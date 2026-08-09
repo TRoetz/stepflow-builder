@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BPMN Designer — StepFlow</title>
+
+    <!-- bpmn-js -->
+    <link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.11.1/dist/assets/diagram-js.css">
+    <link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.11.1/dist/assets/bpmn-js.css">
+    <link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.11.1/dist/assets/bpmn-font/css/bpmn.css">
+
+    <!-- Syntax highlighting for XML preview -->
+    <link rel="stylesheet" href="https://unpkg.com/highlight.js@11.9.0/styles/atom-one-dark.min.css">
+
+    <link rel="stylesheet" href="/css/bpmn-designer.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Top Toolbar -->
+        <header id="toolbar">
+            <div class="toolbar-left">
+                <h1>📐 BPMN Designer</h1>
+                <span id="process-name-badge" class="badge">Untitled Process</span>
+            </div>
+            <div class="toolbar-center">
+                <button id="btn-undo" title="Undo">↩ Undo</button>
+                <button id="btn-redo" title="Redo">↪ Redo</button>
+                <span class="separator">|</span>
+                <button id="btn-zoom-in" title="Zoom In">🔍+</button>
+                <button id="btn-zoom-out" title="Zoom Out">🔍−</button>
+                <button id="btn-fit-view" title="Fit View">⊞ Fit</button>
+                <span class="separator">|</span>
+                <button id="btn-toggle-grid" title="Toggle Grid">▦ Grid</button>
+            </div>
+            <div class="toolbar-right">
+                <button id="btn-xml" class="btn-secondary">📄 XML</button>
+                <button id="btn-convert" class="btn-secondary">⚡ Convert</button>
+                <button id="btn-import-flow" class="btn-secondary">📂 Open</button>
+                <button id="btn-save" class="btn-primary">💾 Save</button>
+            </div>
+        </header>
+
+        <!-- Main Layout -->
+        <div id="main-layout">
+            <!-- Left Panel: Palette & Properties -->
+            <aside id="left-panel">
+                <div id="panel-tabs">
+                    <button class="panel-tab active" data-panel="palette">Palette</button>
+                    <button class="panel-tab" data-panel="properties">Properties</button>
+                </div>
+                <div id="panel-content">
+                    <div id="panel-palette" class="panel-section active"></div>
+                    <div id="panel-properties" class="panel-section">
+                        <div id="properties-placeholder" class="empty-state">
+                            <p>Select an element to edit its properties</p>
+                        </div>
+                        <form id="properties-form" style="display:none;"></form>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Center: Canvas -->
+            <main id="canvas-container">
+                <div id="bpmn-canvas"></div>
+                <div id="canvas-status">
+                    <span id="canvas-coords">0, 0</span>
+                    <span id="canvas-zoom">100%</span>
+                </div>
+            </main>
+
+            <!-- Right Panel: Output / Preview -->
+            <aside id="right-panel">
+                <div id="right-panel-tabs">
+                    <button class="panel-tab active" data-panel="preview">Preview</button>
+                    <button class="panel-tab" data-panel="log">Log</button>
+                </div>
+                <div id="right-panel-content">
+                    <div id="panel-preview" class="panel-section active">
+                        <div id="preview-placeholder" class="empty-state">
+                            <p>Click ⚡ Convert to preview as StepFlow</p>
+                        </div>
+                        <div id="preview-content" style="display:none;"></div>
+                    </div>
+                    <div id="panel-log" class="panel-section">
+                        <div id="log-content" class="log-output"></div>
+                    </div>
+                </div>
+            </aside>
+        </div>
+
+        <!-- XML Modal -->
+        <div id="xml-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>BPMN XML Source</h2>
+                    <button class="modal-close" id="btn-close-xml">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <textarea id="xml-textarea" spellcheck="false"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" id="btn-copy-xml">📋 Copy</button>
+                    <button class="btn-secondary" id="btn-download-xml">⬇ Download .bpmn</button>
+                    <button class="btn-primary" id="btn-apply-xml">Apply Changes</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Convert Result Modal -->
+        <div id="convert-modal" class="modal">
+            <div class="modal-content modal-wide">
+                <div class="modal-header">
+                    <h2>StepFlow Definition Preview</h2>
+                    <button class="modal-close" id="btn-close-convert">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <pre id="convert-json-output"></pre>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" id="btn-copy-convert">📋 Copy JSON</button>
+                    <button class="btn-primary" id="btn-register-flow">🚀 Register & Execute</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Execute Modal -->
+        <div id="execute-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Execute Flow</h2>
+                    <button class="modal-close" id="btn-close-execute">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <label>JSON Input:</label>
+                    <textarea id="execute-input" spellcheck="false">{"creditScore": 750}</textarea>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-primary" id="btn-run-execute">▶ Run</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Execute Result Modal -->
+        <div id="result-modal" class="modal">
+            <div class="modal-content modal-wide">
+                <div class="modal-header">
+                    <h2>Execution Result</h2>
+                    <button class="modal-close" id="btn-close-result">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div id="result-summary"></div>
+                    <pre id="result-json"></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- File Open Dialog -->
+        <input type="file" id="file-input" accept=".bpmn,.xml" style="display:none">
+    </div>
+
+    <!-- bpmn-js -->
+    <script src="https://unpkg.com/bpmn-js@17.11.1/dist/bpmn-modeler.production.min.js"></script>
+    <script src="/js/bpmn-designer.js"></script>
+</body>
+</html>

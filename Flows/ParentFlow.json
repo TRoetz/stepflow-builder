@@ -1,0 +1,21 @@
+{
+  "Comment": "Demonstrates calling another StepFunction (composition)",
+  "StartAt": "PrepareInput",
+  "States": {
+    "PrepareInput": {
+      "Type": "Pass",
+      "Result": {
+        "daysUntilHarvest": 15,
+        "windSpeed": 3,
+        "residue": 1
+      },
+      "Next": "RunComplianceCheck"
+    },
+    "RunComplianceCheck": {
+      "Type": "Task",
+      "Resource": "flow://SprayComplianceCheck",
+      "Comment": "This calls the SprayComplianceCheck flow using the flow:// protocol",
+      "End": true
+    }
+  }
+}

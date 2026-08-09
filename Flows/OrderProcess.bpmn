@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+             targetNamespace="http://example.com/bpmn"
+             id="Definitions_1">
+
+  <process id="OrderProcess" name="Order Processing Workflow" isExecutable="true">
+
+    <startEvent id="StartEvent_1" name="Order Received" />
+
+    <sequenceFlow id="Flow_1" sourceRef="StartEvent_1" targetRef="ValidateOrder" />
+
+    <serviceTask id="ValidateOrder" name="Validate Order">
+      <extensionElements>
+        <zeebe:taskDefinition type="http-call" />
+        <zeebe:ioMapping>
+          <zeebe:input source="orderData" target="payload" />
+        </zeebe:ioMapping>
+      </extensionElements>
+    </serviceTask>
+
+    <sequenceFlow id="Flow_2" sourceRef="ValidateOrder" targetRef="CheckCredit" />
+
+    <exclusiveGateway id="CheckCredit" name="Credit Check Decision" />
+
+    <sequenceFlow id="Flow_3" sourceRef="CheckCredit" targetRef="ApproveOrder" name="Approved">
+      <conditionExpression xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">creditScore &gt; 650</conditionExpression>
+    </sequenceFlow>
+
+    <sequenceFlow id="Flow_4" sourceRef="CheckCredit" targetRef="AiReview" name="AI Review">
+      <conditionExpression xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">creditScore &gt; 500</conditionExpression>
+    </sequenceFlow>
+
+    <sequenceFlow id="Flow_5" sourceRef="CheckCredit" targetRef="RejectOrder" />
+
+    <serviceTask id="ApproveOrder" name="Approve Order">
+      <extensionElements>
+        <zeebe:taskDefinition type="rest-api" />
+      </extensionElements>
+    </serviceTask>
+
+    <sequenceFlow id="Flow_6" sourceRef="ApproveOrder" targetRef="RunRules" />
+
+    <serviceTask id="RunRules" name="Run Compliance Rules">
+      <extensionElements>
+        <zeebe:taskDefinition type="decision" />
+        <zeebe:properties>
+          <zeebe:property name="decisionId" value="ComplianceCheck" />
+        </zeebe:properties>
+      </extensionElements>
+    </serviceTask>
+
+    <sequenceFlow id="Flow_7" sourceRef="RunRules" targetRef="ProcessPayment" />
+
+    <serviceTask id="ProcessPayment" name="Process Payment">
+      <extensionElements>
+        <zeebe:taskDefinition type="http-call" />
+        <camunda:properties>
+          <camunda:property name="url" value="https://api.payment.example.com/charge" />
+        </camunda:properties>
+      </extensionElements>
+    </serviceTask>
+
+    <sequenceFlow id="Flow_8" sourceRef="ProcessPayment" targetRef="SendConfirmation" />
+
+    <sendTask id="SendConfirmation" name="Send Confirmation Email">
+      <extensionElements>
+        <zeebe:properties>
+          <zeebe:property name="url" value="https://api.mail.example.com/send" />
+        </zeebe:properties>
+      </extensionElements>
+    </sendTask>
+
+    <sequenceFlow id="Flow_9" sourceRef="SendConfirmation" targetRef="EndEvent_1" />
+
+    <serviceTask id="AiReview" name="AI Credit Review">
+      <extensionElements>
+        <zeebe:taskDefinition type="ai-prompt" />
+      </extensionElements>
+    </serviceTask>
+
+    <sequenceFlow id="Flow_10" sourceRef="AiReview" targetRef="ApproveOrder" />
+
+    <serviceTask id="RejectOrder" name="Reject Order">
+      <extensionElements>
+        <zeebe:taskDefinition type="http-call" />
+      </extensionElements>
+    </serviceTask>
+
+    <sequenceFlow id="Flow_11" sourceRef="RejectOrder" targetRef="EndEvent_2" />
+
+    <endEvent id="EndEvent_1" name="Order Complete" />
+    <endEvent id="EndEvent_2" name="Order Rejected" />
+
+  </process>
+
+</definitions>

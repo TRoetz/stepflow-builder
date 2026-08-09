@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StepFlow Viewer</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-deep: #05080f;
+    --bg-base: #0b1120;
+    --bg-surface: #111a2e;
+    --bg-elevated: #172038;
+    --border: #1c2d4d;
+    --border-focus: #3b6ef6;
+    --text: #cdd6ec;
+    --text-bright: #edf0f7;
+    --text-dim: #5e7091;
+    --text-muted: #34455f;
+    --accent: #3b82f6;
+    --green: #22c55e;
+    --red: #ef4444;
+    --amber: #eab308;
+    --purple: #a78bfa;
+    --cyan: #22d3ee;
+    --teal: #14b8a6;
+    --mono: 'JetBrains Mono', 'Cascadia Code', monospace;
+    --body: 'DM Sans', system-ui, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; background: var(--bg-deep); color: var(--text); font-family: var(--body); overflow: hidden; }
+  #app { display: flex; height: 100%; }
+
+  /* ─── Left: JSON input panel ─── */
+  #input-panel {
+    width: 420px; min-width: 320px; max-width: 50vw; flex-shrink: 0;
+    background: var(--bg-base); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; position: relative; z-index: 10;
+  }
+  #input-header {
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .logo { display: flex; align-items: center; gap: 8px; }
+  .logo-icon {
+    width: 28px; height: 28px; border-radius: 7px;
+    background: linear-gradient(135deg, #16a34a 0%, #3b82f6 100%);
+    display: flex; align-items: center; justify-content: center;
+    font: 800 13px/1 var(--mono); color: #fff;
+  }
+  .logo-text { font: 700 13px/1 var(--mono); color: var(--text-dim); }
+  .logo-text span { color: var(--text-bright); }
+
+  #controls { padding: 10px 18px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .ctrl-btn {
+    padding: 6px 14px; border-radius: 6px; font: 600 11px/1 var(--mono);
+    cursor: pointer; transition: all 0.12s; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-dim);
+  }
+  .ctrl-btn:hover { border-color: var(--border-focus); color: var(--text); }
+  .ctrl-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .ctrl-btn.primary:hover { background: #2563eb; }
+  .ctrl-select {
+    padding: 5px 8px; border-radius: 6px; font: 500 11px/1 var(--body);
+    background: var(--bg-surface); border: 1px solid var(--border); color: var(--text-dim);
+    cursor: pointer; outline: none;
+  }
+  .ctrl-spacer { flex: 1; }
+  .ctrl-label { font: 600 9px/1 var(--mono); color: var(--text-muted); letter-spacing: 0.1em; text-transform: uppercase; }
+
+  #json-area-wrap { flex: 1; position: relative; overflow: hidden; }
+  #json-area {
+    width: 100%; height: 100%; background: var(--bg-deep); color: var(--text);
+    border: none; font: 400 12px/1.65 var(--mono); padding: 16px 18px;
+    resize: none; outline: none; tab-size: 2;
+  }
+  #json-area::placeholder { color: var(--text-muted); }
+
+  #parse-error {
+    padding: 8px 18px; background: rgba(239,68,68,0.08); border-top: 1px solid rgba(239,68,68,0.15);
+    font: 500 11px/1.4 var(--mono); color: #f87171; display: none;
+  }
+  #parse-info {
+    padding: 6px 18px; border-top: 1px solid var(--border);
+    font: 500 9px/1 var(--mono); color: var(--text-muted); display: flex; gap: 16px; letter-spacing: 0.03em;
+  }
+
+  /* ─── Right: Mermaid viewer ─── */
+  #viewer-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg-deep); }
+  #viewer-header {
+    padding: 10px 20px; border-bottom: 1px solid var(--border); background: var(--bg-base);
+    display: flex; align-items: center; gap: 12px;
+  }
+  #viewer-title { font: 700 13px/1 var(--body); color: var(--text-bright); flex: 1; }
+  #viewer-subtitle { font: 400 11px/1 var(--body); color: var(--text-dim); }
+  #orientation-toggle {
+    display: flex; gap: 2px; background: var(--bg-surface); border-radius: 6px; padding: 2px; border: 1px solid var(--border);
+  }
+  .orient-btn {
+    padding: 4px 10px; border-radius: 4px; font: 600 10px/1 var(--mono);
+    cursor: pointer; border: none; background: transparent; color: var(--text-dim); transition: all 0.12s;
+  }
+  .orient-btn.active { background: var(--accent); color: #fff; }
+  #zoom-controls { display: flex; align-items: center; gap: 4px; }
+  #zoom-controls button {
+    width: 24px; height: 24px; border-radius: 5px; background: var(--bg-surface);
+    border: 1px solid var(--border); color: var(--text-dim); font-size: 14px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #zoom-controls button:hover { border-color: var(--border-focus); color: var(--text); }
+  #zoom-label { font: 500 10px/1 var(--mono); color: var(--text-muted); width: 36px; text-align: center; }
+
+  #viewer-body { flex: 1; overflow: auto; position: relative; display: flex; align-items: flex-start; justify-content: center; padding: 30px; }
+  #mermaid-container { transform-origin: top center; transition: transform 0.1s ease-out; }
+  #mermaid-container svg { max-width: none !important; }
+
+  /* ─── Legend ─── */
+  #legend {
+    padding: 10px 20px; border-top: 1px solid var(--border); background: var(--bg-base);
+    display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
+  }
+  .legend-item { display: flex; align-items: center; gap: 5px; font: 500 10px/1 var(--mono); color: var(--text-dim); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+  
+  /* ─── Resize handle ─── */
+  #resize-handle {
+    position: absolute; right: 0; top: 0; bottom: 0; width: 5px; cursor: col-resize; z-index: 20;
+    background: transparent; transition: background 0.12s;
+  }
+  #resize-handle:hover, #resize-handle.active { background: var(--accent); }
+
+  /* ─── Modal ─── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100;
+    display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px);
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--bg-base); border: 1px solid var(--border); border-radius: 12px;
+    width: min(85vw, 720px); max-height: 80vh; display: flex; flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .modal-header {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .modal-title { font: 700 13px/1 var(--mono); color: var(--text-bright); flex: 1; }
+  .modal textarea {
+    flex: 1; background: var(--bg-deep); color: var(--text); border: none;
+    font: 400 11px/1.6 var(--mono); padding: 14px; outline: none; min-height: 380px; resize: none;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="input-panel">
+    <div id="input-header">
+      <div class="logo">
+        <div class="logo-icon">S</div>
+        <div class="logo-text"><span>StepFlow</span> Viewer</div>
+      </div>
+    </div>
+    <div id="controls">
+      <button class="ctrl-btn primary" id="btn-render">▶ Render</button>
+      <div class="ctrl-spacer"></div>
+      <button class="ctrl-btn" id="btn-mermaid-src">Source</button>
+      <button class="ctrl-btn" id="btn-clear">Clear</button>
+    </div>
+    <div id="json-area-wrap">
+      <textarea id="json-area" placeholder='Paste StepFlow JSON here...' spellcheck="false"></textarea>
+      <div id="resize-handle"></div>
+    </div>
+    <div id="parse-error"></div>
+    <div id="parse-info">
+      <span id="info-states">0 states</span>
+      <span id="info-connections">0 transitions</span>
+    </div>
+  </div>
+
+  <div id="viewer-panel">
+    <div id="viewer-header">
+      <div>
+        <div id="viewer-title">Step Function Diagram</div>
+        <div id="viewer-subtitle"></div>
+      </div>
+      <div class="ctrl-spacer"></div>
+      <div id="orientation-toggle">
+        <button class="orient-btn active" data-dir="TD">↓ Top-Down</button>
+        <button class="orient-btn" data-dir="LR">→ Left-Right</button>
+      </div>
+      <div id="zoom-controls">
+        <button id="zout">−</button>
+        <span id="zoom-label">100%</span>
+        <button id="zin">+</button>
+        <button id="zfit" title="Fit to view">Fit</button>
+      </div>
+    </div>
+    <div id="viewer-body">
+      <div id="mermaid-container">
+        <div id="empty-state">
+          <h3 style="text-align: center; color: var(--text-muted);">No diagram yet</h3>
+        </div>
+      </div>
+    </div>
+    <div id="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#22c55e;border-radius:50%"></div> Start</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div> Task</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#8b5cf6"></div> Pass</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#eab308;transform:rotate(45deg);width:9px;height:9px"></div> Choice</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ef4444;border-radius:50%"></div> Fail</div>
+    </div>
+  </div>
+</div>
+
+<div id="mermaid-modal" class="modal-overlay">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">Mermaid Source</span>
+      <button class="ctrl-btn" onclick="document.getElementById('mermaid-modal').classList.remove('open')">Close</button>
+    </div>
+    <textarea id="mermaid-source" readonly spellcheck="false"></textarea>
+  </div>
+</div>
+
+<script>
+const TYPE_STYLES = {
+  Task:     { fill: '#1e3a5f', stroke: '#3b82f6', color: '#93c5fd' },
+  Pass:     { fill: '#2d1b59', stroke: '#8b5cf6', color: '#c4b5fd' },
+  Choice:   { fill: '#422006', stroke: '#eab308', color: '#fde047' },
+  Wait:     { fill: '#3b1764', stroke: '#a855f7', color: '#d8b4fe' },
+  Parallel: { fill: '#083344', stroke: '#06b6d4', color: '#67e8f9' },
+  Map:      { fill: '#042f2e', stroke: '#14b8a6', color: '#5eead4' },
+  Succeed:  { fill: '#052e16', stroke: '#22c55e', color: '#86efac' },
+  Fail:     { fill: '#450a0a', stroke: '#ef4444', color: '#fca5a5' },
+};
+
+function parseASLtoMermaid(asl, direction = 'TD') {
+  const def = asl.Definition || asl.definition || asl;
+  const states = def.States || def.states || {};
+  const startAt = def.StartAt || def.startAt;
+  const stateEntries = Object.entries(states);
+  if (stateEntries.length === 0) return { mermaid: '', stats: { states: 0, transitions: 0 } };
+
+  const lines = [`flowchart ${direction}`];
+  const styles = [];
+  const nodeIds = {};
+  let idCounter = 0;
+  let transitions = 0;
+
+  function nodeId(name) {
+    if (!name) return 'END_NODE';
+    const key = name.toLowerCase();
+    if (!nodeIds[key]) nodeIds[key] = 's' + (idCounter++);
+    return nodeIds[key];
+  }
+
+  function label(text) {
+    if (!text) return "";
+    return String(text)
+      .replace(/\\/g, "\\\\") // Escape backslashes first
+      .replace(/"/g, "&quot;") // Escape double quotes
+      .replace(/\n/g, "<br/>") // Convert newlines
+      .replace(/[[\]{}()#&]/g, " ") // Still strip structural characters if they aren't quoted correctly elsewhere
+      .trim();
+  }
+
+  lines.push(`  START(( START ))`);
+  styles.push(`style START fill:#16a34a,stroke:#16a34a,color:#fff,stroke-width:3px`);
+  lines.push(`  END_NODE((( END )))`);
+  styles.push(`style END_NODE fill:#dc2626,stroke:#dc2626,color:#fff,stroke-width:3px`);
+
+  if (startAt) {
+    lines.push(`  START --> ${nodeId(startAt)}`);
+    transitions++;
+  }
+
+  stateEntries.forEach(([name, state]) => {
+    const id = nodeId(name);
+    const type = state.Type || state.type || 'Pass';
+    const st = TYPE_STYLES[type] || TYPE_STYLES.Pass;
+
+    let annotation = '';
+    const resource = state.Resource || state.resource;
+    if (type === 'Task' && resource) {
+      const resLabel = label(resource).slice(0, 40);
+      annotation = `<br/><i style='font-size:9px'>${resLabel}</i>`;
+    }
+    
+    const nodeLabel = label(name);
+    const nl = `"${nodeLabel}${annotation}"`;
+    
+    if (type === 'Choice') lines.push(`  ${id}{{${nl}}}`);
+    else if (type === 'Succeed') lines.push(`  ${id}(["✓ ${nodeLabel}"])`);
+    else if (type === 'Fail') lines.push(`  ${id}(["✕ ${nodeLabel}"])`);
+    else lines.push(`  ${id}[${nl}]`);
+
+    styles.push(`style ${id} fill:${st.fill},stroke:${st.stroke},color:${st.color},stroke-width:2px`);
+
+    const next = state.Next || state.next;
+    if (next) { lines.push(`  ${id} --> ${nodeId(next)}`); transitions++; }
+
+    const isEnd = state.End || state.end;
+    if (isEnd === true) { lines.push(`  ${id} --> END_NODE`); transitions++; }
+    
+    const choices = state.Choices || state.choices;
+    if (choices) {
+      choices.forEach((ch, i) => {
+        const chNext = ch.Next || ch.next;
+        if (chNext) { lines.push(`  ${id} --> ${nodeId(chNext)}`); transitions++; }
+      });
+    }
+    const defState = state.Default || state.default;
+    if (defState) { lines.push(`  ${id} -.-> ${nodeId(defState)}`); transitions++; }
+  });
+
+  lines.push('');
+  lines.push(...styles);
+  return { mermaid: lines.join('\n'), stats: { states: stateEntries.length, transitions } };
+}
+
+mermaid.initialize({ 
+  startOnLoad: false, 
+  theme: 'dark',
+  securityLevel: 'loose'
+});
+
+let currentZoom = 1;
+let currentDirection = 'TD';
+let currentMermaidSrc = '';
+
+async function renderDiagram() {
+  const jsonText = document.getElementById('json-area').value.trim();
+  const errorEl = document.getElementById('parse-error');
+  const container = document.getElementById('mermaid-container');
+
+  if (!jsonText) return;
+
+  try {
+    const parsed = JSON.parse(jsonText);
+    const defContent = parsed.Definition || parsed.definition;
+    const asl = defContent ? { Definition: defContent } : (parsed.States ? { Definition: parsed } : parsed);
+    const { mermaid: src, stats } = parseASLtoMermaid(asl, currentDirection);
+    currentMermaidSrc = src;
+    const { svg } = await mermaid.render('mermaid-graph', src);
+    container.innerHTML = svg;
+    document.getElementById('info-states').textContent = stats.states + ' states';
+    document.getElementById('info-connections').textContent = stats.transitions + ' transitions';
+    errorEl.style.display = 'none';
+  } catch (e) {
+    errorEl.textContent = 'Render error: ' + e.message;
+    errorEl.style.display = 'block';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  document.getElementById('btn-render').onclick = renderDiagram;
+  document.getElementById('btn-clear').onclick = () => { document.getElementById('json-area').value = ''; renderDiagram(); };
+  document.getElementById('btn-mermaid-src').onclick = () => {
+    document.getElementById('mermaid-source').value = currentMermaidSrc;
+    document.getElementById('mermaid-modal').classList.add('open');
+  };
+  
+  const urlParams = new URLSearchParams(window.location.search);
+  const flowId = urlParams.get('id');
+  if (flowId) {
+    try {
+      const res = await fetch(`/api/flows/${flowId}/definition`);
+      if (res.ok) {
+        const def = await res.json();
+        document.getElementById('json-area').value = JSON.stringify(def, null, 2);
+        renderDiagram();
+      }
+    } catch (err) { console.error(err); }
+  }
+
+  // Orientation Toggle
+  document.querySelectorAll('.orient-btn').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('.orient-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentDirection = btn.dataset.dir;
+      renderDiagram();
+    };
+  });
+
+  // Zoom Logic
+  const applyZoom = () => { document.getElementById('mermaid-container').style.transform = `scale(${currentZoom})`; document.getElementById('zoom-label').textContent = Math.round(currentZoom*100)+'%'; };
+  document.getElementById('zin').onclick = () => { currentZoom += 0.1; applyZoom(); };
+  document.getElementById('zout').onclick = () => { currentZoom = Math.max(0.1, currentZoom - 0.1); applyZoom(); };
+  document.getElementById('zfit').onclick = () => { currentZoom = 1; applyZoom(); };
+
+  // Handle panel resizing
+  const handle = document.getElementById('resize-handle');
+  const panel = document.getElementById('input-panel');
+  let resizing = false;
+  handle.onmousedown = () => resizing = true;
+  document.onmousemove = e => { if(resizing) panel.style.width = e.clientX + 'px'; };
+  document.onmouseup = () => resizing = false;
+});
+</script>
+</body>
+</html>

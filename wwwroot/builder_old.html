@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StepFlow | Studio</title>
+    
+    <!-- Dependencies -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/drawflow/dist/drawflow.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/drawflow/dist/drawflow.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --surface-color: #1e293b;
+            --surface-hover: #334155;
+            --accent-color: #3b82f6;
+            --accent-glow: rgba(59, 130, 246, 0.4);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border-color: #334155;
+            --node-bg: #1e293b;
+            --sidebar-width: 280px;
+            --props-width: 320px;
+        }
+
+        * {
+            box-sizing: border-box;
+            outline: none;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            overflow: hidden;
+        }
+
+        /* Layout */
+        .app-container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* Sidebar - Toolbox */
+        #toolbox {
+            width: var(--sidebar-width);
+            background: var(--surface-color);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            z-index: 10;
+            overflow-y: auto;
+        }
+
+        .studio-logo {
+            font-weight: 800;
+            font-size: 1.2rem;
+            color: var(--accent-color);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .studio-tagline {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+        }
+
+        .category-title {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-secondary);
+            margin: 24px 0 12px;
+            font-weight: 700;
+        }
+
+        .tool-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: grab;
+            transition: all 0.2s ease;
+            font-size: 0.85rem;
+            font-weight: 500;
+            user-select: none;
+        }
+
+        .tool-item:hover {
+            border-color: var(--accent-color);
+            transform: translateY(-1px);
+            background: var(--surface-hover);
+        }
+
+        .tool-item:active {
+            cursor: grabbing;
+        }
+
+        .tool-icon {
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        /* Canvas Area */
+        #canvas-wrap {
+            flex: 1;
+            position: relative;
+            background-color: #0b1120;
+            overflow: hidden;
+        }
+
+        #drawflow {
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(circle, #334155 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        .toolbar {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            gap: 12px;
+            z-index: 5;
+        }
+
+        .btn {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: var(--surface-hover);
+            border-color: var(--text-secondary);
+        }
+
+        .btn-primary {
+            background: var(--accent-color);
+            border-color: var(--accent-color);
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            box-shadow: 0 0 15px var(--accent-glow);
+        }
+
+        /* Properties Panel */
+        #properties-panel {
+            width: var(--props-width);
+            background: var(--surface-color);
+            border-left: 1px solid var(--border-color);
+            padding: 24px;
+            display: none;
+            flex-direction: column;
+            z-index: 10;
+            overflow-y: auto;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .panel-title {
+            font-weight: 700;
+            font-size: 0.9rem;
+            color: var(--accent-color);
+        }
+
+        .close-panel {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        .prop-group {
+            margin-bottom: 20px;
+        }
+
+        .prop-label {
+            display: block;
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+
+        .prop-input, .prop-select {
+            width: 100%;
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            color: white;
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-family: inherit;
+        }
+
+        .prop-input:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 2px var(--accent-glow);
+        }
+
+        .prop-checkbox-wrap {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            user-select: none;
+            margin-top: 10px;
+        }
+
+        .prop-checkbox-wrap input {
+            cursor: pointer;
+        }
+
+        /* Drawflow Adjustments */
+        .drawflow .drawflow-node {
+            background: var(--surface-color);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            min-width: 180px;
+            padding: 0;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .drawflow .drawflow-node.selected {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        .node-content {
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .node-icon-wrapper {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: var(--bg-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+        }
+
+        .node-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .node-type-label {
+            font-size: 0.6rem;
+            text-transform: uppercase;
+            font-weight: 800;
+            color: var(--text-secondary);
+            letter-spacing: 0.05em;
+        }
+
+        .node-title-label {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-top: 2px;
+        }
+
+        .drawflow .connection .point {
+            stroke: var(--border-color);
+            stroke-width: 2;
+            fill: var(--bg-color);
+        }
+
+        .drawflow .connection .main-path {
+            stroke: var(--text-secondary);
+            stroke-width: 3px;
+        }
+
+        .drawflow .connection.selected .main-path {
+            stroke: var(--accent-color);
+        }
+
+        /* Custom connection handle colors */
+        .drawflow .drawflow-node .input, .drawflow .drawflow-node .output {
+            width: 12px;
+            height: 12px;
+            background: var(--bg-color);
+            border: 2px solid var(--border-color);
+        }
+
+        .drawflow .drawflow-node .input:hover, .drawflow .drawflow-node .output:hover {
+            background: var(--accent-color);
+            border-color: #fff;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <!-- TOOLBOX -->
+    <aside id="toolbox">
+        <div class="studio-logo">
+            <i class="fas fa-project-diagram"></i> StepFlow Studio
+        </div>
+        <div class="studio-tagline">Visual ASL Builder v1.0</div>
+
+        <div class="category-title">Entry Point</div>
+        <div class="tool-item" draggable="true" ondragstart="onDragStart(event)" onclick="addNodeAtCenter('Start', '')" data-type="Start" style="background: rgba(59, 130, 246, 0.2); border-color: var(--accent-color);">
+            <div class="tool-icon" style="background: var(--accent-color); color: white;"><i class="fas fa-play"></i></div>
+            <span>Start</span>
+        </div>
+
+        <div class="category-title">Action States</div>
+        <div class="tool-item" draggable="true" ondragstart="onDragStart(event)" onclick="addNodeAtCenter('AI Agent', 'ai://')" data-type="Task" data-res="ai://">
+            <div class="tool-icon" style="background: rgba(167, 139, 250, 0.1); color: #a78bfa;"><i class="fas fa-robot"></i></div>
+            <span>AI Agent</span>
+        </div>
+        <div class="tool-item" draggable="true" ondragstart="onDragStart(event)" onclick="addNodeAtCenter('Rule Engine', 'rule://')" data-type="Task" data-res="rule://">
+            <div class="tool-icon" style="background: rgba(245, 158, 11, 0.1); color: #f59e0b;"><i class="fas fa-filter"></i></div>
+            <span>Rule Engine</span>
+        </div>
+        <div class="tool-item" draggable="true" ondragstart="onDragStart(event)" onclick="addNodeAtCenter('API Task', 'http://')" data-type="Task" data-res="http://">
+            <div class="tool-icon" style="background: rgba(59, 130, 246, 0.1); color: #3b82f6;"><i class="fas fa-cloud"></i></div>
+            <span>API Task</span>
+        </div>
+        <div class="tool-item" draggable="true" ondragstart="onDragStart(event)" onclick="addNodeAtCenter('Sub-Flow', 'flow://')" data-type="Task" data-res="flow://">
+            <div class="tool-icon" style="background: rgba(16, 185, 129, 0.1); color: #10b981;"><i class="fas fa-share-nodes"></i></div>
+            <span>Sub-Flow</span>
+        </div>
+
+        <div class="category-title">Logic & Control</div>
+        <div class="tool-item" draggable="true" ondragstart="onDragStart(event)" onclick="addNodeAtCenter('Decision Split', '')" data-type="Choice">
+            <div class="tool-icon" style="background: rgba(244, 63, 94, 0.1); color: #f43f5e;"><i class="fas fa-code-branch"></i></div>
+            <span>Decision Split</span>
+        </div>
+        <div class="tool-item" draggable="true" ondragstart="onDragStart(event)" onclick="addNodeAtCenter('Wait Timer', '')" data-type="Wait">
+            <div class="tool-icon" style="background: rgba(148, 163, 184, 0.1); color: #94a3b8;"><i class="fas fa-clock"></i></div>
+            <span>Wait Timer</span>
+        </div>
+        <div class="tool-item" draggable="true" ondragstart="onDragStart(event)" onclick="addNodeAtCenter('Pass / Inject', '')" data-type="Pass">
+            <div class="tool-icon" style="background: rgba(236, 72, 153, 0.1); color: #ec4899;"><i class="fas fa-bolt"></i></div>
+            <span>Pass / Inject</span>
+        </div>
+    </aside>
+
+    <!-- CANVAS -->
+    <main id="canvas-wrap">
+        <div class="toolbar">
+            <button class="btn" onclick="editor.clearModuleSelected()"><i class="fas fa-trash-can"></i> Clear</button>
+            <button class="btn btn-primary" onclick="copyASL()"><i class="fas fa-copy"></i> Copy ASL</button>
+        </div>
+        <div id="drawflow" ondrop="onDrop(event)" ondragover="onDragOver(event)"></div>
+    </main>
+
+    <!-- PROPERTIES -->
+    <aside id="properties-panel">
+        <div class="panel-header">
+            <div class="panel-title" id="panel-title-text">FLOW SETTINGS</div>
+            <button class="close-panel" onclick="closeProps()"><i class="fas fa-times"></i></button>
+        </div>
+
+        <!-- Global Flow Settings (Visible when no node is selected) -->
+        <div id="flow-settings">
+            <div class="prop-group">
+                <label class="prop-label">Workflow Comment</label>
+                <input type="text" id="flow-comment" class="prop-input" placeholder="Explain this flow..." value="StepFlow Workflow">
+            </div>
+            <div class="prop-group">
+                <label class="prop-label">Query Language</label>
+                <select id="flow-query-lang" class="prop-select">
+                    <option value="JSONPath">JSONPath</option>
+                    <option value="JSONata">JSONata</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="node-settings" style="display:none">
+            <div class="prop-group">
+                <label class="prop-label">State Name</label>
+                <input type="text" id="node-name" class="prop-input" placeholder="UniqueStateID" onkeyup="updateNodeData()">
+            </div>
+
+            <div id="task-fields">
+                <div class="prop-group">
+                    <label class="prop-label">Resource URI</label>
+                    <input type="text" id="node-res" class="prop-input" placeholder="ai://..." onkeyup="updateNodeData()">
+                </div>
+                <div class="prop-group">
+                    <label class="prop-label">Input Path</label>
+                    <input type="text" id="node-input" class="prop-input" value="$" onkeyup="updateNodeData()">
+                </div>
+                <div class="prop-group">
+                    <label class="prop-label">Result Path</label>
+                    <input type="text" id="node-result" class="prop-input" value="$.output" onkeyup="updateNodeData()">
+                </div>
+            </div>
+
+            <div id="wait-fields" style="display:none">
+                <div class="prop-group">
+                    <label class="prop-label">Wait Seconds</label>
+                    <input type="number" id="node-seconds" class="prop-input" value="10" onchange="updateNodeData()">
+                </div>
+            </div>
+
+            <div class="prop-group">
+                <label class="prop-checkbox-wrap">
+                    <input type="checkbox" id="node-end" onchange="updateNodeData()">
+                    <span style="font-size: 0.85rem">Terminal State (End)</span>
+                </label>
+            </div>
+        </div>
+    </aside>
+</div>
+
+<script>
+    // 1. INITIALIZATION
+    const container = document.getElementById("drawflow");
+    const editor = new Drawflow(container);
+    editor.start();
+
+    // 2. DRAG & DROP LOGIC
+    function onDragStart(ev) {
+        const type = ev.target.dataset.type;
+        const res = ev.target.dataset.res || "";
+        const label = ev.target.querySelector('span').innerText;
+        
+        ev.dataTransfer.setData("nodeType", type);
+        ev.dataTransfer.setData("nodeRes", res);
+        ev.dataTransfer.setData("nodeLabel", label);
+        ev.dataTransfer.dropEffect = "copy";
+    }
+
+    function onDragOver(ev) {
+        ev.preventDefault();
+        ev.dataTransfer.dropEffect = "copy";
+    }
+
+    function onDrop(ev) {
+        ev.preventDefault();
+        
+        const type = ev.dataTransfer.getData("nodeType");
+        const res = ev.dataTransfer.getData("nodeRes");
+        const label = ev.dataTransfer.getData("nodeLabel");
+
+        // Calculate accurate position
+        // Drawflow zoom and pos_x/pos_y take care of panning/scaling
+        const x = ev.clientX * (editor.pre_canvas_width / (editor.pre_canvas_width * editor.zoom)) - (editor.pos_x);
+        const y = ev.clientY * (editor.pre_canvas_height / (editor.pre_canvas_height * editor.zoom)) - (editor.pos_y);
+
+        // Adjust for toolbox width if necessary, though screen coords are corrected above
+        // We need to subtract the left offset of the canvas itself
+        const rect = container.getBoundingClientRect();
+        const correctedX = (ev.clientX - rect.left) / editor.zoom - editor.pos_x;
+        const correctedY = (ev.clientY - rect.top) / editor.zoom - editor.pos_y;
+
+        createNode(type, label, res, correctedX, correctedY);
+    }
+
+    function addNodeAtCenter(label, res) {
+        // Find the node item in toolbox to get the type
+        const items = document.querySelectorAll('.tool-item');
+        let type = "Task";
+        items.forEach(i => { if(i.innerText.includes(label)) type = i.dataset.type; });
+
+        // Place in center of current view
+        const rect = container.getBoundingClientRect();
+        const x = (rect.width / 2) / editor.zoom - editor.pos_x;
+        const y = (rect.height / 2) / editor.zoom - editor.pos_y;
+
+        createNode(type, label, res, x, y);
+    }
+
+    // 3. NODE CREATION
+    let nodeIndex = 1;
+    function createNode(type, label, res, x, y) {
+        const idName = type === "Start" ? "Start" : `${type.charAt(0)}${type.slice(1)}_${nodeIndex++}`;
+        
+        const data = {
+            name: idName,
+            type: type,
+            resource: res,
+            inputPath: "$",
+            resultPath: "$.output",
+            end: false,
+            seconds: 10
+        };
+
+        const inputs = type === "Start" ? 0 : 1;
+        const outputs = type === "Choice" ? 2 : 1;
+
+        // Custom Styling
+        let icon = "fa-tasks";
+        let color = "#3b82f6";
+
+        if(type === "Start") { icon = "fa-play"; color = "#3b82f6"; }
+        if(type === "Choice") { icon = "fa-code-branch"; color = "#f43f5e"; }
+        if(type === "Wait") { icon = "fa-clock"; color = "#94a3b8"; }
+        if(type === "Pass") { icon = "fa-bolt"; color = "#ec4899"; }
+        if(res.startsWith("ai://")) { icon = "fa-robot"; color = "#a78bfa"; }
+        if(res.startsWith("rule://")) { icon = "fa-filter"; color = "#f59e0b"; }
+        if(res.startsWith("flow://")) { icon = "fa-share-nodes"; color = "#10b981"; }
+
+        const html = `
+            <div>
+                <div class="node-content">
+                    <div class="node-icon-wrapper" style="color: ${color}">
+                        <i class="fas ${icon}"></i>
+                    </div>
+                    <div class="node-info">
+                        <div class="node-type-label">${type}</div>
+                        <div class="node-title-label" id="label_${idName}">${idName}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        editor.addNode(idName, inputs, outputs, x, y, type, data, html);
+    }
+
+    // 4. PROPERTIES INTERACTION
+    let selectedNodeId = null;
+
+    // Show Flow Settings by default
+    document.getElementById("properties-panel").style.display = "flex";
+
+    editor.on('nodeSelected', function(id) {
+        selectedNodeId = id;
+        const node = editor.getNodeFromId(id);
+        
+        document.getElementById("panel-title-text").innerText = "NODE PROPERTIES";
+        document.getElementById("node-settings").style.display = "block";
+        document.getElementById("flow-settings").style.display = "none";
+
+        document.getElementById("node-name").value = node.data.name;
+        document.getElementById("node-res").value = node.data.resource || "";
+        document.getElementById("node-input").value = node.data.inputPath || "$";
+        document.getElementById("node-result").value = node.data.resultPath || "$.output";
+        document.getElementById("node-end").checked = node.data.end;
+        document.getElementById("node-seconds").value = node.data.seconds || 10;
+
+        // Visibility of fields
+        document.getElementById("task-fields").style.display = node.data.type === "Task" ? "block" : "none";
+        document.getElementById("wait-fields").style.display = node.data.type === "Wait" ? "block" : "none";
+        
+        if (node.data.type === "Start") {
+            document.getElementById("node-settings").style.display = "none";
+            document.getElementById("panel-title-text").innerText = "START NODE";
+        }
+    });
+
+    editor.on('nodeUnselected', function() {
+        showFlowSettings();
+    });
+
+    function showFlowSettings() {
+        selectedNodeId = null;
+        document.getElementById("panel-title-text").innerText = "FLOW SETTINGS";
+        document.getElementById("node-settings").style.display = "none";
+        document.getElementById("flow-settings").style.display = "block";
+    }
+
+    function closeProps() {
+        document.getElementById("properties-panel").style.display = "none";
+    }
+
+    function updateNodeData() {
+        if(!selectedNodeId) return;
+        
+        const name = document.getElementById("node-name").value;
+        const res = document.getElementById("node-res").value;
+        const input = document.getElementById("node-input").value;
+        const result = document.getElementById("node-result").value;
+        const end = document.getElementById("node-end").checked;
+        const seconds = parseInt(document.getElementById("node-seconds").value);
+
+        // Update Drawflow internal data
+        const node = editor.getNodeFromId(selectedNodeId);
+        node.data.name = name;
+        node.data.resource = res;
+        node.data.inputPath = input;
+        node.data.resultPath = result;
+        node.data.end = end;
+        node.data.seconds = seconds;
+
+        // Update visual label
+        const labelEl = document.getElementById(`label_${node.id}`);
+        if(labelEl) labelEl.innerText = name;
+    }
+
+    // 5. ASL EXPORT LOGIC
+    function copyASL() {
+        const data = editor.export();
+        const nodes = data.drawflow.Home.data;
+        
+        if (Object.keys(nodes).length === 0) {
+            alert("Canvas is empty!");
+            return;
+        }
+
+        const asl = {
+            Comment: document.getElementById("flow-comment").value,
+            QueryLanguage: document.getElementById("flow-query-lang").value,
+            StartAt: "",
+            States: {}
+        };
+
+        // 1. Identify StartAt via Start Node connection
+        let startAtNodeId = null;
+        let startNodePresent = false;
+
+        for (const id in nodes) {
+            if (nodes[id].data.type === "Start") {
+                startNodePresent = true;
+                if (nodes[id].outputs["output_1"] && nodes[id].outputs["output_1"].connections.length > 0) {
+                    const nextId = nodes[id].outputs["output_1"].connections[0].node;
+                    asl.StartAt = nodes[nextId].data.name;
+                }
+                break;
+            }
+        }
+
+        // Fallback Logic if no Start node or no connection
+        if (!asl.StartAt) {
+            for (const id in nodes) {
+                const node = nodes[id];
+                if (node.data.type === "Start") continue;
+                let hasIncoming = false;
+                for (const otherId in nodes) {
+                    const other = nodes[otherId];
+                    for (const outKey in other.outputs) {
+                        if (other.outputs[outKey].connections.some(c => c.node == id)) {
+                            hasIncoming = true; break;
+                        }
+                    }
+                    if(hasIncoming) break;
+                }
+                if (!hasIncoming) {
+                    asl.StartAt = node.data.name;
+                    break;
+                }
+            }
+        }
+        
+        if(!asl.StartAt && Object.keys(nodes).length > 0) {
+            // Absolute fallback
+            const firstKey = Object.keys(nodes).find(k => nodes[k].data.type !== "Start");
+            if (firstKey) asl.StartAt = nodes[firstKey].data.name;
+        }
+
+        // 2. Build States
+        for (const id in nodes) {
+            const node = nodes[id];
+            if (node.data.type === "Start") continue; // Skip the marker node
+            
+            const name = node.data.name;
+            const type = node.data.type;
+
+            const state = {
+                Type: type
+            };
+
+            // Mapping outgoing connection
+            let nextNodeId = null;
+            if (node.outputs["output_1"] && node.outputs["output_1"].connections.length > 0) {
+                nextNodeId = node.outputs["output_1"].connections[0].node;
+            }
+
+            if (nextNodeId && nodes[nextNodeId]) {
+                state.Next = nodes[nextNodeId].data.name;
+            } else if (node.data.end) {
+                state.End = true;
+            } else {
+                // If it's a leaf node but not marked end, we auto-mark it end if no next
+                state.End = true;
+            }
+
+            // Type-specific fields
+            if (type === "Task") {
+                state.Resource = node.data.resource;
+                state.InputPath = node.data.inputPath;
+                state.ResultPath = node.data.resultPath;
+            } else if (type === "Wait") {
+                state.Seconds = node.data.seconds;
+            } else if (type === "Choice") {
+                // Special handling for Choice branching
+                state.Choices = [];
+                // Look at output_1 (Success/True branch)
+                if (node.outputs["output_1"] && node.outputs["output_1"].connections.length > 0) {
+                    const matchId = node.outputs["output_1"].connections[0].node;
+                    state.Choices.push({
+                        Variable: "$.status",
+                        StringEquals: "success",
+                        Next: nodes[matchId].data.name
+                    });
+                }
+                // Look at output_2 (Failure/Default branch)
+                if (node.outputs["output_2"] && node.outputs["output_2"].connections.length > 0) {
+                    const defaultId = node.outputs["output_2"].connections[0].node;
+                    state.Default = nodes[defaultId].data.name;
+                }
+                // Choices states shouldn't have top-level Next
+                delete state.Next;
+                delete state.End;
+            }
+
+            asl.States[name] = state;
+        }
+
+        const json = JSON.stringify(asl, null, 2);
+        navigator.clipboard.writeText(json).then(() => {
+            alert("ASL copied to clipboard!");
+            console.log(json);
+        });
+    }
+</script>
+
+</body>
+</html>

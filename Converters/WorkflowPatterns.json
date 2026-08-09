@@ -1,0 +1,74 @@
+{
+  "LoadTransactionData": {
+    "Name": "LoadTransactionData",
+    "Description": "Loads sample bank transactions into DuckDB for processing",
+    "Template": {
+      "Type": "Task",
+      "Resource": "transform://query",
+      "Parameters": {
+        "operation": "query",
+        "table": "transactions",
+        "data": "array"
+      }
+    },
+    "Metadata": {
+      "Phase": "load",
+      "Direction": "inbound",
+      "RequiresApproval": false
+    }
+  },
+  "ValidateReferenceData": {
+    "Name": "ValidateReferenceData",
+    "Description": "Validates authority reference tables for matching (aurtmast, auwbmast)",
+    "Template": {
+      "Type": "Task",
+      "Resource": "rule://validate",
+      "Parameters": {
+        "rules": "array",
+        "input": "object",
+        "schema": "string"
+      }
+    },
+    "Metadata": {
+      "Phase": "validate",
+      "Direction": "internal",
+      "RequiresApproval": true
+    }
+  },
+  "ApplyCorrections": {
+    "Name": "ApplyCorrections",
+    "Description": "Applies automatic corrections based on error patterns",
+    "Template": {
+      "Type": "Task",
+      "Resource": "rule://correction",
+      "Parameters": {
+        "rules": "array",
+        "errorType": "string",
+        "correctionData": "object"
+      }
+    },
+    "Metadata": {
+      "Phase": "correct",
+      "Direction": "internal",
+      "RequiresApproval": false
+    }
+  },
+  "LoadReferenceTables": {
+    "Name": "LoadReferenceTables",
+    "Description": "Loads authority reference tables (aurtmast, auwbmast, auinmast)",
+    "Template": {
+      "Type": "Task",
+      "Resource": "transform://query",
+      "Parameters": {
+        "operation": "query",
+        "table": "ref_rates",
+        "data": "array"
+      }
+    },
+    "Metadata": {
+      "Phase": "load",
+      "Direction": "internal",
+      "RequiresApproval": false
+    }
+  }
+}

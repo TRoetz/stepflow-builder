@@ -1,0 +1,308 @@
+{
+  "comment": "REG_INT_BTP - Bank File to Authority Payments File v1\n  Converted from SSIS package: REG_INT_BTP.dtsx\n  Orchestrates bank transaction processing with data corrections, validations, and matching.",
+  "startAt": "LoadTransactionData",
+  "states": {
+    "LoadTransactionData": {
+      "type": "Task",
+      "comment": "Load sample bank transactions into DuckDB for processing",
+      "resource": "transform://query",
+      "next": "LoadReferenceData",
+      "parameters": {
+        "operation": "query",
+        "table": "transactions",
+        "data": [
+          {"id":1,"particulars":"rates","code":"12345","sourceAccountNumber":"15-3972-0007470-00","amount":150.00,"valid":0,"lineStatus":"unchecked","extracted":0,"manualReceipt":0,"manualCorrection":0,"automaticCorrection":0,"warningFlag":0,"particularsCode":1,"transactionCode":50},
+          {"id":2,"particulars":"water","code":"67890","sourceAccountNumber":"15-3972-0007471-00","amount":75.50,"valid":0,"lineStatus":"unchecked","extracted":0,"manualReceipt":0,"manualCorrection":0,"automaticCorrection":0,"warningFlag":0,"particularsCode":2,"transactionCode":50},
+          {"id":3,"particulars":"parking","code":"90123","sourceAccountNumber":"15-3972-0007474-00","amount":45.00,"valid":0,"lineStatus":"unchecked","extracted":0,"manualReceipt":0,"manualCorrection":0,"automaticCorrection":0,"warningFlag":0,"particularsCode":4,"transactionCode":50},
+          {"id":4,"particulars":"animal","code":"45678","sourceAccountNumber":"15-3972-0007475-00","amount":80.00,"valid":0,"lineStatus":"unchecked","extracted":0,"manualReceipt":0,"manualCorrection":0,"automaticCorrection":0,"warningFlag":0,"particularsCode":5,"transactionCode":50},
+          {"id":5,"particulars":"general","code":"123","sourceAccountNumber":"15-3972-0007476-00","amount":120.00,"valid":0,"lineStatus":"unchecked","extracted":0,"manualReceipt":0,"manualCorrection":0,"automaticCorrection":0,"warningFlag":0,"particularsCode":6,"transactionCode":50},
+          {"id":6,"particulars":"debtors","code":"27211.37","sourceAccountNumber":"15-3972-0007473-00","amount":300.00,"valid":0,"lineStatus":"unchecked","extracted":0,"manualReceipt":0,"manualCorrection":0,"automaticCorrection":0,"warningFlag":0,"particularsCode":3,"transactionCode":50},
+          {"id":7,"particulars":"rates","code":"7888","sourceAccountNumber":"12-3236-0907227-00","amount":50.00,"valid":0,"lineStatus":"unchecked","extracted":0,"manualReceipt":0,"manualCorrection":0,"automaticCorrection":0,"warningFlag":0,"particularsCode":1,"transactionCode":52},
+          {"id":8,"particulars":"unknown","code":"ABC","sourceAccountNumber":"15-3972-0007472-00","amount":200.00,"valid":0,"lineStatus":"unchecked","extracted":0,"manualReceipt":0,"manualCorrection":0,"automaticCorrection":0,"warningFlag":0,"particularsCode":0,"transactionCode":50},
+          {"id":9,"particulars":"rates","code":"7218","sourceAccountNumber":"15-3972-0007477-00","amount":60.00,"valid":0,"lineStatus":"unchecked","extracted":0,"manualReceipt":0,"manualCorrection":0,"automaticCorrection":0,"warningFlag":0,"particularsCode":1,"transactionCode":50},
+          {"id":10,"particulars":"water","code":"11111","sourceAccountNumber":"15-3972-0007478-00","amount":90.00,"valid":0,"lineStatus":"unchecked","extracted":0,"manualReceipt":1,"manualCorrection":0,"automaticCorrection":0,"warningFlag":0,"particularsCode":2,"transactionCode":50}
+        ],
+        "sql": "SELECT COUNT(*) as loaded FROM transactions"
+      }
+    },
+
+    "LoadReferenceData": {
+      "type": "Task",
+      "comment": "Load authority reference tables for matching (aurtmast, auwbmast, auinmast, auanmast, auglmast)",
+      "resource": "transform://query",
+      "next": "Phase1_Corrections",
+      "parameters": {
+        "operation": "query",
+        "table": "ref_rates",
+        "data": [
+          {"ass_num":12345,"rte_zne":"01","lev_cur":100.00,"int_ovd":0.00},
+          {"ass_num":67890,"rte_zne":"02","lev_cur":50.00,"int_ovd":0.00},
+          {"ass_num":45678,"rte_zne":"01","lev_cur":75.00,"int_ovd":0.00},
+          {"ass_num":11111,"rte_zne":"03","lev_cur":200.00,"int_ovd":0.00},
+          {"ass_num":7218,"rte_zne":"ca","lev_cur":0.00,"int_ovd":0.00}
+        ],
+        "sql": "SELECT COUNT(*) as loaded FROM ref_rates"
+      }
+    },
+
+    "Phase1_Corrections": {
+      "type": "Task",
+      "comment": "PHASE 1: Initial corrections\n  - Set Line_Status based on particulars validity\n  - Fix debtors replace space\n  - Fix rates/water category\n  - Set particulars to upper-first-lower-remaining\n  - Set initial line status and valid flags\n  - Set transaction code",
+      "resource": "transform://execute",
+      "next": "Phase1_ValidateParticulars",
+      "parameters": {
+        "operation": "execute",
+        "sql": "UPDATE transactions SET lineStatus = CASE WHEN particulars IN ('rates','water','parking','debtors','animal','general') THEN 'unchecked' ELSE 'Invalid Particulars' END WHERE valid = 0 AND lineStatus IN ('unchecked','Invalid Particulars')"
+      }
+    },
+
+    "Phase1_ValidateParticulars": {
+      "type": "Task",
+      "comment": "Validate all transactions against ParticularsValidation rules workflow",
+      "resource": "rules://ParticularsValidation",
+      "next": "Phase2_SetCodes",
+      "parameters": {
+        "particulars": "rates",
+        "particularsCode": 1
+      }
+    },
+
+    "Phase2_SetCodes": {
+      "type": "Task",
+      "comment": "PHASE 2: Set Particulars_Code based on category and initial status values",
+      "resource": "transform://execute",
+      "next": "Phase2_CheckManualReceipts",
+      "parameters": {
+        "operation": "execute",
+        "sql": "UPDATE transactions SET particularsCode = CASE WHEN particulars = 'rates' THEN 1 WHEN particulars = 'water' THEN 2 WHEN particulars = 'debtors' THEN 3 WHEN particulars = 'parking' THEN 4 WHEN particulars = 'animal' THEN 5 WHEN particulars = 'general' THEN 6 ELSE 0 END WHERE extracted = 0 AND particulars IS NOT NULL"
+      }
+    },
+
+    "Phase2_CheckManualReceipts": {
+      "type": "Task",
+      "comment": "Validate manual receipts - set Valid=1 and Line_Status='Manual Receipt'",
+      "resource": "transform://execute",
+      "next": "Phase3_ParallelValidation",
+      "parameters": {
+        "operation": "execute",
+        "sql": "UPDATE transactions SET lineStatus = 'Manual Receipt', valid = 1 WHERE manualReceipt = 1 AND valid = 0"
+      }
+    },
+
+    "Phase3_ParallelValidation": {
+      "type": "Parallel",
+      "comment": "PHASE 3: Parallel validation chains for each particulars category",
+      "next": "Phase4_SMPrime",
+      "branches": [
+        {
+          "comment": "Chain 1: Rates validation",
+          "startAt": "ValidateRates",
+          "states": {
+            "ValidateRates": {
+              "type": "Task",
+              "comment": "Check rates assessment number - ISNUMERIC, no dots, max 7 chars",
+              "resource": "transform://execute",
+              "next": "FlagInvalidRates",
+              "parameters": {
+                "operation": "execute",
+                "sql": "UPDATE transactions SET lineStatus = CASE WHEN REGEXP_MATCHES(code, '^[0-9]+$') AND code NOT LIKE '%.%' AND LENGTH(code) <= 7 THEN 'unchecked' ELSE 'Invalid Assessment No.' END WHERE particulars = 'rates' AND valid = 0 AND extracted = 0"
+              }
+            },
+            "FlagInvalidRates": {
+              "type": "Task",
+              "comment": "Mark rates with invalid assessment numbers",
+              "resource": "transform://execute",
+              "end": true,
+              "parameters": {
+                "operation": "execute",
+                "sql": "UPDATE transactions SET valid = 0, extracted = 0 WHERE particulars = 'rates' AND lineStatus = 'Invalid Assessment No.'"
+              }
+            }
+          }
+        },
+        {
+          "comment": "Chain 2: Parking validation",
+          "startAt": "ValidateParking",
+          "states": {
+            "ValidateParking": {
+              "type": "Task",
+              "comment": "Check parking infringement number - ISNUMERIC, no dots, max 7 chars",
+              "resource": "transform://execute",
+              "next": "FlagInvalidParking",
+              "parameters": {
+                "operation": "execute",
+                "sql": "UPDATE transactions SET lineStatus = CASE WHEN REGEXP_MATCHES(code, '^[0-9]+$') AND code NOT LIKE '%.%' AND LENGTH(code) <= 7 THEN 'unchecked' ELSE 'Invalid Infringement No.' END WHERE particulars = 'parking' AND valid = 0 AND extracted = 0"
+              }
+            },
+            "FlagInvalidParking": {
+              "type": "Task",
+              "comment": "Mark parking with invalid infringement numbers",
+              "resource": "transform://execute",
+              "end": true,
+              "parameters": {
+                "operation": "execute",
+                "sql": "UPDATE transactions SET valid = 0, extracted = 0 WHERE particulars = 'parking' AND lineStatus = 'Invalid Infringement No.'"
+              }
+            }
+          }
+        },
+        {
+          "comment": "Chain 3: Water validation",
+          "startAt": "ValidateWater",
+          "states": {
+            "ValidateWater": {
+              "type": "Task",
+              "comment": "Check water assessment number - ISNUMERIC, no dots, max 7 chars",
+              "resource": "transform://execute",
+              "next": "FlagInvalidWater",
+              "parameters": {
+                "operation": "execute",
+                "sql": "UPDATE transactions SET lineStatus = CASE WHEN REGEXP_MATCHES(code, '^[0-9]+$') AND code NOT LIKE '%.%' AND LENGTH(code) <= 7 THEN 'unchecked' ELSE 'Invalid Assessment No.' END WHERE particulars = 'water' AND valid = 0 AND extracted = 0"
+              }
+            },
+            "FlagInvalidWater": {
+              "type": "Task",
+              "comment": "Mark water with invalid assessment numbers",
+              "resource": "transform://execute",
+              "end": true,
+              "parameters": {
+                "operation": "execute",
+                "sql": "UPDATE transactions SET valid = 0, extracted = 0 WHERE particulars = 'water' AND lineStatus = 'Invalid Assessment No.'"
+              }
+            }
+          }
+        },
+        {
+          "comment": "Chain 4: Animal validation",
+          "startAt": "ValidateAnimal",
+          "states": {
+            "ValidateAnimal": {
+              "type": "Task",
+              "comment": "Check animal number - ISNUMERIC, no dots, max 7 chars",
+              "resource": "transform://execute",
+              "next": "FlagInvalidAnimal",
+              "parameters": {
+                "operation": "execute",
+                "sql": "UPDATE transactions SET lineStatus = CASE WHEN REGEXP_MATCHES(code, '^[0-9]+$') AND code NOT LIKE '%.%' AND LENGTH(code) <= 7 THEN 'unchecked' ELSE 'Invalid Animal Number' END WHERE particulars = 'animal' AND valid = 0 AND extracted = 0"
+              }
+            },
+            "FlagInvalidAnimal": {
+              "type": "Task",
+              "comment": "Mark animal with invalid numbers",
+              "resource": "transform://execute",
+              "end": true,
+              "parameters": {
+                "operation": "execute",
+                "sql": "UPDATE transactions SET valid = 0, extracted = 0 WHERE particulars = 'animal' AND lineStatus = 'Invalid Animal Number'"
+              }
+            }
+          }
+        },
+        {
+          "comment": "Chain 5: General Ledger validation",
+          "startAt": "ValidateGeneralLedger",
+          "states": {
+            "ValidateGeneralLedger": {
+              "type": "Task",
+              "comment": "Check general ledger code - ISNUMERIC, no dots, max 4 chars",
+              "resource": "transform://execute",
+              "next": "ZeroPadLedger",
+              "parameters": {
+                "operation": "execute",
+                "sql": "UPDATE transactions SET lineStatus = CASE WHEN REGEXP_MATCHES(code, '^[0-9]+$') AND code NOT LIKE '%.%' AND LENGTH(code) <= 4 THEN 'unchecked' ELSE 'Invalid Ledger No.' END WHERE particulars = 'general' AND valid = 0 AND extracted = 0"
+              }
+            },
+            "ZeroPadLedger": {
+              "type": "Task",
+              "comment": "Zero-pad valid ledger codes to 4 digits",
+              "resource": "transform://execute",
+              "end": true,
+              "parameters": {
+                "operation": "execute",
+                "sql": "UPDATE transactions SET code = LPAD(code, 4, '0') WHERE particulars = 'general' AND valid = 1 AND extracted = 0 AND manualReceipt = 0"
+              }
+            }
+          }
+        }
+      ]
+    },
+
+    "Phase4_SMPrime": {
+      "type": "Task",
+      "comment": "PHASE 4: SM Prime special case - Flag transactions with code 7218 as invalid",
+      "resource": "transform://execute",
+      "next": "Phase4_AutoCorrections",
+      "parameters": {
+        "operation": "execute",
+        "sql": "UPDATE transactions SET lineStatus = 'Invalid Assessment No.', valid = 0, extracted = 0 WHERE code = '7218' AND extracted = 0"
+      }
+    },
+
+    "Phase4_AutoCorrections": {
+      "type": "Task",
+      "comment": "Apply auto-corrections from reference table - match transactions against authority data",
+      "resource": "transform://query",
+      "next": "Phase5_WarningFlags",
+      "parameters": {
+        "operation": "query",
+        "sql": "SELECT t.id, t.particulars, t.code, t.amount, r.ass_num FROM transactions t LEFT JOIN ref_rates r ON TRY_CAST(t.code AS INTEGER) = r.ass_num WHERE t.valid = 0 AND t.extracted = 0 AND REGEXP_MATCHES(t.code, '^[0-9]+$')"
+      }
+    },
+
+    "Phase5_WarningFlags": {
+      "type": "Task",
+      "comment": "PHASE 5: Set warning flags for special bank accounts, codes, and Poli entries",
+      "resource": "transform://execute",
+      "next": "Phase5_ValidateWarnings",
+      "parameters": {
+        "operation": "execute",
+        "sql": "UPDATE transactions SET warningFlag = 1 WHERE sourceAccountNumber = '12-3236-0907227-00' OR code IN ('7888','27211.37','6521','69782','9091','8864') OR code = 'multiple'"
+      }
+    },
+
+    "Phase5_ValidateWarnings": {
+      "type": "Task",
+      "comment": "Validate warning flags against WarningFlags rules workflow",
+      "resource": "rules://WarningFlags",
+      "next": "Phase6_Matching",
+      "parameters": {
+        "sourceAccountNumber": "15-3972-0007470-00",
+        "code": "12345",
+        "name": "TEST CORP"
+      }
+    },
+
+    "Phase6_Matching": {
+      "type": "Task",
+      "comment": "PHASE 6: Match transactions against authority reference data",
+      "resource": "transform://query",
+      "next": "Phase6_UpdateMatched",
+      "parameters": {
+        "operation": "query",
+        "sql": "SELECT t.id, t.particulars, t.code, t.lineStatus, t.valid, t.amount, t.warningFlag, CASE WHEN r.ass_num IS NOT NULL THEN 'Matched' ELSE 'No Match' END as matchStatus FROM transactions t LEFT JOIN ref_rates r ON TRY_CAST(t.code AS INTEGER) = r.ass_num WHERE t.extracted = 0 ORDER BY t.particulars, t.id"
+      }
+    },
+
+    "Phase6_UpdateMatched": {
+      "type": "Task",
+      "comment": "Update matched transactions to valid",
+      "resource": "transform://execute",
+      "next": "Phase7_FinalSummary",
+      "parameters": {
+        "operation": "execute",
+        "sql": "UPDATE transactions SET valid = 1, lineStatus = 'Valid' WHERE extracted = 0 AND lineStatus = 'unchecked' AND REGEXP_MATCHES(code, '^[0-9]+$')"
+      }
+    },
+
+    "Phase7_FinalSummary": {
+      "type": "Task",
+      "comment": "Generate final processing summary by particulars category",
+      "resource": "transform://query",
+      "end": true,
+      "parameters": {
+        "operation": "query",
+        "sql": "SELECT particulars, COUNT(*) as total, SUM(CASE WHEN valid = 1 THEN 1 ELSE 0 END) as valid, SUM(CASE WHEN valid = 0 THEN 1 ELSE 0 END) as invalid, SUM(CASE WHEN warningFlag = 1 THEN 1 ELSE 0 END) as warnings, SUM(amount) as totalAmount FROM transactions GROUP BY particulars ORDER BY total DESC"
+      }
+    }
+  }
+}

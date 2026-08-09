@@ -1,0 +1,55 @@
+{
+  "FlowId": "bank-file-processing-v1",
+  "SourcePackageName": "REG_INT_BTP.dtsx",
+  "SourcePath": "C:\\Source\\200--INTERFACES--BankFiletoAuthorityPaymentsFilev1\\REG_INT_BTP.dtsx",
+  "ConversionDate": "2026-08-07T14:30:00Z",
+  "ConvertedVersion": "1.0.0",
+  "Mappings": [
+    {
+      "OriginalTaskName": "LoadTransactionData",
+      "ConvertedStateId": "LoadTransactionData",
+      "ResourceUsed": "transform://query",
+      "DataSchema": "operation:string, table:string, data:array",
+      "TransformationLogic": "SQL-based transformation",
+      "RequiresApproval": false
+    },
+    {
+      "OriginalTaskName": "ValidateReferenceData",
+      "ConvertedStateId": "ValidateReferenceData",
+      "ResourceUsed": "rule://validate",
+      "DataSchema": "rules:array, input:object, schema:string",
+      "TransformationLogic": "Business validation rules",
+      "RequiresApproval": true
+    },
+    {
+      "OriginalTaskName": "ApplyCorrections",
+      "ConvertedStateId": "ApplyCorrections",
+      "ResourceUsed": "rule://correction",
+      "DataSchema": "rules:array, errorType:string, correctionData:object",
+      "TransformationLogic": "Automatic corrections based on patterns",
+      "RequiresApproval": false
+    }
+  ],
+  "ValidationResult": {
+    "IsValid": true,
+    "Status": "ready",
+    "Warnings": [],
+    "Errors": []
+  },
+  "RollbackInfo": {
+    "OriginalPackagePath": "C:\\Source\\200--INTERFACES--BankFiletoAuthorityPaymentsFilev1\\REG_INT_BTP.dtsx",
+    "OriginalVersion": "1.0.0",
+    "RestoreCommand": "Copy-Item 'C:\\Source\\200--INTERFACES--BankFiletoAuthorityPaymentsFilev1\\REG_INT_BTP.dtsx' -Destination '.\\original_packages' -Force",
+    "ValidationCheck": "Compare-Object -ReferenceObject (Import-Csv 'manifest.json') -DifferenceObject (Get-Content 'converted.json')"
+  },
+  "Metadata": {
+    "SourcePackageName": "REG_INT_BTP.dtsx",
+    "SourcePath": "C:\\Source\\200--INTERFACES--BankFiletoAuthorityPaymentsFilev1\\REG_INT_BTP.dtsx",
+    "ConversionDate": "2026-08-07T14:30:00Z",
+    "TasksMapped": [
+      "LoadTransactionData",
+      "ValidateReferenceData",
+      "ApplyCorrections"
+    ]
+  }
+}

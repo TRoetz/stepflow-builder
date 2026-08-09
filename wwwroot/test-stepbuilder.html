@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Step Builder Canvas Test</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, sans-serif; background: #f8fafc; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header { background: linear-gradient(135deg, #4f46e5, #7c3aed); color: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; }
+        .header h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+        .canvas-wrapper { background: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); overflow: hidden; }
+        .canvas-header { padding: 18px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+        .canvas-title { font-size: 18px; font-weight: 600; color: #1e293b; }
+        .canvas-body { background: linear-gradient(135deg, #f8fafc, #f1f5f9); min-height: 500px; position: relative; }
+        .canvas-templates { padding: 16px 18px; border-bottom: 1px solid #e2e8f0; }
+        .templates-title { font-size: 13px; font-weight: 600; color: #475569; }
+        .canvas-content { padding: 20px; position: relative; min-height: 400px; }
+        .canvas-legend { padding: 16px 18px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
+        .legend-title { font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 10px; }
+        .legend-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #475569; }
+        .legend-icon { width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+        .canvas-footer { padding: 16px 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: center; gap: 12px; }
+        .btn { padding: 10px 18px; border-radius: 8px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+        .btn-primary { background: linear-gradient(135deg, #4f46e5, #7c3aed); color: white; }
+        .btn-primary:hover { transform: translateY(-1px); }
+        .btn-secondary { background: #f1f5f9; color: #475569; }
+        .btn-secondary:hover { background: #e2e8f0; }
+        .step-node { position: absolute; min-width: 200px; min-height: 110px; background: white; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); cursor: move; z-index: 10; }
+        .step-node-header { padding: 14px; border-radius: 10px 10px 0 0; color: white; font-weight: 600; font-size: 14px; display: flex; align-items: center; justify-content: space-between; }
+        .step-node-body { padding: 14px; border-top: 1px solid #f1f5f9; }
+        .step-node-description { font-size: 12px; color: #64748b; margin: 4px 0; min-height: 36px; line-height: 1.5; }
+        .step-node-footer { padding: 10px 14px; border-top: 1px solid #f1f5f9; font-size: 11px; color: #94a3b8; display: flex; gap: 8px; align-items: center; }
+        .step-connect-btn { background: linear-gradient(135deg, #4f46e5, #7c3aed); color: white; padding: 4px 12px; border-radius: 5px; font-size: 11px; font-weight: 600; border: none; cursor: pointer; white-space: nowrap; }
+        .step-remove-btn { background: rgba(0,0,0,0.15); color: white; border: none; width: 24px; height: 24px; border-radius: 50%; font-size: 16px; cursor: pointer; }
+        .connection-line { position: absolute; height: 3px; background: linear-gradient(90deg, #4f46e5, #7c3aed); transform-origin: 0 50%; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎨 Step Builder Canvas - Test Page</h1>
+            <p>Loads built React components and demonstrates drag-and-drop + connection functionality</p>
+        </div>
+        <div class="canvas-wrapper">
+            <div class="canvas-header">
+                <div class="canvas-title">📋 Order Processing Workflow</div>
+                <div>
+                    <button class="btn btn-secondary" id="exportBtn">📤 Export</button>
+                    <button class="btn btn-secondary" id="clearBtn">🗑️ Clear</button>
+                </div>
+            </div>
+            <div class="canvas-templates">
+                <div class="templates-title">Drag steps from the left sidebar to place them here</div>
+            </div>
+            <div class="canvas-content" id="canvasContent"></div>
+            <div class="canvas-legend">
+                <div class="legend-title">Step Types</div>
+                <div class="legend-grid">
+                    <div class="legend-item"><div class="legend-icon" style="background:#8b5cf6;">🤖</div><span>AI</span></div>
+                    <div class="legend-item"><div class="legend-icon" style="background:#f59e0b;">⚖️</div><span>RULE</span></div>
+                    <div class="legend-item"><div class="legend-icon" style="background:#3b82f6;">📊</div><span>SQL</span></div>
+                    <div class="legend-item"><div class="legend-icon" style="background:#10b981;">🔌</div><span>API</span></div>
+                    <div class="legend-item"><div class="legend-icon" style="background:#9ca3af;">⏭️</div><span>PASS</span></div>
+                    <div class="legend-item"><div class="legend-icon" style="background:#ef4444;">💻</div><span>SCRIPT</span></div>
+                    <div class="legend-item"><div class="legend-icon" style="background:#8b5cf6;">🦆</div><span>DUCKDB</span></div>
+                    <div class="legend-item"><div class="legend-icon" style="background:#f59e0b;">🌐</div><span>HTTP</span></div>
+                </div>
+            </div>
+            <div class="canvas-footer">
+                <button class="btn btn-primary" id="runBtn">▶️ Run Workflow</button>
+                <button class="btn btn-secondary" id="saveBtn">💾 Save</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Sample workflow data
+        const workflow = {
+            name: "Order Processing Workflow",
+            steps: [
+                { id: "AI1", type: "AI", title: "AI Decision", x: 100, y: 100, description: "AI decision and reasoning", resource: "ai://decision", connected: true },
+                { id: "RULE1", type: "RULE", title: "Rule Check", x: 100, y: 250, description: "Business rule validation", resource: "rule://default", connected: true },
+                { id: "SQL1", type: "SQL", title: "SQL Lookup", x: 400, y: 100, description: "Database queries", resource: "duckdb://lookup", connected: true },
+                { id: "API1", type: "API", title: "API Call", x: 400, y: 250, description: "External service calls", resource: "", connected: true },
+                { id: "PASS1", type: "PASS", title: "Pass Through", x: 700, y: 100, description: "Data pass-through", resource: "pass://default", connected: true },
+                { id: "SCRIPT1", type: "SCRIPT", title: "Script Execution", x: 700, y: 250, description: "Custom script execution", resource: "script://default", connected: true },
+                { id: "DUCKDB1", type: "DUCKDB", title: "DuckDB Query", x: 100, y: 400, description: "Analytics queries", resource: "duckdb://query", connected: true },
+                { id: "HTTP1", type: "HTTP", title: "HTTP Request", x: 400, y: 400, description: "REST API calls", resource: "", connected: true }
+            ],
+            connections: [
+                { from: "AI1", to: "SQL1" }, { from: "AI1", to: "PASS1" },
+                { from: "SQL1", to: "API1" }, { from: "SQL1", to: "DUCKDB1" },
+                { from: "PASS1", to: "SCRIPT1" }, { from: "PASS1", to: "HTTP1" }
+            ]
+        };
+
+        const canvasContent = document.getElementById('canvasContent');
+        const colors = { AI: '#8b5cf6', RULE: '#f59e0b', SQL: '#3b82f6', API: '#10b981', PASS: '#9ca3af', SCRIPT: '#ef4444', DUCKDB: '#8b5cf6', HTTP: '#f59e0b' };
+        const icons = { AI: '🤖', RULE: '⚖️', SQL: '📊', API: '🔌', PASS: '⏭️', SCRIPT: '💻', DUCKDB: '🦆', HTTP: '🌐' };
+
+        // Render steps
+        workflow.steps.forEach(step => {
+            const stepNode = document.createElement('div');
+            stepNode.className = 'step-node';
+            stepNode.style.left = step.x + 'px';
+            stepNode.style.top = step.y + 'px';
+            stepNode.style.background = '#ffffff';
+            stepNode.setAttribute('draggable', 'true');
+            stepNode.setAttribute('data-step-id', step.id);
+            
+            stepNode.innerHTML = `
+                <div class="step-node-header" style="background:${colors[step.type] || '#9ca3af'}">
+                    <span style="font-size:16px;">${icons[step.type] || '⏭️'}</span>
+                    <span>${step.title}</span>
+                    <button class="step-remove-btn">×</button>
+                </div>
+                <div class="step-node-body">
+                    <div class="step-node-description">${step.description}</div>
+                    <button class="step-connect-btn">Connect →</button>
+                </div>
+                <div class="step-node-footer">
+                    <span style="font-weight:600;">${step.type}</span>
+                    <span style="font-family:monospace;color:#94a3b8;">${step.resource || 'N/A'}</span>
+                </div>
+            `;
+            
+            stepNode.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('stepId', step.id);
+                e.dataTransfer.effectAllowed = 'move';
+            });
+            
+            stepNode.addEventListener('click', () => {
+                const btn = stepNode.querySelector('.step-connect-btn');
+                btn.style.transform = 'translateY(-2px)';
+                setTimeout(() => btn.style.transform = '', 150);
+            });
+            
+            stepNode.querySelector('.step-remove-btn').addEventListener('click', () => { stepNode.remove(); });
+            stepNode.querySelector('.step-connect-btn').addEventListener('click', () => {
+                alert('Connect from ' + step.id + ' to another step');
+            });
+            
+            canvasContent.appendChild(stepNode);
+        });
+
+        // Draw connections
+        workflow.connections.forEach(conn => {
+            const fromStep = document.querySelector('[data-step-id="' + conn.from + '"]');
+            const toStep = document.querySelector('[data-step-id="' + conn.to + '"]');
+            if (fromStep && toStep) {
+                const fromRect = fromStep.getBoundingClientRect();
+                const toRect = toStep.getBoundingClientRect();
+                const connection = document.createElement('div');
+                connection.className = 'connection-line';
+                connection.style.width = (toRect.left + toRect.width/2 - fromRect.left - fromRect.width/2) + 'px';
+                connection.style.left = (fromRect.left + fromRect.width/2) + 'px';
+                connection.style.top = fromRect.top + 'px';
+                canvasContent.appendChild(connection);
+            }
+        });
+
+        // Export button
+        document.getElementById('exportBtn').addEventListener('click', () => {
+            const workflowJSON = JSON.stringify(workflow, null, 2);
+            console.log('Workflow JSON:', workflowJSON);
+            alert('Workflow exported! Check browser console for full workflow JSON.');
+        });
+
+        // Clear button
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            canvasContent.innerHTML = '';
+            document.querySelectorAll('.connection-line').forEach(el => el.remove());
+        });
+
+        // Run button
+        document.getElementById('runBtn').addEventListener('click', () => {
+            alert('Workflow running! Steps will execute in order.');
+        });
+
+        // Save button
+        document.getElementById('saveBtn').addEventListener('click', () => {
+            alert('Workflow saved! Check browser console.');
+        });
+
+        // Canvas drag handlers
+        const canvas = document.getElementById('canvasContent');
+        canvas.addEventListener('dragover', (e) => { e.preventDefault(); });
+        canvas.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const stepId = e.dataTransfer.getData('stepId');
+            if (stepId) {
+                const stepElement = document.querySelector('[data-step-id="' + stepId + '"]');
+                if (stepElement) {
+                    const canvasRect = canvas.getBoundingClientRect();
+                    const x = e.clientX - canvasRect.left - 100;
+                    const y = e.clientY - canvasRect.top - 100;
+                    stepElement.style.left = x + 'px';
+                    stepElement.style.top = y + 'px';
+                }
+            }
+        });
+
+        console.log('Canvas initialized with sample workflow');
+        console.log('Workflow:', JSON.stringify(workflow, null, 2));
+    </script>
+</body>
+</html>

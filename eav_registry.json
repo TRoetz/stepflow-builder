@@ -1,0 +1,117 @@
+[
+  {
+    "EntityName": "CustomerProfile",
+    "Description": "Maps raw workflow data to strict Customer attributes for the Rule Engine.",
+    "Attributes": [
+      {
+        "AttributeName": "Age",
+        "DataType": "number",
+        "IsRequired": true,
+        "DefaultValue": null,
+        "JsonPathMapping": "Age"
+      },
+      {
+        "AttributeName": "Income",
+        "DataType": "number",
+        "IsRequired": true,
+        "DefaultValue": null,
+        "JsonPathMapping": "Income"
+      },
+      {
+        "AttributeName": "IsActive",
+        "DataType": "boolean",
+        "IsRequired": false,
+        "DefaultValue": null,
+        "JsonPathMapping": "IsActive"
+      }
+    ]
+  },
+  {
+    "EntityName": "OrderData",
+    "Description": "",
+    "Attributes": [
+      {
+        "AttributeName": "OrderID",
+        "DataType": "string",
+        "IsRequired": true,
+        "DefaultValue": null,
+        "JsonPathMapping": "id"
+      },
+      {
+        "AttributeName": "TotalAmount",
+        "DataType": "number",
+        "IsRequired": false,
+        "DefaultValue": null,
+        "JsonPathMapping": "total"
+      }
+    ]
+  },
+  {
+    "EntityName": "Input-Data-EAV",
+    "Description": "Standardized structure for passing input parameters between steps.",
+    "Attributes": [
+      {
+        "AttributeName": "RequestID",
+        "DataType": "string",
+        "IsRequired": true,
+        "DefaultValue": null,
+        "JsonPathMapping": "id"
+      },
+      {
+        "AttributeName": "Payload",
+        "DataType": "string",
+        "IsRequired": false,
+        "DefaultValue": null,
+        "JsonPathMapping": "data"
+      },
+      {
+        "AttributeName": "Source",
+        "DataType": "string",
+        "IsRequired": false,
+        "DefaultValue": null,
+        "JsonPathMapping": "source"
+      },
+      {
+        "AttributeName": "Timestamp",
+        "DataType": "string",
+        "IsRequired": false,
+        "DefaultValue": null,
+        "JsonPathMapping": "ts"
+      }
+    ]
+  },
+  {
+    "EntityName": "Result-Data-EAV",
+    "Description": "Standardized structure for capturing execution results and errors.",
+    "Attributes": [
+      {
+        "AttributeName": "Status",
+        "DataType": "string",
+        "IsRequired": true,
+        "DefaultValue": null,
+        "JsonPathMapping": "status"
+      },
+      {
+        "AttributeName": "ResponseCode",
+        "DataType": "number",
+        "IsRequired": false,
+        "DefaultValue": null,
+        "JsonPathMapping": "code"
+      },
+      {
+        "AttributeName": "Data",
+        "DataType": "string",
+        "IsRequired": false,
+        "DefaultValue": null,
+        "JsonPathMapping": "body"
+      },
+      {
+        "AttributeName": "ErrorMessage",
+        "DataType": "string",
+        "IsRequired": false,
+        "DefaultValue": null,
+        "JsonPathMapping": "error"
+      }
+    ]
+  }
+]

@@ -1,0 +1,29 @@
+# Node
+node_modules/
+dist/
+
+# .NET
+bin/
+obj/
+publish/
+*.user
+*.userosscache
+*.suo
+
+# Logs
+logs/
+
+# Build artifacts
+*.tsbuildinfo
+
+# IDE
+.vs/
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Session data
+.pi/

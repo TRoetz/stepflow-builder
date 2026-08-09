@@ -1,0 +1,112 @@
+'<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Step Builder Canvas - Functionality
+ Test</title><style>body{font-family:sans-serif;background:#f8fafc;padding:20px}.container{max-width:1200px;m
+ argin:0
+ auto}.header{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;padding:20px;border-radius:12px;
+ margin-bottom:20px}.header
+ h1{font-size:22px;margin-bottom:8px}.canvas-wrapper{background:white;border-radius:12px;box-shadow:0 4px
+ 12px rgba(0,0,0,0.1)}.canvas-header{padding:18px;border-bottom:1px solid
+ #e2e8f0;display:flex;justify-content:space-between}.canvas-title{font-size:18px;font-weight:600;color:#1e293
+ b}.canvas-content{background:#f8fafc;min-height:500px;position:relative}.canvas-templates{padding:16px
+ 18px;border-bottom:1px solid
+ #e2e8f0;background:#fff}.templates-title{font-size:13px;font-weight:600;color:#475569}.canvas-legend{padding
+ :16px 18px;border-bottom:1px solid
+ #e2e8f0;background:#f8fafc}.legend-title{font-size:12px;font-weight:700;color:#64748b;margin-bottom:10px}.le
+ gend-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.legend-item{display:flex;align-items:cen
+ ter;gap:6px;font-size:11px;color:#475569}.legend-icon{width:24px;height:24px;border-radius:6px;display:flex;
+ align-items:center;justify-content:center}.canvas-footer{padding:16px 20px;border-top:1px solid
+ #e2e8f0;display:flex;justify-content:center;gap:10px}.btn{padding:10px
+ 16px;border-radius:8px;border:none;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:ce
+ nter;gap:6px}.btn-primary{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white}.btn-secondary{back
+ ground:#f1f5f9;color:#475569}.step-node{position:absolute;min-width:180px;min-height:95px;background:white;b
+ order-radius:8px;box-shadow:0 3px 10px rgba(0,0,0,0.1);cursor:grab;z-index:10;border:1px solid
+ #e2e8f0}.step-node-header{padding:12px;border-radius:8px 8px 0
+ 0;color:white;font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:space-between}.
+ step-node-body{padding:12px;border-top:1px solid
+ #f1f5f9}.step-node-description{font-size:11px;color:#64748b;margin:4px
+ 0;min-height:28px}.step-node-footer{padding:8px 12px;border-top:1px solid
+ #f1f5f9;font-size:10px;color:#94a3b8;display:flex;gap:6px;align-items:center}.step-connect-btn{background:li
+ near-gradient(135deg,#4f46e5,#7c3aed);color:white;padding:3px
+ 10px;border-radius:4px;font-size:10px;font-weight:600;border:none;cursor:pointer}.step-remove-btn{background
+ :rgba(0,0,0,0.1);color:white;border:none;width:20px;height:20px;border-radius:50%;font-size:14px;cursor:poin
+ ter}.connection-line{position:absolute;height:2px;background:linear-gradient(90deg,#4f46e5,#7c3aed);transfor
+ m-origin:0 50%;border-radius:2px;opacity:0.8}</style></head><body><div class="container"><div
+ class="header"><h1>Step Builder Canvas - Functionality Test</h1></div><div class="canvas-wrapper"><div
+ class="canvas-header"><div class="canvas-title">Order Processing Workflow</div><div><button class="btn
+ btn-secondary" id="exportBtn">Export</button><button class="btn btn-secondary"
+ id="clearBtn">Clear</button></div></div><div class="canvas-templates"><div class="templates-title">Drag
+ steps to place them here</div></div><div class="canvas-content" id="canvasContent"></div><div
+ class="canvas-legend"><div class="legend-title">Step Types</div><div class="legend-grid"><div
+ class="legend-item"><div class="legend-icon" style="background:#8b5cf6;">🤖</div><span>AI</span></div><div
+ class="legend-item"><div class="legend-icon" style="background:#f59e0b;">⚖️</div><span>RULE</span></div><div
+ class="legend-item"><div class="legend-icon" style="background:#3b82f6;">📊</div><span>SQL</span></div><div
+ class="legend-item"><div class="legend-icon" style="background:#10b981;">🔌</div><span>API</span></div><div
+ class="legend-item"><div class="legend-icon" style="background:#9ca3af;">⏭️</div><span>PASS</span></div><div
+ class="legend-item"><div class="legend-icon"
+ style="background:#ef4444;">💻</div><span>SCRIPT</span></div><div class="legend-item"><div
+ class="legend-icon" style="background:#8b5cf6;">🦆</div><span>DUCKDB</span></div><div
+ class="legend-item"><div class="legend-icon"
+ style="background:#f59e0b;">🌐</div><span>HTTP</span></div></div></div><div class="canvas-footer"><button
+ class="btn btn-primary" id="runBtn">Run</button><button class="btn btn-secondary"
+ id="saveBtn">Save</button></div></div></div></div><script>var workflow={name:"Order Processing
+ Workflow",steps:[{id:"AI1",type:"AI",title:"AI Decision",x:100,y:100,description:"AI decision and
+ reasoning",resource:"ai://decision",connected:true},{id:"RULE1",type:"RULE",title:"Rule
+ Check",x:100,y:250,description:"Business rule
+ validation",resource:"rule://default",connected:true},{id:"SQL1",type:"SQL",title:"SQL
+ Lookup",x:400,y:100,description:"Database
+ queries",resource:"duckdb://lookup",connected:true},{id:"API1",type:"API",title:"API
+ Call",x:400,y:250,description:"External service
+ calls",resource:"",connected:true},{id:"PASS1",type:"PASS",title:"Pass
+ Through",x:700,y:100,description:"Data
+ pass-through",resource:"pass://default",connected:true},{id:"SCRIPT1",type:"SCRIPT",title:"Script
+ Execution",x:700,y:250,description:"Custom script
+ execution",resource:"script://default",connected:true},{id:"DUCKDB1",type:"DUCKDB",title:"DuckDB
+ Query",x:100,y:400,description:"Analytics
+ queries",resource:"duckdb://query",connected:true},{id:"HTTP1",type:"HTTP",title:"HTTP
+ Request",x:400,y:400,description:"REST API
+ calls",resource:"",connected:true}],connections:[{from:"AI1",to:"SQL1"},{from:"AI1",to:"PASS1"},{from:"SQL1"
+ ,to:"API1"},{from:"SQL1",to:"DUCKDB1"},{from:"PASS1",to:"SCRIPT1"},{from:"PASS1",to:"HTTP1"}]};var
+ colors={AI:"#8b5cf6",RULE:"#f59e0b",SQL:"#3b82f6",API:"#10b981",PASS:"#9ca3af",SCRIPT:"#ef4444",DUCKDB:"#8b5
+ cf6",HTTP:"#f59e0b"};var
+ icons={AI:"🤖",RULE:"⚖️",SQL:"📊",API:"🔌",PASS:"⏭️",SCRIPT:"💻",DUCKDB:"🦆",HTTP:"🌐"};var
+ canvasContent=document.getElementById("canvasContent");workflow.steps.forEach(function(step){var
+ stepNode=document.createElement("div");stepNode.className="step-node";stepNode.style.left=step.x+"px";stepNo
+ de.style.top=step.y+"px";stepNode.setAttribute("draggable","true");stepNode.setAttribute("data-step-id",step
+ .id);var headerBg=colors[step.type];var stepIcon=icons[step.type];var stepType=step.type;var
+ stepResource=step.resource||"N/A";stepNode.innerHTML="<div class='step-node-header'
+ style='background:"+headerBg+"'>"+stepIcon+" "+step.title+"<button
+ class='step-remove-btn'>×</button></div><div class='step-node-body'><div
+ class='step-node-description'>"+step.description+"</div><button class='step-connect-btn'>Connect
+ →</button></div><div class='step-node-footer'><span style='font-weight:600'>"+stepType+"</span><span
+ style='font-family:monospace;color:#94a3b8'>"+stepResource+"</span></div>";stepNode.addEventListener("dragst
+ art",function(e){e.dataTransfer.setData("stepId",step.id)});stepNode.addEventListener("click",function(){var
+
+ btn=this.querySelector(".step-connect-btn");btn.style.transform="translateY(-2px)";setTimeout(function(){btn
+ .style.transform=""},150)});this.querySelector(".step-remove-btn").addEventListener("click",function(e){e.st
+ opPropagation();stepNode.remove()});this.querySelector(".step-connect-btn").addEventListener("click",functio
+ n(e){e.stopPropagation();alert("Connect from
+ "+step.id)});canvasContent.appendChild(stepNode);});workflow.connections.forEach(function(conn){var
+ fromStep=document.querySelector("[data-step-id="+conn.from+"]");var
+ toStep=document.querySelector("[data-step-id="+conn.to+"]");if(fromStep&&toStep){var
+ fromRect=fromStep.getBoundingClientRect();var toRect=toStep.getBoundingClientRect();var
+ fromCenterX=fromRect.left+fromRect.width/2;var fromCenterY=fromRect.top+fromRect.height/2;var
+ toCenterX=toRect.left+toRect.width/2;var toCenterY=toRect.top+toRect.height/2;var
+ dx=toCenterX-fromCenterX;var dy=toCenterY-fromCenterY;var dist=Math.sqrt(dx*dx+dy*dy);var
+ connection=document.createElement("div");connection.className="connection-line";connection.style.width=dist+
+ "px";connection.style.left=fromCenterX+"px";connection.style.top=fromCenterY+"px";canvasContent.appendChild(
+ connection);}});document.getElementById("exportBtn").addEventListener("click",function(){var
+ workflowJSON=JSON.stringify(workflow,null,2);console.log("Workflow JSON
+ exported:",workflowJSON);alert("Workflow exported! Check browser console for full workflow
+ JSON.");});document.getElementById("clearBtn").addEventListener("click",function(){canvasContent.innerHTML="
+ ";document.querySelectorAll(".connection-line").forEach(function(el){el.remove()});});document.getElementByI
+ d("runBtn").addEventListener("click",function(){alert("Workflow
+ running!");});document.getElementById("saveBtn").addEventListener("click",function(){var
+ workflowJSON=JSON.stringify(workflow,null,2);console.log("Workflow saved:",workflowJSON);alert("Workflow
+ saved! Check browser console.");});var
+ canvas=document.getElementById("canvasContent");canvas.addEventListener("dragover",function(e){e.preventDefa
+ ult()});canvas.addEventListener("drop",function(e){e.preventDefault();var
+ stepId=e.dataTransfer.getData("stepId");if(stepId){var
+ stepElement=document.querySelector("[data-step-id="+stepId+"]");if(stepElement){var
+ canvasRect=canvas.getBoundingClientRect();var x=e.clientX-canvasRect.left-90;var
+ y=e.clientY-canvasRect.top-47;stepElement.style.left=x+"px";stepElement.style.top=y+"px";}}});console.log("S
+ tep Builder Canvas initialized");console.log("Total steps:",workflow.steps.length);console.log("Total
+ connections:",workflow.connections.length);</script></body></html>

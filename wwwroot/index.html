@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Step Functions Builder</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:-apple-system,sans-serif;background:#f8fafc;padding:20px}
+        .header{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;padding:20px;border-radius:12px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
+        h1{font-size:24px;font-weight:700}
+        .sidebar{width:300px;background:white;border-radius:12px;padding:18px;overflow-y:auto}
+        .sidebar h2{font-size:18px;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid #e2e8f0}
+        .step-template{background:white;border:2px solid #e2e8f0;border-radius:10px;padding:14px;margin:12px 0;cursor:pointer;display:flex;align-items:center;gap:12px}
+        .step-template:hover{border-color:#4f46e5;box-shadow:0 8px 24px rgba(79,70,229,0.15)}
+        .step-icon{font-size:28px}
+        .step-info h3{font-size:14px;font-weight:600;color:#0f172a;margin-bottom:4px}
+        .step-info p{font-size:12px;color:#64748b}
+        .canvas-area{flex:1;background:white;border-radius:12px;position:relative;overflow:hidden;display:flex;flex-direction:column}
+        .canvas-header{padding:18px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center}
+        .canvas-title{font-size:20px;font-weight:600;color:#1e293b}
+        .btn{padding:10px 18px;border-radius:8px;border:none;font-size:14px;font-weight:600;cursor:pointer;margin:5px}
+        .btn-primary{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white}
+        .btn-secondary{background:#f1f5f9;color:#475569}
+        .canvas-content{flex:1;position:relative;background:linear-gradient(135deg,#f8fafc,#f1f5f9)}
+        .canvas-empty-state{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;color:#94a3b8}
+        .canvas-empty-state h3{font-size:22px;color:#64748b;margin-bottom:12px}
+        .canvas-empty-state p{font-size:14px;color:#94a3b8}
+        .step-node{position:absolute;background:white;border-radius:10px;padding:12px;box-shadow:0 4px 16px rgba(0,0,0,0.12);cursor:move;user-select:none;min-width:180px;min-height:90px}
+        .step-node-header{padding:10px;border-radius:10px 10px 0 0;background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:white;font-weight:600;font-size:13px;display:flex;justify-content:space-between;align-items:center}
+        .step-node-body{padding:10px;border-top:1px solid #f1f5f9}
+        .step-node-description{font-size:11px;color:#64748b;margin-top:4px}
+        .step-node-footer{padding:8px;border-top:1px solid #f1f5f9;font-size:10px;color:#94a3b8;display:flex;gap:8px;align-items:center}
+        .step-connect-btn{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;padding:3px 10px;border-radius:4px;font-size:11px;border:none;cursor:pointer;font-weight:600}
+        .step-remove-btn{background:rgba(0,0,0,0.15);color:white;border:none;width:20px;height:20px;border-radius:50%;font-size:14px;cursor:pointer}
+    </style>
+</head>
+<body>
+    <div class="header"><h1>Step Functions Builder</h1><span style="background:rgba(255,255,255,0.2);padding:6px 14px;border-radius:20px;font-size:13px;font-weight:600">Ready</span></div>
+    <div style="display:flex;gap:20px;height:calc(100vh-140px)">
+        <div class="sidebar">
+            <h2>Step Templates</h2>
+            <div class="step-template" onclick="addStep('AI',100,100)"><span class="step-icon">🤖</span><div class="step-info"><h3>AI/LLM</h3><p>AI decision and reasoning</p></div></div>
+            <div class="step-template" onclick="addStep('SQL',100,230)"><span class="step-icon">📊</span><div class="step-info"><h3>SQL Lookup</h3><p>Database queries</p></div></div>
+            <div class="step-template" onclick="addStep('API',100,360)"><span class="step-icon">🔌</span><div class="step-info"><h3>API Call</h3><p>External service calls</p></div></div>
+        </div>
+        <div class="canvas-area">
+            <div class="canvas-header"><div class="canvas-title">Order Processing Workflow</div><div style="display:flex;gap:10px"><button class="btn btn-secondary" onclick="saveWorkflow()">Save</button><button class="btn btn-primary" onclick="runWorkflow()">Run</button></div></div>
+            <div class="canvas-content" id="canvas"><div class="canvas-empty-state" id="emptyState"><h3>Start Building Your Workflow</h3><p>Drag steps from the left sidebar and place them on the canvas</p><p style="font-size:13px;color:#cbd5e1;margin-top:12px;font-style:italic">Click Connect on steps to link them together</p></div></div>
+            <div style="padding:16px;border-top:1px solid #e2e8f0;display:flex;justify-content:center;gap:12px;background:#f8fafc"><button class="btn btn-secondary" onclick="clearCanvas()">Clear</button><button class="btn btn-secondary" onclick="addConnection()">Connect</button><button class="btn btn-primary" onclick="exportFlow()">Export</button></div>
+        </div>
+    </div>
+    <script>
+        const canvas=document.getElementById("canvas"),emptyState=document.getElementById("emptyState");
+        let stepIdCounter=0,steps=[],connections=[],selectedStep=null,dragOffset={x:0,y:0},draggedStepId=null;
+        function addStep(type,x,y){stepIdCounter++;const step={id:stepIdCounter,type:type,title:type+" Step",x,y,resource:type+"://resource",description:type+" description"};steps.push(step);renderStep(step);updateEmptyState();return step;}
+        function renderStep(step){const stepEl=document.createElement("div");stepEl.className="step-node";stepEl.id="step_"+step.id;stepEl.style.left=step.x+"px";stepEl.style.top=step.y+"px";stepEl.dataset.type=step.type;stepEl.dataset.id=step.id;stepEl.innerHTML="<div class='step-node-header'><span>"+step.title+"</span><button class='step-remove-btn' onclick='removeStep("+step.id+")'>x</button></div><div class='step-node-body'><div class='step-node-description'>"+step.description+"</div><div class='step-node-actions'><button class='step-connect-btn' onclick='connectStep("+step.id+")'>Connect</button></div></div><div class='step-node-footer'><span style='font-weight:600'>"+step.type+"</span><span style='font-family:monospace'>"+step.resource+"</span></div>";stepEl.draggable=true;stepEl.addEventListener("dragstart",handleDragStart);stepEl.addEventListener("dragend",handleDragEnd);canvas.appendChild(stepEl);selectedStep=step.id;}
+        function handleDragStart(e){const step=steps.find(s=>s.id==e.target.dataset.id);if(!step)return;const canvasRect=canvas.getBoundingClientRect();dragOffset.x=e.clientX-canvasRect.left-step.x;dragOffset.y=e.clientY-canvasRect.top-step.y;draggedStepId=step.id;e.target.classList.add("dragging");}
+        function handleDragEnd(){const stepEl=document.querySelector(".step-node.dragging");if(stepEl){stepEl.classList.remove("dragging");}}
+        canvas.addEventListener("mousemove",(e)=>{if(draggedStepId&&steps.find(s=>s.id==draggedStepId)){const canvasRect=canvas.getBoundingClientRect();const step=steps.find(s=>s.id==draggedStepId);let newX=e.clientX-canvasRect.left-dragOffset.x, newY=e.clientY-canvasRect.top-dragOffset.y;newX=Math.max(0,Math.min(newX,canvasRect.width-200));newY=Math.max(0,Math.min(newY,canvasRect.height-110));const stepEl=document.querySelector("[data-id="+draggedStepId+"]");if(stepEl){stepEl.style.left=newX+"px";stepEl.style.top=newY+"px";step.x=newX;step.y=newY;}}});
+        canvas.addEventListener("mouseup",handleDragEnd);
+        function removeStep(id){steps=steps.filter(s=>s.id!=id);const stepEl=document.querySelector("[data-id="+id+"]");if(stepEl){stepEl.remove();}if(selectedStep==id){selectedStep=null;updateEmptyState();}}
+        function connectStep(id){if(!selectedStep){alert("Select a step first by clicking on it");return;}const fromStep=steps.find(s=>s.id==selectedStep);const toStep=steps.find(s=>s.id==id);if(fromStep&&toStep&&!fromStep.connected){connections.push({from:fromStep.id,to:toStep.id});fromStep.connected=true;const fromEl=document.querySelector("[data-id="+fromStep.id+"]"),toEl=document.querySelector("[data-id="+toStep.id+"]");if(fromEl&&toEl){createConnectionLine(fromEl,toEl);}}}
+        function createConnectionLine(fromEl,toEl){const rect1=fromEl.getBoundingClientRect(),rect2=toEl.getBoundingClientRect(),canvasRect=canvas.getBoundingClientRect();const x1=rect1.left+rect1.width/2-canvasRect.left,y1=rect1.top+rect1.height-8-canvasRect.top,x2=rect2.left+rect2.width/2-canvasRect.left,y2=rect2.top+8-canvasRect.top;const line=document.createElement("div");line.className="connection-line";line.style.width=Math.abs(x2-x1)+"px";line.style.left=Math.min(x1,x2)+"px";line.style.top=y1+"px";canvas.insertBefore(line,canvas.firstChild);}
+        function addConnection(){if(steps.length>=2){const firstStep=steps[0];if(!firstStep.connected){alert("Select a step and click Connect button to create connection");}}}
+        function clearCanvas(){steps=[];connections=[];stepIdCounter=0;const stepEls=document.querySelectorAll(".step-node");stepEls.forEach(el=>el.remove());const lines=document.querySelectorAll(".connection-line");lines.forEach(line=>line.remove());selectedStep=null;updateEmptyState();}
+        function updateEmptyState(){if(steps.length===0){emptyState.style.display="block";}else{emptyState.style.display="none";}}
+        function saveWorkflow(){const workflow={name:"Order Processing Workflow",steps:steps,connections:connections};console.log("Workflow saved:",JSON.stringify(workflow,null,2));alert("Workflow saved! Check browser console for workflow JSON.");}
+        function runWorkflow(){if(steps.length===0){alert("No steps to run. Add some steps first.");return;}const stepNames=steps.map(s=>s.title).join(" -> ");alert("Running workflow: "+stepNames);console.log("Executing workflow steps:",steps.map(s=>s.type));}
+        function exportFlow(){const workflow={name:"Order Processing Workflow",steps:steps,connections:connections};const dataStr="data:text/json;charset=utf-8,"+encodeURIComponent(JSON.stringify(workflow));const downloadAnchorNode=document.createElement("a");downloadAnchorNode.setAttribute("href",dataStr);downloadAnchorNode.setAttribute("download","workflow.json");document.body.appendChild(downloadAnchorNode);downloadAnchorNode.click();downloadAnchorNode.remove();alert("Workflow exported to workflow.json");}
+        window.addEventListener("load",()=>{addStep("AI",100,100);addStep("SQL",400,100);addStep("API",700,100);});
+    </script>
+</body>
+</html>

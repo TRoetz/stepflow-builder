@@ -1,0 +1,36 @@
+{
+  "Comment": "A demonstration of using Playwright via the tool:// protocol in a StepFlow.",
+  "StartAt": "SearchAI",
+  "States": {
+    "SearchAI": {
+      "Type": "Task",
+      "Resource": "tool://web_browser",
+      "Parameters": {
+        "action": "search",
+        "query": "Who is the current Prime Minister of New Zealand?"
+      },
+      "ResultPath": "$.searchResult",
+      "Next": "AnalyzeResults"
+    },
+    "AnalyzeResults": {
+      "Type": "Task",
+      "Resource": "ai://decide/LMStudio",
+      "Parameters": {
+        "prompt.$": "States.Format('Based on the following search results, extract the name of the Prime Minister of New Zealand. Search Results: {}', $.searchResult.result)",
+        "systemPrompt": "You are a data extraction assistant. Return only the name."
+      },
+      "ResultPath": "$.extractedName",
+      "Next": "NavigateToProfile"
+    },
+    "NavigateToProfile": {
+      "Type": "Task",
+      "Resource": "tool://web_browser",
+      "Parameters": {
+        "action": "navigate",
+        "url": "https://en.wikipedia.org/wiki/Prime_Minister_of_New_Zealand"
+      },
+      "ResultPath": "$.wikiContent",
+      "End": true
+    }
+  }
+}

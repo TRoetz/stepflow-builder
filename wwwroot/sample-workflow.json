@@ -1,0 +1,97 @@
+{
+  "name": "Order Processing Workflow",
+  "description": "Complete example workflow demonstrating drag-and-drop and connection functionality",
+  "steps": [
+    {
+      "id": "AI1",
+      "type": "AI",
+      "title": "AI Decision",
+      "x": 100,
+      "y": 100,
+      "description": "AI decision and reasoning",
+      "resource": "ai://decision",
+      "connected": true
+    },
+    {
+      "id": "RULE1",
+      "type": "RULE",
+      "title": "Rule Check",
+      "x": 100,
+      "y": 250,
+      "description": "Business rule validation",
+      "resource": "rule://default",
+      "connected": true
+    },
+    {
+      "id": "SQL1",
+      "type": "SQL",
+      "title": "SQL Lookup",
+      "x": 400,
+      "y": 100,
+      "description": "Database queries",
+      "resource": "duckdb://lookup",
+      "connected": true
+    },
+    {
+      "id": "API1",
+      "type": "API",
+      "title": "API Call",
+      "x": 400,
+      "y": 250,
+      "description": "External service calls",
+      "resource": "",
+      "connected": true
+    },
+    {
+      "id": "PASS1",
+      "type": "PASS",
+      "title": "Pass Through",
+      "x": 700,
+      "y": 100,
+      "description": "Data pass-through",
+      "resource": "pass://default",
+      "connected": true
+    },
+    {
+      "id": "SCRIPT1",
+      "type": "SCRIPT",
+      "title": "Script Execution",
+      "x": 700,
+      "y": 250,
+      "description": "Custom script execution",
+      "resource": "script://default",
+      "connected": true
+    },
+    {
+      "id": "DUCKDB1",
+      "type": "DUCKDB",
+      "title": "DuckDB Query",
+      "x": 100,
+      "y": 400,
+      "description": "Analytics queries",
+      "resource": "duckdb://query",
+      "connected": true
+    },
+    {
+      "id": "HTTP1",
+      "type": "HTTP",
+      "title": "HTTP Request",
+      "x": 400,
+      "y": 400,
+      "description": "REST API calls",
+      "resource": "",
+      "connected": true
+    }
+  ],
+  "connections": [
+    {"from": "AI1", "to": "SQL1"},
+    {"from": "AI1", "to": "PASS1"},
+    {"from": "SQL1", "to": "API1"},
+    {"from": "SQL1", "to": "DUCKDB1"},
+    {"from": "API1", "to": "SCRIPT1"},
+    {"from": "PASS1", "to": "SCRIPT1"},
+    {"from": "PASS1", "to": "HTTP1"}
+  ],
+  "exported": true,
+  "timestamp": "2024-08-08T21:53:00Z"
+}
