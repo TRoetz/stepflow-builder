@@ -1,4 +1,4 @@
-import { Play, Square, Save, Undo2, Redo2, LayoutGrid, Settings, Download, Upload, PanelLeft, PanelRight, MessageCircle, Puzzle, RotateCcw } from 'lucide-react';
+import { Play, Square, Save, Undo2, Redo2, LayoutGrid, Settings, Download, Upload, PanelLeft, PanelRight, MessageCircle, Puzzle, RotateCcw, FolderOpen } from 'lucide-react';
 interface AppHeaderProps {
   isRunning: boolean;
   onRun: () => void;
@@ -10,11 +10,14 @@ interface AppHeaderProps {
   onToggleAiConfig: () => void;
   onAutoLayout?: () => void;
   onResetFlow?: () => void;
+  onImport?: () => void;
+  onExport?: () => void;
+  onLoad?: () => void;
   flowName?: string;
   onFlowNameChange?: (name: string) => void;
 }
 
-export function AppHeader({ isRunning, onRun, onSave, onTogglePalette, onToggleProperties, onToggleAiAssistant, onToggleAgentPanel, onToggleAiConfig, onAutoLayout, onResetFlow, flowName, onFlowNameChange }: AppHeaderProps) {
+export function AppHeader({ isRunning, onRun, onSave, onTogglePalette, onToggleProperties, onToggleAiAssistant, onToggleAgentPanel, onToggleAiConfig, onAutoLayout, onResetFlow, onImport, onExport, onLoad, flowName, onFlowNameChange }: AppHeaderProps) {
   return (
     <header className="app-header">
       {/* Left: Logo + Flow Name */}
@@ -90,11 +93,14 @@ export function AppHeader({ isRunning, onRun, onSave, onTogglePalette, onToggleP
         <button className="btn-icon" title="Toggle Properties" onClick={onToggleProperties}>
           <PanelRight className="w-4 h-4" />
         </button>
-        <button className="btn-icon" title="Import Flow">
+        <button className="btn-icon" title="Import Flow" onClick={onImport}>
           <Upload className="w-4 h-4" />
         </button>
-        <button className="btn-icon" title="Export Flow">
+        <button className="btn-icon" title="Export Flow" onClick={onExport}>
           <Download className="w-4 h-4" />
+        </button>
+        <button className="btn-icon" title="Load Flow" onClick={onLoad}>
+          <FolderOpen className="w-4 h-4" />
         </button>
         <button className="btn-icon" title="AI Model Configuration" onClick={onToggleAiConfig}>
           <Settings className="w-4 h-4" />

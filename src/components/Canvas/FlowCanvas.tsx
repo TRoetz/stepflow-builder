@@ -79,8 +79,7 @@ function FlowCanvasInner({
   // ── Keyboard Shortcuts ──
   useKeyboardShortcuts({
     onAutoLayout: async () => {
-      const { autoLayout: layout } = useAutoLayout();
-      await layout();
+      // Auto-layout is handled by the parent App component
     },
     onSave: () => {
       FlowService.saveFlow('My Flow');
