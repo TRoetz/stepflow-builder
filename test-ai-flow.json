@@ -1,0 +1,36 @@
+{
+  "name": "NZD/USD Currency Check",
+  "description": "Fetch the current NZD to USD exchange rate and save it to a text file in the temp folder.",
+  "nodes": [
+    {
+      "schemaId": "stepflow:terminal:start",
+      "label": "START"
+    },
+    {
+      "schemaId": "stepflow:api:http",
+      "label": "Fetch Exchange Rate",
+      "config": {
+        "method": "GET",
+        "url": "https://api.exchangerate-api.com/v4/latest/NZD",
+        "headers": "{\"Accept\": \"application/json\"}"
+      }
+    },
+    {
+      "schemaId": "stepflow:transform:script",
+      "label": "Save Rate to File",
+      "config": {
+        "language": "javascript",
+        "script": "const rate = context.input?.rates?.USD || 'N/A';\nconst date = new Date().toISOString().split('T')[0];\nconst output = `NZD/USD Exchange Rate\\nDate: ${date}\\nRate: 1 NZD = ${rate} USD`;\nreturn { saved: true, content: output, path: 'C:\\\\temp\\\\currency_rate.txt' };"
+      }
+    },
+    {
+      "schemaId": "stepflow::end",
+      "label": "END"
+    }
+  ],
+  "edges": [
+    { "source": "START", "target": "Fetch Exchange Rate" },
+    { "source": "Fetch Exchange Rate", "target": "Save Rate to File" },
+    { "source": "Save Rate to File", "target": "END" }
+  ]
+}

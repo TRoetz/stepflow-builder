@@ -15,6 +15,16 @@ export function PropertyPanel({ selectedNode }: PropertyPanelProps) {
   const removeNode = useNodeStore((s) => s.removeNode);
   const duplicateNode = useNodeStore((s) => s.duplicateNode);
 
+  // Hooks must run before any early returns
+  const schema = selectedNode ? schemaById.get(selectedNode.data?.schemaId as string) : null;
+  const validity = useMemo((): Validity[] => {
+    if (!schema || !selectedNode) return [];
+    return schema.validation.map((rule) => ({
+      id: rule.id,
+      ...rule.check(selectedNode.data, new Set()),
+    }));
+  }, [selectedNode?.data, schema?.validation]);
+
   if (!selectedNode) {
     return (
       <div className="flex flex-col h-full">
@@ -29,7 +39,6 @@ export function PropertyPanel({ selectedNode }: PropertyPanelProps) {
     );
   }
 
-  const schema = schemaById.get(selectedNode.data?.schemaId as string);
   if (!schema) {
     return (
       <div className="flex flex-col h-full">
@@ -42,14 +51,6 @@ export function PropertyPanel({ selectedNode }: PropertyPanelProps) {
       </div>
     );
   }
-
-  // Run validation
-  const validity = useMemo((): Validity[] => {
-    return schema.validation.map((rule) => ({
-      id: rule.id,
-      ...rule.check(selectedNode.data, new Set()),
-    }));
-  }, [selectedNode.data, schema.validation]);
 
   const allValid = validity.every((v) => v.isValid);
   const invalidRules = validity.filter((v) => !v.isValid);
@@ -150,7 +151,7 @@ export function PropertyPanel({ selectedNode }: PropertyPanelProps) {
                         onChange={(value) => {
                           updateNodeData(selectedNode.id, {
                             configuration: {
-                              ...selectedNode.data.configuration,
+                              ...(selectedNode.data.configuration || {}),
                               [field.id]: value,
                             },
                           });

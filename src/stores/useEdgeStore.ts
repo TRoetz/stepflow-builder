@@ -6,16 +6,18 @@ export type StepEdge = Edge;
 
 interface EdgeState {
   edges: StepEdge[];
+  selectedEdgeId: string | null;
   onEdgesChange: (changes: EdgeChange[]) => void;
   addEdge: (edge: StepEdge) => void;
   removeEdge: (edgeId: string) => void;
   removeEdgesByNodeId: (nodeId: string) => void;
   clearEdges: () => void;
+  setSelectedEdge: (edgeId: string | null) => void;
 }
 
 export const useEdgeStore = create<EdgeState>((set, get) => ({
   edges: [],
-
+  selectedEdgeId: null,
   // ── Edge Change Handler (xyflow) ──
   onEdgesChange: (changes: EdgeChange[]) => {
     set({
@@ -50,6 +52,11 @@ export const useEdgeStore = create<EdgeState>((set, get) => ({
   clearEdges: () => {
     set({ edges: [] });
   },
+
+  // ── Set Selected Edge ──
+  setSelectedEdge: (edgeId: string | null) => {
+    set({ selectedEdgeId: edgeId });
+  },
 }));
 
 // ── Apply Edge Changes ──
@@ -65,7 +72,7 @@ function applyEdgeChangesWithSchema(
     } else if (change.type === 'select') {
       nextEdges = nextEdges.map((edge) => {
         if (edge.id === change.id) {
-          return { ...edge, selected: true };
+          return { ...edge, selected: change.selected };
         }
         return edge;
       });

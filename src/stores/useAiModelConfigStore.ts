@@ -1,8 +1,9 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 // ── AI Provider Types ──
 
-export type AiProvider = 'openai' | 'azureOpenAI' | 'anthropic' | 'openaiCompatible';
+export type AiProvider = 'openai' | 'azureOpenAI' | 'anthropic' | 'openaiCompatible' | 'ollama' | 'lmStudio' | 'llamaCpp';
 
 export interface AiProviderConfig {
   provider: AiProvider;
@@ -11,8 +12,12 @@ export interface AiProviderConfig {
   defaultModel: string;
   temperature: number;
   maxTokens: number;
-  topP: number;
 }
+
+export type AiModelConfig = Pick<
+  AiModelConfigState,
+  'provider' | 'baseUrl' | 'apiKey' | 'defaultModel' | 'temperature' | 'maxTokens' | 'topP'
+>;
 
 export interface AiModelConfigState {
   // Provider configuration
@@ -66,21 +71,36 @@ const defaultConfig: Omit<
   topP: 1.0,
   isConfigModalOpen: false,
 };
+export const useAiModelConfigStore = create<AiModelConfigState>()(
+  persist(
+    (set) => ({
+      ...defaultConfig,
 
-export const useAiModelConfigStore = create<AiModelConfigState>((set) => ({
-  ...defaultConfig,
+      setProvider: (provider) => set({ provider }),
+      setBaseUrl: (baseUrl) => set({ baseUrl }),
+      setApiKey: (apiKey) => set({ apiKey }),
+      setDefaultModel: (defaultModel) => set({ defaultModel }),
+      setTemperature: (temperature) => set({ temperature }),
+      setMaxTokens: (maxTokens) => set({ maxTokens }),
+      setTopP: (topP) => set({ topP }),
+      setConfig: (partial) => set(() => partial as Partial<AiModelConfigState>),
 
-  setProvider: (provider) => set({ provider }),
-  setBaseUrl: (baseUrl) => set({ baseUrl }),
-  setApiKey: (apiKey) => set({ apiKey }),
-  setDefaultModel: (defaultModel) => set({ defaultModel }),
-  setTemperature: (temperature) => set({ temperature }),
-  setMaxTokens: (maxTokens) => set({ maxTokens }),
-  setTopP: (topP) => set({ topP }),
-  setConfig: (partial) => set(() => partial as Partial<AiModelConfigState>),
-
-  toggleConfigModal: () => set((s) => ({ isConfigModalOpen: !s.isConfigModalOpen })),
-  openConfigModal: () => set({ isConfigModalOpen: true }),
-  closeConfigModal: () => set({ isConfigModalOpen: false }),
-  resetConfig: () => set(defaultConfig),
-}));
+      toggleConfigModal: () => set((s) => ({ isConfigModalOpen: !s.isConfigModalOpen })),
+      openConfigModal: () => set({ isConfigModalOpen: true }),
+      closeConfigModal: () => set({ isConfigModalOpen: false }),
+      resetConfig: () => set(defaultConfig),
+    }),
+    {
+      name: 'stepflow-ai-config',
+      partialize: (state) => ({
+        provider: state.provider,
+        baseUrl: state.baseUrl,
+        apiKey: state.apiKey,
+        defaultModel: state.defaultModel,
+        temperature: state.temperature,
+        maxTokens: state.maxTokens,
+        topP: state.topP,
+      }),
+    }
+  )
+);

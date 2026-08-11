@@ -74,6 +74,12 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
       // Delete / Backspace — Delete selected
       if (key === 'Delete' || key === 'Backspace') {
         event.preventDefault();
+        const state = useEdgeStore.getState();
+        const selectedEdge = state.edges.find((e) => e.selected);
+        if (selectedEdge) {
+          useEdgeStore.getState().removeEdge(selectedEdge.id);
+          return;
+        }
         const selectedId = useNodeStore.getState().selectedNodeId;
         if (selectedId) {
           // Remove connected edges

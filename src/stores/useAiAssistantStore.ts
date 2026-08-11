@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import { categoryPromptTemplates } from '@stores/aiAssistantPrompts';
+import { useAiModelConfigStore, type AiModelConfig } from '@stores/useAiModelConfigStore';
+import { useNodeStore } from '@stores/useNodeStore';
+import { useEdgeStore } from '@stores/useEdgeStore';
+import { summarizeConfigFields } from '@stores/aiAssistantPrompts';
+import { stepSchemas } from '@schemas/index';
+
 
 // ── Types ──
 
@@ -24,6 +29,26 @@ export interface WorkflowContext {
   hasEndNode: boolean;
 }
 
+// AI-generated flow JSON structure
+export interface AiFlowNode {
+  schemaId: string;
+  label: string;
+  config?: Record<string, unknown>;
+  position?: { x: number; y: number };
+}
+
+export interface AiFlowEdge {
+  source: string; // node label
+  target: string; // node label
+}
+
+export interface AiFlowJson {
+  name?: string;
+  description?: string;
+  nodes: AiFlowNode[];
+  edges: AiFlowEdge[];
+}
+
 interface AiAssistantState {
   // Chat state
   messages: AiAssistantMessage[];
@@ -46,9 +71,10 @@ interface AiAssistantState {
   notifyNodeAdded: (nodeName: string, category: string) => void;
   notifyNodeSelected: (nodeName: string | null, schemaId?: string, category?: string, configFieldsSummary?: string) => void;
 
-  // AI response simulation
+  // AI response generation
   generateResponse: (userMessage: string) => Promise<string>;
 }
+
 const defaultContext: WorkflowContext = {
   nodeCount: 0,
   edgeCount: 0,
@@ -63,7 +89,7 @@ const defaultContext: WorkflowContext = {
   hasEndNode: false,
 };
 
-// ── Context-aware response generation ──
+// ── Context helpers ──
 
 function buildContextSummary(ctx: WorkflowContext): string {
   const parts: string[] = [];
@@ -83,68 +109,314 @@ function buildContextSummary(ctx: WorkflowContext): string {
   return parts.join('. ');
 }
 
-const nodeHelpMap: Record<string, string> = {
-  'START': 'The START node marks the entry point of your workflow. Add a description to document what this flow does. Next, connect it to your first processing state.',
-  'END': 'The END node marks where your flow completes. Connect it from the last state in your execution path. You can have multiple END nodes for different branches.',
-  'Choice': 'The Choice state branches execution based on a condition. Configure the condition expression to evaluate your data. It has True and False outputs for different paths.',
-  'Map': 'The Map state iterates over arrays. Configure the iterator variable name and connect a sub-flow to process each item. Results are collected into an array output.',
-  'Parallel': 'The Parallel state runs branches concurrently. Set the number of branches and connect independent sub-flows. All branches must complete before continuing.',
-  'Succeed': 'The Succeed state marks a successful endpoint. Use it to terminate a branch with a success status. Configure a success message for documentation.',
-  'Fail': 'The Fail state marks an error endpoint. Use it when a condition indicates failure. Configure an error message and error code.',
-  'AI Decision': 'The AI Decision state sends data to an AI engine. Configure the Resource URI (e.g., ai://classify) and the input data expression. The output contains the AI\'s decision.',
-  'AI Text Generation': 'The AI Text Generation state uses an LLM to generate text. Configure the prompt template, model parameters like temperature and max tokens.',
-  'Rule Engine': 'The Rule Engine state evaluates business rules. Configure the rule set as JSON with name/expression/outcome fields, evaluation mode, and default outcome.',
-  'MS RulesEngine': 'The MS RulesEngine state evaluates rules using Microsoft RulesEngine. Configure rule definitions with C# lambda expressions (input => condition).',
-  'SQL Query': 'The SQL Query state executes database queries. Configure the connection, SQL statement, and parameter bindings.',
-  'DuckDB Query': 'The DuckDB Query state runs SQL queries for in-memory analytics. Configure the SQL statement and data sources.',
-  'EAV Operation': 'The EAV Operation state manages Entity-Attribute-Value data. Configure the entity, attributes, and operation type.',
-  'HTTP Request': 'The HTTP Request state calls external APIs. Configure the method, URL, headers, body template, and timeout.',
-  'Registered API': 'The Registered API state uses pre-registered integrations. Configure the API reference and endpoint.',
-  'JSONata Processor': 'The JSONata Processor state transforms data using JSONata expressions. Configure the expression and input/output paths.',
-  'Script Execution': 'The Script Execution state runs custom code. Choose the engine (JavaScript/Python) and write the script body.',
-  'Pass Through': 'The Pass Through state forwards data unchanged. Useful for labeling, routing, or debugging data flow.',
-  'Wait': 'The Wait state pauses execution. Configure the wait type (duration or timestamp) and the wait value.',
-  'Branch': 'The Branch state routes data to multiple paths. Configure branch conditions for each output.',
-  'Sub-Flow Call': 'The Sub-Flow Call state invokes another workflow. Reference the target flow and configure input mapping.',
-};
-
-function getContextualHelp(ctx: WorkflowContext, userMessage: string): string {
-  const lower = userMessage.toLowerCase();
-  const queriedNode = Object.keys(nodeHelpMap).find(
-    (name) => lower.includes(name.toLowerCase())
-  );
-  if (queriedNode) {
-    return nodeHelpMap[queriedNode];
-  }
-
-  // Check if asking about the recently added node
-  if (ctx.recentlyAddedNodeName && lower.includes('it')) {
-    return nodeHelpMap[ctx.recentlyAddedNodeName] || `I can help configure the ${ctx.recentlyAddedNodeName} state. What specific aspect would you like help with?`;
-  }
-
-  // Check if asking about the selected node
-  if (ctx.selectedNodeName && lower.includes('selected')) {
-    return nodeHelpMap[ctx.selectedNodeName] || `The ${ctx.selectedNodeName} state is currently selected. You can configure its properties in the right panel.`;
-  }
-
-  // Generic workflow advice
-  if (!ctx.hasStartNode && ctx.nodeCount > 0) {
-    return 'I notice your flow doesn\'t have a START node. Every workflow should begin with a START state from the Terminal category. Would you like help setting up the flow structure?';
-  }
-
-  if (ctx.hasStartNode && !ctx.hasEndNode && ctx.nodeCount > 1) {
-    return 'Your flow has a START node but no END node. Consider adding an END state from the Terminal category to mark where the flow completes.';
-  }
-
-  return 'I can help you with state configuration, control flow design, variable expressions, and API connections. What would you like to know?';
+function buildSchemaReference(): string {
+  return stepSchemas
+    .map((s) => {
+      const configSummary = s.configFields.length > 0
+        ? `  config_fields: ${summarizeConfigFields(s.configFields)}`
+        : '';
+      return `- "${s.schemaId}" (${s.name}, ${s.category}): ${s.description}${configSummary ? '\n' + configSummary : ''}`;
+    })
+    .join('\n');
 }
+
+// ── AI API Integration ──
+
+function buildAssistantSystemPrompt(ctx: WorkflowContext): string {
+  const parts: string[] = [
+    'You are the AI assistant for StepFlow Builder, a visual workflow designer.',
+    '',
+    '## PRIMARY TASK: Generate Flow JSON',
+    'When the user asks you to build, create, design, or describe a workflow/flow, respond with ONLY a JSON object in this exact format:',
+    '',
+    '```json',
+    '{',
+    '  "name": "Flow Name",',
+    '  "description": "What this flow does",',
+    '  "nodes": [',
+    '    { "schemaId": "stepflow:terminal:start", "label": "START" },',
+    '    { "schemaId": "stepflow:ai:decision", "label": "Analyze Input", "config": { "prompt": "Analyze the input data", "model": "gpt-4" } },',
+    '    { "schemaId": "stepflow::end", "label": "END" }',
+    '  ],',
+    '  "edges": [',
+    '    { "source": "START", "target": "Analyze Input" },',
+    '    { "source": "Analyze Input", "target": "END" }',
+    '  ]',
+    '}',
+    '```',
+    '',
+    '### Available Node Types (schemaId → name):',
+    buildSchemaReference(),
+    '',
+    '### Rules for JSON Output:',
+    '- ALWAYS include a START node (schemaId: "stepflow:terminal:start") as the first node.',
+    '- ALWAYS include at least one END node (schemaId: "stepflow::end") as the last node.',
+    '- Each node MUST have a unique "label" — labels are used to wire edges.',
+    '- Edges use node "label" values for "source" and "target" (not schemaId).',
+    '- Use "config" to set node-specific properties (see schema fields above).',
+    '- Keep "config" keys matching the schema field "id" values.',
+    '- Return ONLY the JSON. No markdown, no explanation, no extra text.',
+    '- If the request is ambiguous, make reasonable defaults and build the flow.',
+    '',
+    '### Non-Flow Questions:',
+    'If the user asks a question about configuration, best practices, or how to use the builder (not asking to build a flow), answer normally in markdown.',
+    '',
+    `## CURRENT CANVAS CONTEXT:`,
+    buildContextSummary(ctx),
+  ];
+
+  if (ctx.selectedNodeName) {
+    parts.push(`Currently selected node: "${ctx.selectedNodeName}"`);
+    if (ctx.selectedNodeCategory) {
+      parts.push(`Category: ${ctx.selectedNodeCategory}`);
+    }
+    if (ctx.selectedNodeConfigFields) {
+      parts.push(`Config fields: ${ctx.selectedNodeConfigFields}`);
+    }
+  }
+
+  return parts.join('\n');
+}
+
+interface AiApiMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+interface AiApiResponse {
+  choices?: Array<{
+    message?: {
+      content?: string;
+    };
+  }>;
+  error?: {
+    message?: string;
+  };
+}
+
+async function callAiApi(
+  config: AiModelConfig,
+  systemPrompt: string,
+  userMessage: string,
+): Promise<string> {
+  const messages: AiApiMessage[] = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userMessage },
+  ];
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  const localProviders = ['ollama', 'lmStudio', 'llamaCpp'] as const;
+  const isLocalProvider = localProviders.includes(config.provider as (typeof localProviders)[number]);
+
+  // Set authentication based on provider
+  if (config.provider === 'azureOpenAI') {
+    headers['api-key'] = config.apiKey;
+  } else if (config.provider === 'anthropic') {
+    headers['x-api-key'] = config.apiKey;
+    headers['anthropic-version'] = '2023-06-01';
+  } else if (!isLocalProvider && config.apiKey) {
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+  }
+
+  // Build request body based on provider
+  let body: Record<string, unknown>;
+  let url: string;
+
+  if (config.provider === 'anthropic') {
+    body = {
+      model: config.defaultModel,
+      system: systemPrompt,
+      messages: messages.filter((m) => m.role !== 'system'),
+      max_tokens: config.maxTokens,
+      temperature: config.temperature,
+      top_p: config.topP,
+    };
+    url = `${config.baseUrl}/v1/messages`;
+  } else {
+    const basePath = config.provider === 'azureOpenAI'
+      ? `${config.baseUrl}/openai/deployments/${config.defaultModel}`
+      : `${config.baseUrl}/v1`;
+
+    body = {
+      model: config.defaultModel,
+      messages,
+      max_tokens: config.maxTokens,
+      temperature: config.temperature,
+      top_p: config.topP,
+    };
+    url = `${basePath}/chat/completions`;
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errorData = (await response.json()) as AiApiResponse;
+    throw new Error(errorData.error?.message ?? `API error: ${response.status}`);
+  }
+
+  const data = (await response.json()) as AiApiResponse;
+
+  // Extract response based on provider
+  if (config.provider === 'anthropic') {
+    if (data && typeof data === 'object' && 'content' in data && Array.isArray(data.content)) {
+      const content = data.content as Array<{ text?: string }>;
+      if (content?.[0]?.text) return content[0].text;
+    }
+    throw new Error('No content in Anthropic response');
+  }
+
+  const content = data.choices?.[0]?.message?.content;
+  if (content) return content;
+  throw new Error('No content in API response');
+}
+
+export async function testAiConnection(config: AiModelConfig): Promise<{ success: boolean; message: string }> {
+  const localProviders = ['ollama', 'lmStudio', 'llamaCpp'] as const;
+  const isLocalProvider = localProviders.includes(config.provider as (typeof localProviders)[number]);
+
+  if (!config.baseUrl) {
+    return { success: false, message: 'Please enter an API Base URL.' };
+  }
+  if (!isLocalProvider && !config.apiKey) {
+    return { success: false, message: 'Please enter an API key for this provider.' };
+  }
+
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+    if (config.provider === 'azureOpenAI') {
+      headers['api-key'] = config.apiKey;
+    } else if (!isLocalProvider && config.apiKey) {
+      headers['Authorization'] = `Bearer ${config.apiKey}`;
+    }
+
+    const body = {
+      model: config.defaultModel,
+      messages: [{ role: 'user', content: 'Hi' }],
+      max_tokens: 1,
+    };
+
+    const basePath = config.provider === 'azureOpenAI'
+      ? `${config.baseUrl}/openai/deployments/${config.defaultModel}`
+      : `${config.baseUrl}/v1`;
+
+    const response = await fetch(`${basePath}/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    if (response.ok) {
+      return { success: true, message: 'Connection successful!' };
+    }
+
+    const errorData = (await response.json()) as AiApiResponse;
+    return { success: false, message: errorData.error?.message ?? `API error: ${response.status}` };
+  } catch (error) {
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      return {
+        success: false,
+        message: `CORS error: Your AI server at ${config.baseUrl} is blocking browser requests. Add --host 0.0.0.0 and CORS headers to your server config.`,
+      };
+    }
+    return { success: false, message: `Connection failed: ${error instanceof Error ? error.message : String(error)}` };
+  }
+}
+
+// ── JSON Flow Parsing & Loading ──
+
+function extractJsonFromResponse(text: string): string {
+  // Strip markdown code fences if present
+  let cleaned = text.trim();
+  const fenceMatch = cleaned.match(/```(?:json)?\s*\n([\s\S]*?)\n```/);
+  if (fenceMatch) {
+    cleaned = fenceMatch[1].trim();
+  }
+  return cleaned;
+}
+
+function parseAiFlowJson(text: string): AiFlowJson | null {
+  try {
+    const jsonStr = extractJsonFromResponse(text);
+    const parsed = JSON.parse(jsonStr) as AiFlowJson;
+    if (!parsed.nodes || !Array.isArray(parsed.nodes)) return null;
+    if (!parsed.edges || !Array.isArray(parsed.edges)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function loadAiFlow(flow: AiFlowJson): void {
+  const addNode = useNodeStore.getState().addNode;
+  const updateNodeData = useNodeStore.getState().updateNodeData;
+  const addEdge = useEdgeStore.getState().addEdge;
+
+  // Calculate starting position
+  const allNodes = useNodeStore.getState().nodes;
+  let startY = 150;
+  if (allNodes.length > 0) {
+    const maxY = Math.max(...allNodes.map(n => n.position.y));
+    startY = maxY + 150;
+  }
+  const startX = 250;
+
+  // Track label → node id mapping for edge wiring
+  const labelToId = new Map<string, string>();
+
+  // Create nodes
+  for (const nodeDef of flow.nodes) {
+    const position = nodeDef.position ?? { x: startX, y: startY };
+    addNode(nodeDef.schemaId, position);
+
+    // addNode appends to the array — grab the last entry
+    const newNodes = useNodeStore.getState().nodes;
+    const newNode = newNodes[newNodes.length - 1];
+    if (newNode) {
+      labelToId.set(nodeDef.label, newNode.id);
+
+      // Update node label and config
+      const updates: Record<string, unknown> = { label: nodeDef.label };
+      if (nodeDef.config) {
+        updates.configuration = { ...newNode.data.configuration, ...nodeDef.config };
+      }
+      updateNodeData(newNode.id, updates);
+    }
+
+    startY += 150;
+  }
+
+  // Create edges
+  for (const edgeDef of flow.edges) {
+    const sourceId = labelToId.get(edgeDef.source);
+    const targetId = labelToId.get(edgeDef.target);
+
+    if (sourceId && targetId) {
+      addEdge({
+        id: `edge-${sourceId}-${targetId}`,
+        source: sourceId,
+        target: targetId,
+        type: 'step-edge',
+      });
+    }
+  }
+}
+
+// ── Store ──
 
 export const useAiAssistantStore = create<AiAssistantState>((set, get) => ({
   messages: [
     {
       id: 'welcome',
       role: 'assistant',
-      content: 'Welcome to StepFlow Builder! I\'m your AI assistant. I can help you configure states, design control flow, set up variables, and connect APIs. Drag states from the palette and I\'ll provide guidance as you build.',
+      content: 'Welcome to StepFlow Builder! I\'m your AI assistant. Ask me to **build a flow** and I\'ll generate the workflow JSON and load it onto the canvas. You can also ask me questions about configuring nodes, control flow patterns, or best practices.',
       timestamp: Date.now(),
     },
   ],
@@ -170,7 +442,7 @@ export const useAiAssistantStore = create<AiAssistantState>((set, get) => ({
         {
           id: 'welcome',
           role: 'assistant',
-          content: 'Chat cleared. How can I help with your workflow?',
+          content: 'Chat cleared. Ask me to build a flow or help with configuration.',
           timestamp: Date.now(),
         },
       ],
@@ -195,23 +467,6 @@ export const useAiAssistantStore = create<AiAssistantState>((set, get) => ({
       hasEndNode: nodeName === 'END' || ctx.hasEndNode,
     };
     set({ context: updatedContext });
-
-    // Auto-suggest help for the new node
-    const helpText = nodeHelpMap[nodeName]
-      ? `You just added a **${nodeName}** state (${category}). ${nodeHelpMap[nodeName]}`
-      : `You just added a **${nodeName}** state from the ${category} category. Click on it to configure its properties.`;
-
-    set((state) => ({
-      messages: [
-        ...state.messages,
-        {
-          id: `suggestion-${Date.now()}`,
-          role: 'assistant',
-          content: helpText,
-          timestamp: Date.now(),
-        },
-      ],
-    }));
   },
 
   notifyNodeSelected: (nodeName, schemaId, category, configFieldsSummary) => {
@@ -229,26 +484,70 @@ export const useAiAssistantStore = create<AiAssistantState>((set, get) => ({
   generateResponse: async (userMessage: string) => {
     set({ isTyping: true });
 
-    // Simulate AI processing delay
-    await new Promise((r) => setTimeout(r, 400 + Math.random() * 600));
-
     const ctx = get().context;
-    let systemPrompt = '';
+    const config: AiModelConfig = {
+      provider: useAiModelConfigStore.getState().provider,
+      baseUrl: useAiModelConfigStore.getState().baseUrl,
+      apiKey: useAiModelConfigStore.getState().apiKey,
+      defaultModel: useAiModelConfigStore.getState().defaultModel,
+      temperature: useAiModelConfigStore.getState().temperature,
+      maxTokens: useAiModelConfigStore.getState().maxTokens,
+      topP: useAiModelConfigStore.getState().topP,
+    };
 
-    // Inject category-specific prompt if a node is selected
-    if (ctx.selectedNodeCategory && ctx.selectedNodeConfigFields) {
-      const template = categoryPromptTemplates[ctx.selectedNodeCategory as keyof typeof categoryPromptTemplates];
-      if (template) {
-        systemPrompt = template(ctx.selectedNodeConfigFields) + '\n\n';
-      }
+    // Check if AI is configured
+    const localProviders = ['ollama', 'lmStudio', 'llamaCpp'] as const;
+    const isLocalProvider = localProviders.includes(config.provider as (typeof localProviders)[number]);
+    const shouldCallApi = (config.apiKey && config.baseUrl) || (isLocalProvider && config.baseUrl);
+
+    if (!shouldCallApi) {
+      set({ isTyping: false });
+      const tip = !config.baseUrl
+        ? 'Configure your AI provider base URL in settings (gear icon in the header).'
+        : !isLocalProvider && !config.apiKey
+          ? 'Enter an API key for your provider in settings.'
+          : '';
+      return `⚠️ **AI not configured.** I need an AI provider to generate flows.\n\n💡 ${tip}`;
     }
 
-    const contextualHelp = getContextualHelp(ctx, userMessage);
-    const contextSummary = buildContextSummary(ctx);
+    // Build system prompt with workflow context and schema reference
+    const systemPrompt = buildAssistantSystemPrompt(ctx);
 
-    const response = `${systemPrompt}${contextualHelp}\n\n*Current workflow: ${contextSummary}*`;
+    try {
+      const response = await callAiApi(config, systemPrompt, userMessage);
 
-    set({ isTyping: false });
-    return response;
+      // Try to parse as flow JSON
+      const flowJson = parseAiFlowJson(response);
+      if (flowJson) {
+        // Load the flow onto the canvas
+        loadAiFlow(flowJson);
+
+        // Update context to reflect new nodes
+        const newNodes = useNodeStore.getState().nodes;
+        const newEdges = useEdgeStore.getState().edges;
+        set((state) => ({
+          context: {
+            ...state.context,
+            nodeCount: newNodes.length,
+            edgeCount: newEdges.length,
+            hasStartNode: newNodes.some(n => n.data?.schemaId === 'stepflow:terminal:start') || state.context.hasStartNode,
+            hasEndNode: newNodes.some(n => n.data?.schemaId === 'stepflow::end') || state.context.hasEndNode,
+          },
+        }));
+
+        const nodeCount = flowJson.nodes.length;
+        const edgeCount = flowJson.edges.length;
+        const flowName = flowJson.name || 'Flow';
+        return `✅ **Flow "${flowName}" loaded!**\n\nAdded **${nodeCount} nodes** and **${edgeCount} connections** to the canvas.`;
+      }
+
+      // Not a flow JSON — return the AI's text response as-is
+      set({ isTyping: false });
+      return response;
+    } catch (error) {
+      set({ isTyping: false });
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      return `⚠️ **AI request failed:** ${errorMsg}\n\nCheck your AI provider configuration (gear icon).`;
+    }
   },
 }));

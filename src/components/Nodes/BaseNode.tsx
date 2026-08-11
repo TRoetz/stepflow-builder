@@ -12,13 +12,13 @@ import { getExecutionColor } from '@utils/validation';
 // ═══════════════════════════════════════════════════════════
 
 export const HANDLE_SIZES: Record<DataType, number> = {
-  json: 10,
-  string: 8,
-  number: 8,
-  boolean: 7,
-  array: 10,
-  image: 9,
-  any: 8,
+  json: 18,
+  string: 14,
+  number: 14,
+  boolean: 13,
+  array: 18,
+  image: 15,
+  any: 14,
 };
 
 export const HANDLE_COLORS: Record<DataType, string> = {
@@ -128,7 +128,7 @@ export function BaseNodeWithHandles({
           boxShadow: selected ? `0 0 0 1px ${accentColor}40, 0 4px 12px ${accentColor}20` : 'none',
         }}
       >
-        <Handle type="target" position={Position.Left} style={{ background: accentColor }} />
+        <Handle type="target" position={Position.Left} style={{ background: accentColor, width: 14, height: 14 }} />
         <div className="px-3 py-1.5 flex items-center gap-2">
           <div
             className="w-4 h-4 rounded flex items-center justify-center shrink-0"
@@ -140,7 +140,7 @@ export function BaseNodeWithHandles({
           {disabled && <AlertCircle className="w-3 h-3 text-amber-400 shrink-0" />}
           {headerExtras}
         </div>
-        <Handle type="source" position={Position.Right} style={{ background: accentColor }} />
+        <Handle type="source" position={Position.Right} style={{ background: accentColor, width: 14, height: 14 }} />
       </div>
     );
   }
@@ -169,7 +169,7 @@ export function BaseNodeWithHandles({
                   width: HANDLE_SIZES[input.type],
                   height: HANDLE_SIZES[input.type],
                   right: 'auto',
-                  left: '-5px',
+                  left: '-8px',
                 }}
                 className="transition-all hover:scale-125"
               />
@@ -251,7 +251,7 @@ export function BaseNodeWithHandles({
                   width: HANDLE_SIZES[output.type],
                   height: HANDLE_SIZES[output.type],
                   left: 'auto',
-                  right: '-5px',
+                  right: '-8px',
                 }}
                 className="transition-all hover:scale-125"
               />

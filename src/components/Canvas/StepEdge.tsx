@@ -13,6 +13,7 @@ export function StepEdge({
   targetPosition,
   markerEnd,
   data,
+  selected,
 }: EdgeProps) {
   const [path] = getSmoothStepPath({
     sourceX,
@@ -39,16 +40,18 @@ export function StepEdge({
   } else if (edgeData?.sourceColor) {
     edgeColor = edgeData.sourceColor;
   }
-
+  const isSelected = !!selected;
   return (
     <BaseEdge
       path={path}
       style={{
         stroke: edgeColor,
-        strokeWidth: edgeData?.warning ? 2 : 2.5,
+        strokeWidth: isSelected ? 4 : edgeData?.warning ? 2 : 2.5,
         strokeDasharray: edgeData?.warning ? '5 5' : undefined,
+        filter: isSelected ? `drop-shadow(0 0 4px ${edgeColor})` : undefined,
+        cursor: 'pointer',
       }}
-      markerEnd={markerEnd ? { ...(typeof markerEnd as any), color: edgeColor } : undefined}
+      markerEnd={markerEnd}
     />
   );
 }

@@ -1,14 +1,18 @@
-import { useCallback, useMemo } from 'react';
-import { X, Save, RotateCcw, Globe, Key, Cpu, Thermometer, Hash, SlidersHorizontal } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
+import { X, Save, RotateCcw, Globe, Key, Cpu, Thermometer, Hash, SlidersHorizontal, Plug, CheckCircle, AlertCircle } from 'lucide-react';
 import {
   useAiModelConfigStore,
   type AiProvider,
 } from '@stores/useAiModelConfigStore';
+import { testAiConnection } from '@stores/useAiAssistantStore';
 
 const PROVIDER_OPTIONS: { value: AiProvider; label: string; defaultUrl: string }[] = [
   { value: 'openai', label: 'OpenAI', defaultUrl: 'https://api.openai.com/v1' },
   { value: 'azureOpenAI', label: 'Azure OpenAI', defaultUrl: 'https://YOUR_RESOURCE.openai.azure.com' },
   { value: 'anthropic', label: 'Anthropic', defaultUrl: 'https://api.anthropic.com' },
+  { value: 'ollama', label: 'Ollama (Local)', defaultUrl: 'http://localhost:11434/v1' },
+  { value: 'lmStudio', label: 'LM Studio (Local)', defaultUrl: 'http://localhost:1234/v1' },
+  { value: 'llamaCpp', label: 'llama.cpp (Local)', defaultUrl: 'http://localhost:8080/v1' },
   { value: 'openaiCompatible', label: 'OpenAI Compatible', defaultUrl: 'http://localhost:8080/v1' },
 ];
 
@@ -36,6 +40,28 @@ const MODEL_OPTIONS: Record<AiProvider, { label: string; value: string }[]> = {
     { label: 'GPT-3.5 Turbo', value: 'gpt-3.5-turbo' },
     { label: 'Custom...', value: 'custom' },
   ],
+  ollama: [
+    { label: 'Llama 3.3 70B', value: 'llama3.3' },
+    { label: 'Llama 3.1 8B', value: 'llama3.1' },
+    { label: 'Mistral 7B', value: 'mistral' },
+    { label: 'Phi 3 Mini', value: 'phi3' },
+    { label: 'Gemma 2 9B', value: 'gemma2' },
+    { label: 'Custom...', value: 'custom' },
+  ],
+  lmStudio: [
+    { label: 'Llama 3.3 70B', value: 'llama-3.3-70b' },
+    { label: 'Llama 3.1 8B', value: 'llama-3.1-8b' },
+    { label: 'Mistral 7B', value: 'mistral-7b' },
+    { label: 'Phi 3 Mini', value: 'phi-3-mini' },
+    { label: 'Custom...', value: 'custom' },
+  ],
+  llamaCpp: [
+    { label: 'Default Model', value: 'default' },
+    { label: 'Llama 3.3 70B', value: 'llama-3.3-70b' },
+    { label: 'Llama 3.1 8B', value: 'llama-3.1-8b' },
+    { label: 'Mistral 7B', value: 'mistral-7b' },
+    { label: 'Custom...', value: 'custom' },
+  ],
 };
 
 export function AiModelConfigModal() {
@@ -57,6 +83,23 @@ export function AiModelConfigModal() {
     setTopP,
     closeConfigModal,
   } = useAiModelConfigStore();
+
+  const [testStatus, setTestStatus] = useState<{ loading: boolean; result?: { success: boolean; message: string } }>({ loading: false });
+
+  const handleTestConnection = useCallback(async () => {
+    setTestStatus({ loading: true, result: undefined });
+    const config = {
+      provider,
+      baseUrl,
+      apiKey,
+      defaultModel,
+      temperature,
+      maxTokens,
+      topP,
+    };
+    const result = await testAiConnection(config);
+    setTestStatus({ loading: false, result });
+  }, [provider, baseUrl, apiKey, defaultModel, temperature, maxTokens, topP]);
 
   const availableModels = useMemo(
     () => MODEL_OPTIONS[provider] ?? MODEL_OPTIONS.openai,
@@ -89,9 +132,6 @@ export function AiModelConfigModal() {
     setTopP(1.0);
   }, [setProvider, setBaseUrl, setApiKey, setDefaultModel, setTemperature, setMaxTokens, setTopP]);
 
-  const handleSave = useCallback(() => {
-    closeConfigModal();
-  }, [closeConfigModal]);
 
   if (!isConfigModalOpen) {
     return null;
@@ -289,29 +329,48 @@ export function AiModelConfigModal() {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-700/50">
-          <button
-            className="btn btn-ghost text-sm flex items-center gap-1.5"
-            onClick={handleReset}
-            title="Reset to defaults"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Reset
-          </button>
-          <div className="flex items-center gap-2">
+        <div className="px-6 py-4 border-t border-gray-700/50 space-y-3">
+          {/* Test Connection Result */}
+          {testStatus.result && (
+            <div className={`flex items-center gap-2 text-xs px-3 py-2 rounded-lg ${testStatus.result.success ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+              {testStatus.result.success ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+              <span>{testStatus.result.message}</span>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between">
             <button
-              className="btn btn-ghost text-sm"
-              onClick={closeConfigModal}
+              className="btn btn-ghost text-sm flex items-center gap-1.5"
+              onClick={handleReset}
+              title="Reset to defaults"
             >
-              Cancel
+              <RotateCcw className="w-3.5 h-3.5" />
+              Reset
             </button>
-            <button
-              className="btn btn-primary text-sm flex items-center gap-1.5"
-              onClick={handleSave}
-            >
-              <Save className="w-3.5 h-3.5" />
-              Save
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                className="btn btn-ghost text-sm flex items-center gap-1.5"
+                onClick={handleTestConnection}
+                disabled={testStatus.loading}
+                title="Test connection"
+              >
+                <Plug className="w-3.5 h-3.5" />
+                {testStatus.loading ? 'Testing...' : 'Test Connection'}
+              </button>
+              <button
+                className="btn btn-ghost text-sm"
+                onClick={closeConfigModal}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary text-sm flex items-center gap-1.5"
+                onClick={closeConfigModal}
+              >
+                <Save className="w-3.5 h-3.5" />
+                Save
+              </button>
+            </div>
           </div>
         </div>
       </div>

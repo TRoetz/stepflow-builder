@@ -17,6 +17,7 @@ import { useAiAssistantStore } from '@stores/useAiAssistantStore';
 import { summarizeConfigFields } from '@stores/aiAssistantPrompts';
 import { useAiModelConfigStore } from '@stores/useAiModelConfigStore';
 import { AiModelConfigModal } from '@components/AiModelConfigModal';
+import { ErrorBoundary } from '@components/ErrorBoundary';
 import './styles/globals.css';
 
 export default function App() {
@@ -195,19 +196,23 @@ export default function App() {
 
         {/* Center: Canvas */}
         <div className="app-canvas">
-          <FlowCanvas
-            onNodeSelect={handleNodeSelect}
-            onNodeCountChange={setNodeCount}
-            onEdgeCountChange={setEdgeCount}
-            onZoomChange={setZoom}
-          />
+          <ErrorBoundary>
+            <FlowCanvas
+              onNodeSelect={handleNodeSelect}
+              onNodeCountChange={setNodeCount}
+              onEdgeCountChange={setEdgeCount}
+              onZoomChange={setZoom}
+            />
+          </ErrorBoundary>
           {aiAssistantOpen && <CanvasAssistant />}
         </div>
 
         {/* Right: Property Panel */}
         {!isCollapsedProperties && (
           <div className="app-properties">
-            <PropertyPanel selectedNode={selectedNode} />
+            <ErrorBoundary>
+              <PropertyPanel selectedNode={selectedNode} />
+            </ErrorBoundary>
           </div>
         )}
         {showAgentPanel && (

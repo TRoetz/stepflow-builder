@@ -68,6 +68,7 @@ function FlowCanvasInner({
   const edges = useEdgeStore((state) => state.edges);
   const onEdgesChange = useEdgeStore((state) => state.onEdgesChange);
   const addEdge = useEdgeStore((state) => state.addEdge);
+  const setSelectedEdge = useEdgeStore((state) => state.setSelectedEdge);
 
   // Execution store
   const executionStatus = useExecutionStore((s) => s.status);
@@ -144,11 +145,15 @@ function FlowCanvasInner({
 
   // ── Handle Selection Change ──
   const onSelectionChange = useCallback(
-    ({ nodes: selectedNodes }: { nodes: Node[]; edges: Edge[] }) => {
+    ({ nodes: selectedNodes, edges: selectedEdges }: { nodes: Node[]; edges: Edge[] }) => {
       const selected = selectedNodes.length > 0 ? selectedNodes[0].id : null;
       onNodeSelect(selected);
+      // Deselect edge if no edges are selected
+      if (selectedEdges.length === 0) {
+        setSelectedEdge(null);
+      }
     },
-    [onNodeSelect]
+    [onNodeSelect, setSelectedEdge]
   );
 
   // ── Handle Zoom Change ──
@@ -157,6 +162,14 @@ function FlowCanvasInner({
       onZoomChange(viewport.zoom);
     },
     [onZoomChange]
+  );
+
+  // ── Handle Edge Click ──
+  const onEdgeClick = useCallback(
+    (_: unknown, edge: Edge) => {
+      setSelectedEdge(edge.id);
+    },
+    [setSelectedEdge]
   );
 
 
@@ -172,8 +185,10 @@ function FlowCanvasInner({
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onSelectionChange={onSelectionChange}
+        onEdgeClick={onEdgeClick}
         onNodeClick={(_, node: Node) => {
           onNodeSelect(node.id);
+          setSelectedEdge(null);
         }}
         onMoveEnd={onMoveEnd}
         onInit={() => setIsInstanceReady(true)}
