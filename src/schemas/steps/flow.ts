@@ -66,6 +66,15 @@ export const mapStateSchema: StepSchema = {
 
   configFields: [
     {
+      id: 'targetFlowId',
+      label: 'Iterator Flow (Sub-Flow)',
+      type: 'dropdown',
+      default: '',
+      options: [], // Populated dynamically from registered flows
+      required: true,
+      description: 'Select the sub-flow to execute as the iterator for each item',
+    },
+    {
       id: 'itemsPath',
       label: 'Items Path',
       type: 'text',

@@ -1,16 +1,32 @@
 import { create } from 'zustand';
 
 export type ExecutionStatus = 'idle' | 'running' | 'paused' | 'completed' | 'failed';
+export type ExecutionMode = 'simulated' | 'backend';
+
+export interface StepExecutionLog {
+  nodeId: string;
+  nodeName: string;
+  status: 'running' | 'completed' | 'failed';
+  input: any;
+  output: any;
+  error?: string;
+  startTime: number;
+  endTime?: number;
+}
 
 interface ExecutionState {
   status: ExecutionStatus;
+  executionMode: ExecutionMode;
   currentNodeId: string | null;
   completedNodes: Set<string>;
   failedNodes: Map<string, string>; // nodeId -> error message
+  logs: Record<string, StepExecutionLog>; // nodeId -> log
   startTime: number | null;
   endTime: number | null;
 
   // Actions
+  setExecutionMode: (mode: ExecutionMode) => void;
+  setNodeLog: (nodeId: string, log: Partial<StepExecutionLog>) => void;
   startExecution: () => void;
   stopExecution: () => void;
   pauseExecution: () => void;
@@ -23,11 +39,38 @@ interface ExecutionState {
 
 export const useExecutionStore = create<ExecutionState>((set) => ({
   status: 'idle',
+  executionMode: 'simulated',
   currentNodeId: null,
   completedNodes: new Set<string>(),
   failedNodes: new Map<string, string>(),
+  logs: {},
   startTime: null,
   endTime: null,
+
+  setNodeLog: (nodeId, log) => {
+    set((state) => {
+      const existing = state.logs[nodeId] || {
+        nodeId,
+        nodeName: '',
+        status: 'running',
+        input: null,
+        output: null,
+        startTime: Date.now(),
+      };
+      return {
+        logs: {
+          ...state.logs,
+          [nodeId]: {
+            ...existing,
+            ...log,
+            endTime: log.status === 'running' ? undefined : Date.now(),
+          } as StepExecutionLog,
+        },
+      };
+    });
+  },
+
+  setExecutionMode: (mode) => set({ executionMode: mode }),
 
   startExecution: () => {
     set({

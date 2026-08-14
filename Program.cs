@@ -3,6 +3,8 @@ using System.IO;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using StepFunctionsApp.StepFunctions;
 
 namespace StepFunctionsApp;
 
@@ -18,17 +20,43 @@ public class Program
             .ConfigureWebHostDefaults(webBuilder =>
             {
                 webBuilder.UseStartup<Startup>();
+                webBuilder.UseUrls("http://localhost:5001");
             });
 }
-
 public class Startup
 {
     public void ConfigureServices(IServiceCollection services)
     {
-        services.AddControllersWithViews();
+        services.AddControllersWithViews()
+            .AddNewtonsoftJson();
         services.AddRazorPages();
-    }
 
+        services.AddHttpClient();
+
+        // Register EAV Registry Service
+        var eavRegistry = new EavRegistryService();
+        eavRegistry.Initialize("eav_registry.json");
+        services.AddSingleton(eavRegistry);
+
+        // StepFlow Services
+        services.AddSingleton<RuleEngineService>();
+        services.AddSingleton<MicrosoftRulesEngineService>();
+        services.AddSingleton<DuckDbTransformService>();
+        services.AddSingleton<ScriptExecutionService>();
+        services.AddSingleton<AiDecisionService>();
+        
+        services.AddSingleton<IResourceInvoker, CompositeResourceInvoker>();
+        services.AddSingleton<StepFunctionInterpreter>();
+        services.AddSingleton<BpmnConverter>();
+
+        // Register StepFunctionService as both singleton (for Controller injection) and HostedService (to run background executions)
+        services.AddSingleton<StepFunctionService>();
+        services.AddHostedService(provider => provider.GetRequiredService<StepFunctionService>());
+
+        // Register Lazy<StepFunctionService> for CompositeResourceInvoker circular dependency resolution
+        services.AddTransient<Lazy<StepFunctionService>>(provider =>
+            new Lazy<StepFunctionService>(() => provider.GetRequiredService<StepFunctionService>()));
+    }
     public void Configure(IApplicationBuilder app, IHostEnvironment env)
     {
         if (env.IsDevelopment())

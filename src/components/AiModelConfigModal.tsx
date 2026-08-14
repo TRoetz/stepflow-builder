@@ -7,13 +7,13 @@ import {
 import { testAiConnection } from '@stores/useAiAssistantStore';
 
 const PROVIDER_OPTIONS: { value: AiProvider; label: string; defaultUrl: string }[] = [
-  { value: 'openai', label: 'OpenAI', defaultUrl: 'https://api.openai.com/v1' },
+  { value: 'openai', label: 'OpenAI', defaultUrl: 'https://api.openai.com' },
   { value: 'azureOpenAI', label: 'Azure OpenAI', defaultUrl: 'https://YOUR_RESOURCE.openai.azure.com' },
   { value: 'anthropic', label: 'Anthropic', defaultUrl: 'https://api.anthropic.com' },
-  { value: 'ollama', label: 'Ollama (Local)', defaultUrl: 'http://localhost:11434/v1' },
-  { value: 'lmStudio', label: 'LM Studio (Local)', defaultUrl: 'http://localhost:1234/v1' },
-  { value: 'llamaCpp', label: 'llama.cpp (Local)', defaultUrl: 'http://localhost:8080/v1' },
-  { value: 'openaiCompatible', label: 'OpenAI Compatible', defaultUrl: 'http://localhost:8080/v1' },
+  { value: 'ollama', label: 'Ollama (Local)', defaultUrl: 'http://localhost:11434' },
+  { value: 'lmStudio', label: 'LM Studio (Local)', defaultUrl: 'http://localhost:1234' },
+  { value: 'llamaCpp', label: 'llama.cpp (Local)', defaultUrl: 'http://localhost:8080' },
+  { value: 'openaiCompatible', label: 'OpenAI Compatible', defaultUrl: 'http://localhost:8080' },
 ];
 
 const MODEL_OPTIONS: Record<AiProvider, { label: string; value: string }[]> = {
@@ -291,7 +291,7 @@ export function AiModelConfigModal() {
             <input
               type="range"
               min="1"
-              max="4096"
+              max="8192"
               step="1"
               value={maxTokens}
               onChange={(e) => setMaxTokens(parseInt(e.target.value))}
@@ -299,7 +299,7 @@ export function AiModelConfigModal() {
             />
             <div className="flex justify-between text-[10px] text-gray-500 mt-0.5">
               <span>1</span>
-              <span>4096</span>
+              <span>8192</span>
             </div>
           </div>
 

@@ -1,8 +1,11 @@
 import { Play, Square, Save, Undo2, Redo2, LayoutGrid, Settings, Download, Upload, PanelLeft, PanelRight, MessageCircle, Puzzle, RotateCcw, FolderOpen } from 'lucide-react';
+import { useExecutionStore } from '@stores/useExecutionStore';
 interface AppHeaderProps {
   isRunning: boolean;
   onRun: () => void;
   onSave: () => void;
+  onSaveProject?: () => void;
+  onLoadProject?: () => void;
   onTogglePalette: () => void;
   onToggleProperties: () => void;
   onToggleAiAssistant: () => void;
@@ -17,7 +20,7 @@ interface AppHeaderProps {
   onFlowNameChange?: (name: string) => void;
 }
 
-export function AppHeader({ isRunning, onRun, onSave, onTogglePalette, onToggleProperties, onToggleAiAssistant, onToggleAgentPanel, onToggleAiConfig, onAutoLayout, onResetFlow, onImport, onExport, onLoad, flowName, onFlowNameChange }: AppHeaderProps) {
+export function AppHeader({ isRunning, onRun, onSave, onSaveProject, onLoadProject, onTogglePalette, onToggleProperties, onToggleAiAssistant, onToggleAgentPanel, onToggleAiConfig, onAutoLayout, onResetFlow, onImport, onExport, onLoad, flowName, onFlowNameChange }: AppHeaderProps) {
   return (
     <header className="app-header">
       {/* Left: Logo + Flow Name */}
@@ -39,7 +42,7 @@ export function AppHeader({ isRunning, onRun, onSave, onTogglePalette, onToggleP
       </div>
 
       {/* Center: Execution Controls */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-3">
         <button
           className={`btn gap-1.5 text-xs ${isRunning ? 'btn-danger' : 'btn-success'}`}
           title={isRunning ? 'Stop Execution' : 'Run Flow (Ctrl+Enter)'}
@@ -52,18 +55,62 @@ export function AppHeader({ isRunning, onRun, onSave, onTogglePalette, onToggleP
           )}
           <span>{isRunning ? 'Stop' : 'Run'}</span>
         </button>
-      </div>
 
+        {/* Execution Mode Toggle */}
+        <div className="flex items-center gap-1 bg-gray-800/80 rounded-lg p-0.5 border border-gray-700/50">
+          <button
+            onClick={() => useExecutionStore.getState().setExecutionMode('simulated')}
+            className={`px-2 py-1 rounded-md text-[10px] font-semibold transition-all ${
+              useExecutionStore((s) => s.executionMode) === 'simulated'
+                ? 'bg-gray-700 text-white shadow-sm'
+                : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            Simulated
+          </button>
+          <button
+            onClick={() => useExecutionStore.getState().setExecutionMode('backend')}
+            className={`px-2 py-1 rounded-md text-[10px] font-semibold transition-all ${
+              useExecutionStore((s) => s.executionMode) === 'backend'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-gray-400 hover:text-gray-200'
+            }`}
+            title="Execute live using real .NET 10 background engine"
+          >
+            Live Backend
+          </button>
+        </div>
+      </div>
       {/* Right: Actions */}
       <div className="flex items-center gap-1">
         <button
           className="btn btn-primary gap-1.5 text-xs"
-          title="Save Flow (Ctrl+S)"
+          title="Save Flow to LocalStorage (Ctrl+S)"
           onClick={onSave}
         >
           <Save className="w-3.5 h-3.5" />
           <span>Save</span>
         </button>
+        {onSaveProject && (
+          <button
+            className="btn btn-primary gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 border-indigo-500/20"
+            title="Save as Multi-File Project Folder"
+            onClick={onSaveProject}
+          >
+            <FolderOpen className="w-3.5 h-3.5" />
+            <span>Save Project</span>
+          </button>
+        )}
+        {onLoadProject && (
+          <button
+            className="btn btn-primary gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 border-indigo-500/20"
+            title="Load Multi-File Project Folder"
+            onClick={onLoadProject}
+          >
+            <FolderOpen className="w-3.5 h-3.5" />
+            <span>Load Project</span>
+          </button>
+        )}
         <button className="btn-icon" title="Undo (Ctrl+Z)">
           <Undo2 className="w-4 h-4" />
         </button>

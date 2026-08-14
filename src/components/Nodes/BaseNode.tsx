@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { ChevronDown, X, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, X, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { NodeData, StepInput, StepOutput, DataType } from '@schema-types/schema';
 import { schemaById } from '@schemas/index';
 import { useNodeStore } from '@stores/useNodeStore';
@@ -129,14 +129,17 @@ export function BaseNodeWithHandles({
         }}
       >
         <Handle type="target" position={Position.Left} style={{ background: accentColor, width: 14, height: 14 }} />
-        <div className="px-3 py-1.5 flex items-center gap-2">
+        <div className="px-3 py-1.5 flex items-center gap-2 cursor-pointer select-none" onClick={toggleCollapse}>
+          <button className="p-0.5 rounded hover:bg-white/10 transition-colors shrink-0">
+            <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+          </button>
           <div
             className="w-4 h-4 rounded flex items-center justify-center shrink-0"
             style={{ backgroundColor: `${accentColor}40` }}
           >
             <span className="text-[10px]">{schema?.icon || '📦'}</span>
           </div>
-          <span className="text-xs font-medium text-gray-200 truncate">{data.label || 'Step'}</span>
+          <span className="text-xs font-medium text-gray-200 truncate flex-1">{data.label || 'Step'}</span>
           {disabled && <AlertCircle className="w-3 h-3 text-amber-400 shrink-0" />}
           {headerExtras}
         </div>

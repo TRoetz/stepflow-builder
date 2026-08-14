@@ -24,7 +24,7 @@
       }
     },
     {
-      "schemaId": "stepflow::end",
+      "schemaId": "stepflow:terminal:end",
       "label": "END"
     }
   ],

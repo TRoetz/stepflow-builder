@@ -34,7 +34,7 @@ export const startStateSchema: StepSchema = {
 
 // ── END State ──
 export const endStateSchema: StepSchema = {
-  schemaId: 'stepflow::end',
+  schemaId: 'stepflow:terminal:end',
   name: 'END',
   category: 'terminal',
   description: 'Marks the end of the workflow. Place one or more END states to define flow completion.',

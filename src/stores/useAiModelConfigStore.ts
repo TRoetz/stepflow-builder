@@ -67,7 +67,7 @@ const defaultConfig: Omit<
   apiKey: '',
   defaultModel: 'gpt-4-turbo',
   temperature: 0.7,
-  maxTokens: 1000,
+  maxTokens: 4096,
   topP: 1.0,
   isConfigModalOpen: false,
 };

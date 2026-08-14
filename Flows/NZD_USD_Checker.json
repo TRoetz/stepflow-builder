@@ -1,0 +1,37 @@
+{
+  "steps": [
+    {
+      "id": "s1",
+      "name": "GetExchangeRateFromXE",
+      "type": "Task",
+      "resource": "https://www.xe.com/currencyconverter/api/rates/?from=NZD&to=USD&amount=1",
+      "httpMethod": "GET",
+      "description": "Fetch NZD to USD exchange rate from xe.com API",
+      "showAdvanced": true
+    },
+    {
+      "id": "s2",
+      "name": "ExtractRateValue",
+      "type": "Task",
+      "resource": "arn:aws:lambda:us-east-1:ACCOUNT_ID:function:ExtractRate",
+      "description": "Extract USD rate from API response",
+      "showAdvanced": true,
+      "resultPath": "$.rate"
+    },
+    {
+      "id": "s3",
+      "name": "WriteToFile",
+      "type": "Task",
+      "resource": "arn:aws:lambda:us-east-1:ACCOUNT_ID:function:WriteFile",
+      "description": "Write exchange rate to c:/temp/nzd_usd_rate.txt",
+      "showAdvanced": true,
+      "resultPath": "$.output"
+    }
+  ],
+  "connections": [
+    {"from": "s1", "to": "s2"},
+    {"from": "s2", "to": "s3"}
+  ],
+  "exported": true,
+  "timestamp": "2026-08-13T00:00:00Z"
+}

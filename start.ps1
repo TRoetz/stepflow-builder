@@ -15,5 +15,10 @@ if (-not (Test-Path 'node_modules')) {
     Write-Host ''
 }
 
-# Start Vite dev server
+# Start .NET 10 Backend in separate terminal window
+Write-Host '  Starting .NET 10 Execution Engine...' -ForegroundColor Cyan
+Start-Process dotnet -ArgumentList "run"
+
+# Start Vite dev server (Proxies /api to .NET backend on port 5001)
+Write-Host '  Starting Frontend Dev Server (port 3001)...' -ForegroundColor Cyan
 npm run dev

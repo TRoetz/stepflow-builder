@@ -28,6 +28,7 @@ namespace StepFunctionsApp.StepFunctions
         private readonly MicrosoftRulesEngineService _msRulesEngine;
         private readonly DuckDbTransformService _duckDbTransform;
         private readonly EavRegistryService _eavRegistry;
+        private readonly ScriptExecutionService _scriptExecution;
         private readonly Lazy<StepFunctionService> _stepService;
         private readonly ILogger<CompositeResourceInvoker> _logger;
         private readonly string _callbackBaseUrl = "http://localhost:5000"; // Should come from config
@@ -38,6 +39,7 @@ namespace StepFunctionsApp.StepFunctions
             MicrosoftRulesEngineService msRulesEngine,
             DuckDbTransformService duckDbTransform,
             EavRegistryService eavRegistry,
+            ScriptExecutionService scriptExecution,
             Lazy<StepFunctionService> stepService,
             ILogger<CompositeResourceInvoker> logger)
         {
@@ -46,6 +48,7 @@ namespace StepFunctionsApp.StepFunctions
             _msRulesEngine = msRulesEngine;
             _duckDbTransform = duckDbTransform;
             _eavRegistry = eavRegistry;
+            _scriptExecution = scriptExecution;
             _stepService = stepService;
             _logger = logger;
         }
@@ -101,6 +104,18 @@ namespace StepFunctionsApp.StepFunctions
         private async Task<JToken> HandleTransformAsync(string resource, JToken input, CancellationToken ct)
         {
             var operation = resource["transform://".Length..].Trim('/');
+            var lowerOp = operation.ToLowerInvariant();
+
+            if (lowerOp == "javascript" || lowerOp == "python" || lowerOp == "powershell" || lowerOp == "csharp" || lowerOp == "shell")
+            {
+                _logger.LogInformation("Routing scripting execution to ScriptExecutionService. Language: {Language}", operation);
+                
+                var script = input["script"]?.ToString() ?? input["parameters"]?["script"]?.ToString() ?? "";
+                var inputData = input["input_data"] ?? input["parameters"]?["input_data"] ?? input;
+                
+                return await _scriptExecution.ExecuteScriptAsync(operation, script, inputData, ct);
+            }
+
             _logger.LogDebug("Executing DuckDB transform: {Operation}", operation);
 
             var inputObj = input as JObject ?? new JObject();

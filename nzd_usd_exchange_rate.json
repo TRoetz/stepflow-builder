@@ -1,0 +1,75 @@
+{
+  "name": "NZD/USD Exchange Rate Checker",
+  "description": "Fetches the latest NZD to USD exchange rate from xe.com and writes to a file",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start",
+      "name": "Start",
+      "config": {}
+    },
+    {
+      "id": "http_node",
+      "type": "http",
+      "name": "HTTP Request to xe.com API",
+      "config": {
+        "method": "GET",
+        "url": "https://www.xe.com/currencyconverter/api/rates/?from=NZD&to=USD&amount=1",
+        "headers": {},
+        "timeout": 30000
+      }
+    },
+    {
+      "id": "extract_rate",
+      "type": "expression",
+      "name": "Extract Exchange Rate",
+      "config": {
+        "expression": "$ctx.rates.USD.rate"
+      }
+    },
+    {
+      "id": "format_output",
+      "type": "expression",
+      "name": "Format Output",
+      "config": {
+        "expression": "{\n  \"timestamp\": $ctx.timestamp,\n  \"pair\": \"NZD/USD\",\n  \"rate\": $ctx.rates.USD.rate,\n  \"source\": \"xe.com\"\n}"
+      }
+    },
+    {
+      "id": "write_file",
+      "type": "file",
+      "name": "Write to File",
+      "config": {
+        "path": "c:/temp/nzd_usd_rate.txt",
+        "content": "$ctx",
+        "append": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "start",
+      "sourceHandle": "main",
+      "target": "http_node",
+      "targetHandle": "main"
+    },
+    {
+      "source": "http_node",
+      "sourceHandle": "main",
+      "target": "extract_rate",
+      "targetHandle": "main"
+    },
+    {
+      "source": "extract_rate",
+      "sourceHandle": "main",
+      "target": "format_output",
+      "targetHandle": "main"
+    },
+    {
+      "source": "format_output",
+      "sourceHandle": "main",
+      "target": "write_file",
+      "targetHandle": "main"
+    }
+  ]
+}

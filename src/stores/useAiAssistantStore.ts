@@ -2,9 +2,12 @@ import { create } from 'zustand';
 import { useAiModelConfigStore, type AiModelConfig } from '@stores/useAiModelConfigStore';
 import { useNodeStore } from '@stores/useNodeStore';
 import { useEdgeStore } from '@stores/useEdgeStore';
-import { summarizeConfigFields } from '@stores/aiAssistantPrompts';
-import { stepSchemas } from '@schemas/index';
 
+import { stepSchemas } from '@schemas/index';
+// Strip trailing /v1 (or /v1/) so callers can append their own path segment
+function stripV1Suffix(url: string): string {
+  return url.replace(/\/v1\/?$/, '');
+}
 
 // ── Types ──
 
@@ -110,13 +113,9 @@ function buildContextSummary(ctx: WorkflowContext): string {
 }
 
 function buildSchemaReference(): string {
+  // Ultra-compact: only schemaId and name, one per line
   return stepSchemas
-    .map((s) => {
-      const configSummary = s.configFields.length > 0
-        ? `  config_fields: ${summarizeConfigFields(s.configFields)}`
-        : '';
-      return `- "${s.schemaId}" (${s.name}, ${s.category}): ${s.description}${configSummary ? '\n' + configSummary : ''}`;
-    })
+    .map((s) => `- "${s.schemaId}": ${s.name}`)
     .join('\n');
 }
 
@@ -124,55 +123,42 @@ function buildSchemaReference(): string {
 
 function buildAssistantSystemPrompt(ctx: WorkflowContext): string {
   const parts: string[] = [
-    'You are the AI assistant for StepFlow Builder, a visual workflow designer.',
+    'You are a StepFlow Builder assistant. Generate workflow JSON when asked to build a flow.',
     '',
-    '## PRIMARY TASK: Generate Flow JSON',
-    'When the user asks you to build, create, design, or describe a workflow/flow, respond with ONLY a JSON object in this exact format:',
-    '',
-    '```json',
+    '## JSON FORMAT (output ONLY this, wrapped in ```json):',
     '{',
     '  "name": "Flow Name",',
-    '  "description": "What this flow does",',
+    '  "description": "What it does",',
     '  "nodes": [',
     '    { "schemaId": "stepflow:terminal:start", "label": "START" },',
-    '    { "schemaId": "stepflow:ai:decision", "label": "Analyze Input", "config": { "prompt": "Analyze the input data", "model": "gpt-4" } },',
-    '    { "schemaId": "stepflow::end", "label": "END" }',
+    '    { "schemaId": "stepflow:api:http", "label": "Get Data", "config": { "url": "https://api.example.com", "method": "GET" } },',
+    '    { "schemaId": "stepflow:terminal:end", "label": "END" }',
     '  ],',
     '  "edges": [',
-    '    { "source": "START", "target": "Analyze Input" },',
-    '    { "source": "Analyze Input", "target": "END" }',
+    '    { "source": "START", "target": "Get Data" },',
+    '    { "source": "Get Data", "target": "END" }',
     '  ]',
     '}',
-    '```',
     '',
-    '### Available Node Types (schemaId → name):',
+    '## RULES:',
+    '- ALWAYS start with "stepflow:terminal:start" (label: "START")',
+    '- ALWAYS end with "stepflow:terminal:end" (label: "END")',
+    '- Each node MUST have a unique "label" (used for edge wiring)',
+    '- Edges reference node "label" values, NOT schemaId',
+    '- "config" keys must match schema field "id" values',
+    '- Return ONLY the JSON. No explanation, no reasoning, no extra text.',
+    '- If ambiguous, make reasonable defaults.',
+    '- NEVER output a file download link or a file path. Output ONLY the JSON.',
+    '',
+    '## AVAILABLE NODES (schemaId: name):',
     buildSchemaReference(),
     '',
-    '### Rules for JSON Output:',
-    '- ALWAYS include a START node (schemaId: "stepflow:terminal:start") as the first node.',
-    '- ALWAYS include at least one END node (schemaId: "stepflow::end") as the last node.',
-    '- Each node MUST have a unique "label" — labels are used to wire edges.',
-    '- Edges use node "label" values for "source" and "target" (not schemaId).',
-    '- Use "config" to set node-specific properties (see schema fields above).',
-    '- Keep "config" keys matching the schema field "id" values.',
-    '- Return ONLY the JSON. No markdown, no explanation, no extra text.',
-    '- If the request is ambiguous, make reasonable defaults and build the flow.',
-    '',
-    '### Non-Flow Questions:',
-    'If the user asks a question about configuration, best practices, or how to use the builder (not asking to build a flow), answer normally in markdown.',
-    '',
-    `## CURRENT CANVAS CONTEXT:`,
+    '## CANVAS:',
     buildContextSummary(ctx),
   ];
 
   if (ctx.selectedNodeName) {
-    parts.push(`Currently selected node: "${ctx.selectedNodeName}"`);
-    if (ctx.selectedNodeCategory) {
-      parts.push(`Category: ${ctx.selectedNodeCategory}`);
-    }
-    if (ctx.selectedNodeConfigFields) {
-      parts.push(`Config fields: ${ctx.selectedNodeConfigFields}`);
-    }
+    parts.push(`Selected: "${ctx.selectedNodeName}"`);
   }
 
   return parts.join('\n');
@@ -234,11 +220,11 @@ async function callAiApi(
       temperature: config.temperature,
       top_p: config.topP,
     };
-    url = `${config.baseUrl}/v1/messages`;
+    url = `${stripV1Suffix(config.baseUrl)}/v1/messages`;
   } else {
     const basePath = config.provider === 'azureOpenAI'
-      ? `${config.baseUrl}/openai/deployments/${config.defaultModel}`
-      : `${config.baseUrl}/v1`;
+      ? `${stripV1Suffix(config.baseUrl)}/openai/deployments/${config.defaultModel}`
+      : `${stripV1Suffix(config.baseUrl)}/v1`;
 
     body = {
       model: config.defaultModel,
@@ -261,7 +247,8 @@ async function callAiApi(
     throw new Error(errorData.error?.message ?? `API error: ${response.status}`);
   }
 
-  const data = (await response.json()) as AiApiResponse;
+  const data = (await response.json()) as Record<string, unknown>;
+  console.log('AI API response keys:', Object.keys(data));
 
   // Extract response based on provider
   if (config.provider === 'anthropic') {
@@ -272,9 +259,50 @@ async function callAiApi(
     throw new Error('No content in Anthropic response');
   }
 
-  const content = data.choices?.[0]?.message?.content;
-  if (content) return content;
-  throw new Error('No content in API response');
+  // OpenAI-compatible extraction — inspect choices
+  const choices = data.choices as Array<Record<string, unknown>> | undefined;
+  console.log('AI API choices:', JSON.stringify(choices));
+
+  // Check for truncation — model ran out of tokens
+  const finishReason = (choices?.[0] as { finish_reason?: string } | undefined)?.finish_reason;
+  if (finishReason === 'length') {
+    const reasoningLen = String((choices?.[0] as { message?: { reasoning_content?: string } } | undefined)?.message?.reasoning_content ?? '').length;
+    const hint = reasoningLen > 100
+      ? ' Model spent tokens on internal reasoning. Try increasing maxTokens (current: ' + config.maxTokens + ') to at least ' + Math.max(config.maxTokens * 2, 8192) + ', or use a non-reasoning model.'
+      : ' Try increasing maxTokens from ' + config.maxTokens + ' to at least ' + Math.max(config.maxTokens * 2, 4096) + '.';
+    throw new Error('Model response was truncated (hit token limit).' + hint);
+  }
+
+  // Standard: choices[0].message.content
+  const standard = (data as { choices?: Array<{ message?: { content?: string | null } }> }).choices?.[0]?.message?.content;
+  if (typeof standard === 'string' && standard.length > 0) return standard;
+
+  // Reasoning models (Qwen, DeepSeek): content may be empty, reasoning in reasoning_content
+  const reasoningContent = (choices?.[0] as { message?: { reasoning_content?: string | null } } | undefined)?.message?.reasoning_content;
+  if (typeof reasoningContent === 'string' && reasoningContent.length > 0 && (!standard || !standard.trim())) {
+    // Model produced reasoning but no content — extract JSON from reasoning if present
+    const jsonMatch = reasoningContent.match(/```(?:json)?\s*\n([\s\S]*?)\n```/);
+    if (jsonMatch) {
+      return jsonMatch[1].trim();
+    }
+    // Fall through to error — model reasoned but didn't produce output
+  }
+
+  // Some servers return delta content (streaming-style): choices[0].delta.content
+  const delta = (data as { choices?: Array<{ delta?: { content?: string | null } }> }).choices?.[0]?.delta?.content;
+  if (typeof delta === 'string' && delta.length > 0) return delta;
+
+  // Some servers return content at top level
+  if (typeof data.content === 'string' && data.content.length > 0) return data.content;
+
+  // Some servers return response at top level
+  if (typeof data.response === 'string' && data.response.length > 0) return data.response;
+
+  // Log the full shape for debugging and fail
+  const choicesDetail = choices ? `choices[${choices.length}]` : 'no choices';
+  const firstChoice = choices?.[0] ? JSON.stringify(choices[0]).slice(0, 500) : 'none';
+  console.error('AI API full response:', JSON.stringify(data).slice(0, 2000));
+  throw new Error(`No content in API response. ${choicesDetail}: ${firstChoice}`);
 }
 
 export async function testAiConnection(config: AiModelConfig): Promise<{ success: boolean; message: string }> {
@@ -304,8 +332,8 @@ export async function testAiConnection(config: AiModelConfig): Promise<{ success
     };
 
     const basePath = config.provider === 'azureOpenAI'
-      ? `${config.baseUrl}/openai/deployments/${config.defaultModel}`
-      : `${config.baseUrl}/v1`;
+      ? `${stripV1Suffix(config.baseUrl)}/openai/deployments/${config.defaultModel}`
+      : `${stripV1Suffix(config.baseUrl)}/v1`;
 
     const response = await fetch(`${basePath}/chat/completions`, {
       method: 'POST',
@@ -333,24 +361,185 @@ export async function testAiConnection(config: AiModelConfig): Promise<{ success
 // ── JSON Flow Parsing & Loading ──
 
 function extractJsonFromResponse(text: string): string {
-  // Strip markdown code fences if present
   let cleaned = text.trim();
-  const fenceMatch = cleaned.match(/```(?:json)?\s*\n([\s\S]*?)\n```/);
+
+  // Try extracting markdown block wrapped in ```json ... ``` or ``` ... ```
+  const fenceMatch = cleaned.match(/```(?:json)?\s*\n([\s\S]*?)\n```/i);
   if (fenceMatch) {
     cleaned = fenceMatch[1].trim();
+  } else {
+    // Look for outermost JSON object { ... } if text surrounds it
+    const startIdx = cleaned.indexOf('{');
+    const endIdx = cleaned.lastIndexOf('}');
+    if (startIdx !== -1 && endIdx > startIdx) {
+      cleaned = cleaned.slice(startIdx, endIdx + 1);
+    }
   }
   return cleaned;
 }
 
-function parseAiFlowJson(text: string): AiFlowJson | null {
+// Normalize common AI typos and state machine variations in JSON before parsing
+function normalizeFlowJson(jsonStr: string): string {
+  return jsonStr
+    .replace(/"schemald"\s*:/g, '"schemaId":')
+    .replace(/"schema_id"\s*:/g, '"schemaId":')
+    .replace(/"StartAt"\s*:/g, '"startAt":')
+    .replace(/"States"\s*:/g, '"states":')
+    .replace(/"Resource"\s*:/g, '"resource":')
+    .replace(/"Next"\s*:/g, '"next":')
+    .replace(/"Type"\s*:/g, '"type":')
+    .replace(/"Comment"\s*:/g, '"comment":')
+    .replace(/"Parameters"\s*:/g, '"parameters":');
+}
+
+interface ParseResult {
+  ok: boolean;
+  flow?: AiFlowJson;
+  error?: string;
+}
+
+/**
+ * Infer stepflow schemaId from Amazon States Language / State Machine state object.
+ */
+function stateToSchemaId(state: Record<string, unknown>): string {
+  const resource = typeof state.resource === 'string' ? state.resource : '';
+  const type = typeof state.type === 'string' ? state.type : '';
+
+  if (resource.startsWith('ai://') || resource.includes('ai')) return 'stepflow:ai:decision';
+  if (resource.startsWith('rule://') || resource.includes('rule')) return 'stepflow:rule:rule_engine';
+  if (resource.startsWith('sql://')) return 'stepflow:data:sql';
+  if (resource.startsWith('duckdb://')) return 'stepflow:data:duckdb';
+  if (resource.startsWith('eav://')) return 'stepflow:data:eav';
+  if (resource.startsWith('http://') || resource.startsWith('https://')) return 'stepflow:api:http';
+  if (resource.startsWith('api://')) return 'stepflow:api:registered';
+  if (resource.startsWith('transform://jsonata')) return 'stepflow:transform:jsonata';
+  if (resource.startsWith('transform://')) return 'stepflow:transform:script';
+  if (resource.startsWith('flow://')) return 'stepflow:subflow:invoke';
+
+  switch (type.toLowerCase()) {
+    case 'choice': return 'stepflow:flow:choice';
+    case 'map': return 'stepflow:flow:map';
+    case 'parallel': return 'stepflow:flow:parallel';
+    case 'succeed': return 'stepflow:flow:succeed';
+    case 'fail': return 'stepflow:flow:fail';
+    case 'wait': return 'stepflow:utility:wait';
+    case 'pass': return 'stepflow:utility:pass';
+    default: return 'stepflow:utility:pass';
+  }
+}
+
+/**
+ * Convert Amazon States Language (StateMachineDefinition / { startAt, states }) into AiFlowJson.
+ */
+function convertStateMachineToAiFlow(parsed: Record<string, unknown>): AiFlowJson {
+  const states = (parsed.states || {}) as Record<string, Record<string, unknown>>;
+  const nodes: AiFlowNode[] = [];
+  const edges: AiFlowEdge[] = [];
+
+  const stateKeys = Object.keys(states);
+  const startAt = typeof parsed.startAt === 'string' ? parsed.startAt : stateKeys[0];
+
+  // If startAt doesn't exist or doesn't map to a START terminal node, prepend a START terminal if not present
+  const hasStartTerminal = stateKeys.some(key => {
+    const s = states[key];
+    const res = typeof s?.resource === 'string' ? s.resource : '';
+    return key.toUpperCase() === 'START' || res.includes('start');
+  });
+
+  if (!hasStartTerminal) {
+    nodes.push({
+      schemaId: 'stepflow:terminal:start',
+      label: 'START',
+    });
+  }
+
+  for (const stateName of stateKeys) {
+    const state = states[stateName];
+    let schemaId = stateToSchemaId(state);
+
+    if (stateName.toUpperCase() === 'START') {
+      schemaId = 'stepflow:terminal:start';
+    } else if (stateName.toUpperCase() === 'END') {
+      schemaId = 'stepflow:terminal:end';
+    }
+
+    const config = (state.parameters || state.config) as Record<string, unknown> | undefined;
+
+    nodes.push({
+      schemaId,
+      label: stateName,
+      config: config ?? (typeof state.comment === 'string' ? { description: state.comment } : undefined),
+    });
+
+    // Handle next edge
+    if (typeof state.next === 'string' && state.next) {
+      edges.push({
+        source: stateName,
+        target: state.next,
+      });
+    }
+
+    // Handle Choice state choices
+    if (Array.isArray(state.choices)) {
+      for (const choice of state.choices as Array<Record<string, unknown>>) {
+        if (typeof choice.next === 'string' && choice.next) {
+          edges.push({
+            source: stateName,
+            target: choice.next,
+          });
+        }
+      }
+    }
+  }
+
+  // Connect START to startAt if START node was prepended
+  if (!hasStartTerminal && startAt && states[startAt]) {
+    edges.unshift({
+      source: 'START',
+      target: startAt,
+    });
+  }
+
+  return {
+    name: typeof parsed.name === 'string' ? parsed.name : (typeof parsed.comment === 'string' ? parsed.comment : 'Generated Flow'),
+    description: typeof parsed.description === 'string' ? parsed.description : undefined,
+    nodes,
+    edges,
+  };
+}
+function parseAiFlowJson(text: string): ParseResult {
   try {
-    const jsonStr = extractJsonFromResponse(text);
-    const parsed = JSON.parse(jsonStr) as AiFlowJson;
-    if (!parsed.nodes || !Array.isArray(parsed.nodes)) return null;
-    if (!parsed.edges || !Array.isArray(parsed.edges)) return null;
-    return parsed;
+    const jsonStr = normalizeFlowJson(extractJsonFromResponse(text));
+    const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
+
+    // Case 1: Standard AiFlowJson format ({ nodes: [...], edges: [...] })
+    if (Array.isArray(parsed.nodes) && Array.isArray(parsed.edges)) {
+      for (let i = 0; i < parsed.nodes.length; i++) {
+        const node = parsed.nodes[i] as Record<string, unknown>;
+        if (!node.schemaId) {
+          return { ok: false, error: `Node #${i + 1} is missing "schemaId".` };
+        }
+        if (!node.label) {
+          return { ok: false, error: `Node #${i + 1} is missing "label".` };
+        }
+      }
+      return { ok: true, flow: parsed as unknown as AiFlowJson };
+    }
+
+    // Case 2: State Machine / ASL format ({ startAt: "...", states: { ... } })
+    if (parsed.states && typeof parsed.states === 'object') {
+      const convertedFlow = convertStateMachineToAiFlow(parsed);
+      return { ok: true, flow: convertedFlow };
+    }
+
+    // Case 3: AI output a file download link or file path instead of JSON
+    if (typeof parsed.url === 'string' || typeof parsed.path === 'string' || typeof parsed.file === 'string') {
+      return { ok: false, error: 'AI output a file link instead of JSON. Please try rephrasing your request.' };
+    }
+
+    return { ok: false, error: 'JSON response must contain either a "nodes" array or a "states" dictionary.' };
   } catch {
-    return null;
+    return { ok: false, error: 'Failed to parse JSON from AI response. The output was not valid JSON.' };
   }
 }
 
@@ -517,21 +706,22 @@ export const useAiAssistantStore = create<AiAssistantState>((set, get) => ({
       const response = await callAiApi(config, systemPrompt, userMessage);
 
       // Try to parse as flow JSON
-      const flowJson = parseAiFlowJson(response);
-      if (flowJson) {
-        // Load the flow onto the canvas
+      const parseResult = parseAiFlowJson(response);
+      if (parseResult.ok && parseResult.flow) {
+        const flowJson = parseResult.flow;
         loadAiFlow(flowJson);
 
         // Update context to reflect new nodes
         const newNodes = useNodeStore.getState().nodes;
         const newEdges = useEdgeStore.getState().edges;
         set((state) => ({
+          isTyping: false,
           context: {
             ...state.context,
             nodeCount: newNodes.length,
             edgeCount: newEdges.length,
             hasStartNode: newNodes.some(n => n.data?.schemaId === 'stepflow:terminal:start') || state.context.hasStartNode,
-            hasEndNode: newNodes.some(n => n.data?.schemaId === 'stepflow::end') || state.context.hasEndNode,
+            hasEndNode: newNodes.some(n => n.data?.schemaId === 'stepflow:terminal:end') || state.context.hasEndNode,
           },
         }));
 
@@ -539,6 +729,12 @@ export const useAiAssistantStore = create<AiAssistantState>((set, get) => ({
         const edgeCount = flowJson.edges.length;
         const flowName = flowJson.name || 'Flow';
         return `✅ **Flow "${flowName}" loaded!**\n\nAdded **${nodeCount} nodes** and **${edgeCount} connections** to the canvas.`;
+      }
+
+      // JSON parse failed — report the error
+      if (parseResult.error) {
+        set({ isTyping: false });
+        return `⚠️ **Flow JSON invalid:** ${parseResult.error}\n\nPlease try rephrasing your request.`;
       }
 
       // Not a flow JSON — return the AI's text response as-is

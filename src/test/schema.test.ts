@@ -4,12 +4,12 @@ import { categoryById } from '@schemas/categories';
 
 describe('Schema System', () => {
   describe('Registry', () => {
-    it('should have all 15 step schemas registered', () => {
-      expect(stepSchemas.length).toBe(15);
+    it('should have all 22 step schemas registered', () => {
+      expect(stepSchemas.length).toBe(22);
     });
 
-    it('should have all 7 categories defined', () => {
-      expect(categoryById.size).toBe(7);
+    it('should have all 9 categories defined', () => {
+      expect(categoryById.size).toBe(9);
     });
 
     it('should map all schemas by ID', () => {
@@ -20,12 +20,12 @@ describe('Schema System', () => {
     });
 
     it('should have palette data for all categories', () => {
-      expect(paletteData.length).toBe(7);
+      expect(paletteData.length).toBe(9);
     });
 
     it('should have schema service working', () => {
-      expect(schemaService.getAllSchemas().length).toBe(15);
-      expect(schemaService.getCategories().length).toBe(7);
+      expect(schemaService.getAllSchemas().length).toBe(22);
+      expect(schemaService.getCategories().length).toBe(9);
     });
   });
 
@@ -45,7 +45,7 @@ describe('Schema System', () => {
         });
 
         it('should have valid category', () => {
-          const validCategories = ['ai', 'rule', 'data', 'api', 'transform', 'utility', 'subflow'];
+          const validCategories = ['ai', 'rule', 'data', 'api', 'transform', 'utility', 'subflow', 'terminal', 'flow'];
           expect(validCategories).toContain(schema.category);
         });
 

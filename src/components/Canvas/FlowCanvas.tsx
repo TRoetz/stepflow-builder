@@ -32,8 +32,6 @@ import { StepEdge } from './StepEdge';
 import { useAutoLayout } from '@hooks/useAutoLayout';
 import { useKeyboardShortcuts } from '@hooks/useKeyboardShortcuts';
 import { ExecutionService } from '@services/executionService';
-import { FlowService } from '@services/flowService';
-
 
 interface FlowCanvasProps {
   onNodeSelect: (nodeId: string | null) => void;
@@ -83,7 +81,7 @@ function FlowCanvasInner({
       // Auto-layout is handled by the parent App component
     },
     onSave: () => {
-      FlowService.saveFlow('My Flow');
+      // Handled at App header level / global shortcut
     },
     onRun: async () => {
       if (executionStatus === 'running' || executionStatus === 'paused') {

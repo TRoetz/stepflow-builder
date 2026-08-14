@@ -95,6 +95,8 @@ export const scriptSchema: StepSchema = {
         { label: 'JavaScript (Node.js)', value: 'javascript' },
         { label: 'Python', value: 'python' },
         { label: 'PowerShell', value: 'powershell' },
+        { label: 'C# (Roslyn Scripting)', value: 'csharp' },
+        { label: 'Shell Command (Bash / CMD)', value: 'shell' },
       ],
       required: true,
       description: 'Scripting language to use',

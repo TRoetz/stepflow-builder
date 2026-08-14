@@ -10,6 +10,7 @@
   <ItemGroup>
     <PackageReference Include="Jsonata.Net.Native.JsonNet" Version="3.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="10.0.5" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.8.0" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.5" />
     <PackageReference Include="RulesEngine" Version="6.0.1" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
@@ -18,5 +19,10 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.8" />
     <PackageReference Include="DuckDB.NET.Data.Full" Version="1.0.2" />
   </ItemGroup>
-
+  <ItemGroup>
+    <Compile Remove="StepFunctionsApp.Tests\**" />
+    <Content Remove="StepFunctionsApp.Tests\**" />
+    <EmbeddedResource Remove="StepFunctionsApp.Tests\**" />
+    <None Remove="StepFunctionsApp.Tests\**" />
+  </ItemGroup>
 </Project>
