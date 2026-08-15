@@ -14,11 +14,14 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import { v4 as uuidv4 } from 'uuid';
-import { useNodeStore } from '@stores/useNodeStore';
-import { useEdgeStore } from '@stores/useEdgeStore';
+import { useNodeStore, StepNode } from '@stores/useNodeStore';
+import { useEdgeStore, type StepEdge as StepEdgeData } from '@stores/useEdgeStore';
+import { useCanvasUiStore } from '@stores/useCanvasUiStore';
 import { useExecutionStore } from '@stores/useExecutionStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
-import { getStepNodeTypes } from '@schemas/index';
+import { getStepNodeTypes, schemaById } from '@schemas/index';
+import { findFirstCompatiblePair, checkPortCompatibility } from '@utils/connectionCompat';
+import { AddNextPopover } from './AddNextPopover';
 import { AiNode } from '@components/Nodes/AiNode';
 import { RuleNode } from '@components/Nodes/RuleNode';
 import { DataNode } from '@components/Nodes/DataNode';
@@ -117,6 +120,14 @@ function FlowCanvasInner({
     'step-edge': StepEdge,
   }), []);
 
+  // Ref (not state) so connection handlers never trigger a re-render mid-drag.
+  // Marks an *edge reconnection* drag in progress: React Flow fires onConnectEnd
+  // for those drags too — before onReconnectEnd — so without this guard, dropping
+  // a reconnect onto a node body would leave the original edge intact AND create
+  // a duplicate one. It also relaxes isValidConnection during reconnects (a
+  // revert must not be rejected as a "duplicate" of the edge being dragged).
+  const reconnectingEdgeRef = useRef(false);
+
   // ── Pass original nodes to ReactFlow ──
   // NOTE: We must NOT create new node objects here. ReactFlow v12 tracks nodes
   // by reference internally (for dragging, selection, etc.). Creating new objects
@@ -124,24 +135,55 @@ function FlowCanvasInner({
   // Execution state styling is handled inside the node components themselves.
 
   // ── Handle Connection ──
-  // NOTE: `...params` intentionally preserves sourceHandle/targetHandle so edges
-  // render at the exact ports the user connected (important for multi-port nodes).
   const onConnect = useCallback(
     (params: Connection) => {
-      const edge: Edge = {
-        id: uuidv4(),
-        ...params,
-        type: 'step-edge',
-        animated: true,
-        style: { stroke: '#6366f1', strokeWidth: 2 },
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: '#6366f1',
-        },
-      };
-      addEdge(edge);
+      addEdge(buildStepEdge(params));
     },
     [addEdge]
+  );
+
+  /**
+   * Reject self-loops and exact duplicate port-pair edges.
+   *
+   * While an edge is being reconnected we allow everything (except self-loops):
+   * dropping a reconnect back on its original target must not be blocked by the
+   * duplicate check, since that pair already exists in the store as the very
+   * edge being dragged.
+   */
+  const isValidConnection = useCallback(
+    (connection: StepEdgeData | Connection): boolean => {
+      if (!connection.source || !connection.target || connection.source === connection.target) return false;
+
+      // Reconnect drags are validated loosely (see above).
+      if (reconnectingEdgeRef.current) return true;
+
+      const sourceHandle = connection.sourceHandle ?? null;
+      const targetHandle = connection.targetHandle ?? null;
+      const edges = useEdgeStore.getState().edges;
+      if (
+        edges.some(
+          (e) =>
+            e.source === connection.source &&
+            e.target === connection.target &&
+            (e.sourceHandle ?? null) === sourceHandle &&
+            (e.targetHandle ?? null) === targetHandle,
+        )
+      ) {
+        return false;
+      }
+
+      // Port type compatibility: blocks genuinely mismatched port pairs
+      // (e.g. string → number). Unknown/untyped ports stay connectable.
+      const srcNode = nodes.find((n) => n.id === connection.source);
+      const tgtNode = nodes.find((n) => n.id === connection.target);
+      return checkPortCompatibility(
+        sourceHandle,
+        targetHandle,
+        srcNode?.data,
+        tgtNode?.data,
+      ).ok;
+    },
+    [nodes],
   );
 
   // ── Handle Connection End (drop-on-node-body fallback) ──
@@ -150,12 +192,6 @@ function FlowCanvasInner({
   // card (or its port label), so in that case we resolve the node under the
   // pointer and wire it to the appropriate default port ourselves.
   //
-  // This ref marks an *edge reconnection* drag in progress. React Flow fires
-  // onConnectEnd for those drags too — before onReconnectEnd — so without this
-  // guard, dropping a reconnect onto a node body would leave the original edge
-  // intact AND create a duplicate one.
-  const reconnectingEdgeRef = useRef(false);
-
   const onConnectEnd = useCallback(
     (
       event: MouseEvent | TouchEvent,
@@ -178,17 +214,37 @@ function FlowCanvasInner({
         event instanceof MouseEvent ? event.clientY : event.changedTouches[0]?.clientY;
       if (clientX == null || clientY == null) return;
 
-      // Find the node under the pointer, skipping any overlay elements above it.
-      const targetEl: HTMLElement | undefined = document
-        .elementsFromPoint(clientX, clientY)
+      // Find what's under the pointer, skipping overlay elements (panes, lines).
+      const els = document.elementsFromPoint(clientX, clientY);
+      const targetEl = els
         .map((el) => el.closest?.('.react-flow__node'))
         .find(Boolean) as HTMLElement | undefined;
-      if (!targetEl) return;
 
-      const droppedNodeId = targetEl.getAttribute('data-id');
+      const droppedNodeId = targetEl?.getAttribute('data-id');
       const fromNodeId = connectionState.fromNode?.id;
       const fromHandle = connectionState.fromHandle;
-      if (!droppedNodeId || !fromNodeId || fromNodeId === droppedNodeId) return;
+      if (!targetEl || !droppedNodeId || !fromNodeId || fromNodeId === droppedNodeId) return;
+
+      // The port type the drop node must expose for this drag direction.
+      const wantedSelector =
+        fromHandle?.type !== 'target'
+          ? '.react-flow__handle.react-flow__target'  // dragged from an output → need an input port
+          : '.react-flow__handle.react-flow__source'; // dragged from an input  → need an output port
+
+      // Prefer a specific port directly under the cursor (near-miss on one of
+      // several ports); otherwise fall back to the node's default (first) port.
+      let portEl: HTMLElement | null = null;
+      for (const el of els) {
+        const h = el.closest?.(wantedSelector) as HTMLElement | undefined;
+        if (h && h.getAttribute('data-nodeid') === droppedNodeId) {
+          portEl = h;
+          break;
+        }
+      }
+      if (!portEl) portEl = targetEl.querySelector(wantedSelector);
+      if (!portEl) return; // Drop node has no compatible port (e.g. End / Start).
+
+      const portHandleId: string | null = portEl.getAttribute('data-handleid');
 
       let source: string;
       let target: string;
@@ -196,25 +252,28 @@ function FlowCanvasInner({
       let targetHandleId: string | null;
 
       if (fromHandle?.type !== 'target') {
-        // Dragged from an output port → connect it to the dropped node's first input port.
+        // Dragged from an output port → the dropped node becomes the target.
         source = fromNodeId;
         target = droppedNodeId;
         sourceHandleId = fromHandle?.id ?? null;
-        const inputEl = targetEl.querySelector('.react-flow__handle.react-flow__target');
-        if (!inputEl) return; // Node has no input port (e.g. End).
-        targetHandleId = inputEl.getAttribute('data-handleid');
+        targetHandleId = portHandleId;
       } else {
-        // Dragged from an input port → connect the dropped node's first output port to it.
+        // Dragged from an input port → the dropped node becomes the source.
         source = droppedNodeId;
         target = fromNodeId;
         targetHandleId = fromHandle?.id ?? null;
-        const outputEl = targetEl.querySelector('.react-flow__handle.react-flow__source');
-        if (!outputEl) return; // Node has no output port (e.g. Start).
-        sourceHandleId = outputEl.getAttribute('data-handleid');
+        sourceHandleId = portHandleId;
       }
 
       // data-handleid is absent for collapsed nodes' single unnamed handle;
-      // leaving the edge's handle undefined then matches that handle correctly.
+      // a null edge handle then matches that handle correctly (React Flow
+      // omits the attribute when no id was given).
+
+      // Enforce the same port-type rules as a direct handle drop (unknown
+      // ports pass), so body-drops can't smuggle in an invalid edge.
+      const srcNodeData = useNodeStore.getState().nodes.find((n) => n.id === source)?.data;
+      const tgtNodeData = useNodeStore.getState().nodes.find((n) => n.id === target)?.data;
+      if (!checkPortCompatibility(sourceHandleId, targetHandleId, srcNodeData, tgtNodeData).ok) return;
 
       const { edges: currentEdges, addEdge } = useEdgeStore.getState();
       const duplicate = currentEdges.some(
@@ -226,20 +285,14 @@ function FlowCanvasInner({
       );
       if (duplicate) return;
 
-      addEdge({
-        id: uuidv4(),
-        source,
-        target,
-        sourceHandle: sourceHandleId ?? undefined,
-        targetHandle: targetHandleId ?? undefined,
-        type: 'step-edge',
-        animated: true,
-        style: { stroke: '#6366f1', strokeWidth: 2 },
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: '#6366f1',
-        },
-      });
+      addEdge(
+        buildStepEdge({
+          source,
+          target,
+          sourceHandle: sourceHandleId,
+          targetHandle: targetHandleId,
+        })
+      );
     },
     []
   );
@@ -273,6 +326,43 @@ function FlowCanvasInner({
     [setSelectedEdge]
   );
 
+  // ── P0: "Add next step" popover ──
+  const addNextAnchor = useCanvasUiStore((s) => s.addNextAnchor);
+  const closeAddNext = useCanvasUiStore((s) => s.closeAddNext);
+
+  const handlePickNextStep = useCallback(
+    (schemaId: string) => {
+      if (!addNextAnchor) return;
+      const sourceNode = nodes.find((n) => n.id === addNextAnchor.nodeId);
+      closeAddNext();
+      if (!sourceNode) return;
+
+      const sourceSchema = schemaById.get(sourceNode.data.schemaId as string);
+      const targetSchema = schemaById.get(schemaId);
+      if (!sourceSchema || !targetSchema) return;
+
+      // Popover only lists compatible candidates; this is a defensive re-check.
+      const pair = findFirstCompatiblePair(sourceSchema.outputs, targetSchema.inputs);
+      if (!pair) return;
+
+      const created = addNode(schemaId, findSlotRightOf(sourceNode, nodes));
+      if (!created) return;
+
+      useEdgeStore.getState().addEdge(
+        buildStepEdge({
+          source: sourceNode.id,
+          target: created.id,
+          sourceHandle: pair.sourceHandle ?? null,
+          targetHandle: pair.targetHandle ?? null,
+        })
+      );
+
+      // Select the new node so its PropertyPanel opens for immediate configuration.
+      useNodeStore.getState().setSelectedNode(created.id);
+    },
+    [addNextAnchor, closeAddNext, nodes, addNode]
+  );
+
 
   return (
     <div
@@ -285,6 +375,7 @@ function FlowCanvasInner({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        isValidConnection={isValidConnection}
         onConnectEnd={onConnectEnd}
         onReconnectStart={() => {
           reconnectingEdgeRef.current = true;
@@ -368,6 +459,16 @@ function FlowCanvasInner({
         />
       </ReactFlow>
 
+      {/* P0: "Add next step" popover (portal-rendered, fixed to viewport) */}
+      {addNextAnchor && (
+        <AddNextPopover
+          sourceNodeId={addNextAnchor.nodeId}
+          anchor={{ x: addNextAnchor.x, y: addNextAnchor.y }}
+          onPick={handlePickNextStep}
+          onClose={closeAddNext}
+        />
+      )}
+
       {/* Drag overlay indicator */}
       {isDragOver && (
         <div className="absolute inset-0 bg-indigo-500/10 border-2 border-dashed border-indigo-500/50 pointer-events-none z-50 flex items-center justify-center">
@@ -419,6 +520,65 @@ function FlowCanvasInner({
       )}
     </div>
   );
+}
+
+/** Build an edge in the app's standard step-edge style. */
+function buildStepEdge(params: {
+  source: string;
+  target: string;
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
+}): Edge {
+  return {
+    id: uuidv4(),
+    ...params,
+    sourceHandle: params.sourceHandle ?? undefined,
+    targetHandle: params.targetHandle ?? undefined,
+    type: 'step-edge',
+    animated: true,
+    style: { stroke: '#6366f1', strokeWidth: 2 },
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      color: '#6366f1',
+    },
+  };
+}
+
+/**
+ * Find a free slot to the right of `sourceNode` for an auto-added step.
+ * Jumps past any overlapping nodes (repeatedly, in case the jump lands on
+ * another blocker) so the new node is fully visible and draggable.
+ */
+function findSlotRightOf(sourceNode: StepNode, allNodes: StepNode[]) {
+  const DEFAULT_W = 260;
+  const DEFAULT_H = 170;
+  const GAP = 90; // roughly matches the horizontal gap used by auto-layout
+  const PAD = 24; // clearance around other nodes
+
+  const srcW = sourceNode.measured?.width ?? DEFAULT_W;
+  let x = sourceNode.position.x + srcW + GAP;
+  const y = sourceNode.position.y;
+
+  for (let i = 0; i < 8; i++) {
+    const blockers = allNodes.filter((n) => {
+      if (n.id === sourceNode.id) return false;
+      const nw = n.measured?.width ?? DEFAULT_W;
+      const nh = n.measured?.height ?? DEFAULT_H;
+      return (
+        x < n.position.x + nw + PAD &&
+        x + DEFAULT_W > n.position.x - PAD &&
+        y < n.position.y + nh + PAD &&
+        y + DEFAULT_H > n.position.y - PAD
+      );
+    });
+    if (blockers.length === 0) break;
+    // Jump past the rightmost blocker in this row.
+    x = Math.max(
+      ...blockers.map((b) => b.position.x + (b.measured?.width ?? DEFAULT_W))
+    ) + GAP;
+  }
+
+  return { x, y };
 }
 
 // ── Wrapper with ReactFlowProvider ──

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { Node, NodeChange, applyNodeChanges } from '@xyflow/react';
 import { v4 as uuidv4 } from 'uuid';
 import { schemaById } from '@schemas/index';
+import { useEdgeStore } from '@stores/useEdgeStore';
 import { NodeData } from '@schema-types/schema';
 
 // ── Extended Node with schema data ──
@@ -11,7 +12,11 @@ interface NodeState {
   nodes: StepNode[];
   selectedNodeId: string | null;
   onNodesChange: (changes: NodeChange[]) => void;
-  addNode: (schemaId: string, position?: { x: number; y: number }) => void;
+  /** Adds a node from a schema and returns it (null if the schema is unknown). */
+  addNode: (
+    schemaId: string,
+    position?: { x: number; y: number }
+  ) => StepNode | null;
   removeNode: (nodeId: string) => void;
   updateNodeData: (nodeId: string, data: Partial<NodeData>) => void;
   setSelectedNode: (nodeId: string | null) => void;
@@ -36,7 +41,7 @@ export const useNodeStore = create<NodeState>((set, get) => ({
     const schema = schemaById.get(schemaId);
     if (!schema) {
       console.warn(`Schema not found: ${schemaId}`);
-      return;
+      return null;
     }
 
     const defaultConfig: Record<string, unknown> = {};
@@ -64,6 +69,8 @@ export const useNodeStore = create<NodeState>((set, get) => ({
     set({
       nodes: [...get().nodes, newNode],
     });
+
+    return newNode;
   },
 
   // ── Remove Node ──
@@ -72,6 +79,8 @@ export const useNodeStore = create<NodeState>((set, get) => ({
       nodes: get().nodes.filter((n) => n.id !== nodeId),
       selectedNodeId: get().selectedNodeId === nodeId ? null : get().selectedNodeId,
     });
+    // Remove every edge touching this node so no dangling edges remain.
+    useEdgeStore.getState().removeEdgesByNodeId(nodeId);
   },
 
   // ── Update Node Data ──

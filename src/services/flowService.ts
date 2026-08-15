@@ -1,6 +1,7 @@
 import { useNodeStore, StepNode } from '@stores/useNodeStore';
 import { useEdgeStore } from '@stores/useEdgeStore';
 import { schemaById } from '@schemas/index';
+import { flowTemplates } from '@schemas/templates';
 
 /**
  * Flow data format (Amazon States Language compatible).
@@ -279,6 +280,152 @@ export const FlowService = {
     const flows = loadSavedFlows();
     const flow = flows.find((f) => f.id === id);
     return flow?.definition || null;
+  },
+
+  /**
+   * Ensure a Map node has an iterator sub-flow body.
+   *
+   * A Map node (`stepflow:flow:map`) executes `configuration.targetFlowId` once per
+   * item in `itemsPath`. If the target flow doesn't exist (fresh scaffold, or it was
+   * deleted), this creates a saved flow with a pre-wired starter body (Start → EAV row read → AI Text Gen → AI Decision) and
+   * links it to the Map node's configuration and reports what happened. Idempotent:
+   * an already-linked Map just gets its existing link reported.
+   */
+  async ensureIteratorBody(
+    mapNodeId: string,
+    opts?: { initialDefinition?: unknown; flowName?: string }
+  ): Promise<{
+    success: boolean;
+    created: boolean;
+    flowId?: string;
+    flowName?: string;
+    message: string;
+  }> {
+    const mapNode = useNodeStore.getState().nodes.find((n) => n.id === mapNodeId);
+    if (!mapNode || (mapNode.data?.schemaId as string | undefined) !== 'stepflow:flow:map') {
+      return { success: false, created: false, message: 'Select a Map node to scaffold its iterator body.' };
+    }
+
+    const flows = loadSavedFlows();
+    const targetFlowId = String(mapNode.data?.configuration?.targetFlowId ?? '');
+    const existing = targetFlowId ? flows.find((f) => f.id === targetFlowId) : undefined;
+
+    if (existing) {
+      return {
+        success: true,
+        created: false,
+        flowId: existing.id,
+        flowName: existing.name,
+        message: `Map is already linked to "${existing.name}".`,
+      };
+    }
+
+    // No (valid) link — create a starter iterator flow.
+    const base = opts?.flowName ?? 'Map Iterator';
+    let name = base;
+    let suffix = 2;
+    while (flows.some((f) => f.name.toLowerCase() === name.toLowerCase())) {
+      name = `${base} (${suffix++})`;
+    }
+
+    // Default starter body (graph format — importFlow loads it verbatim, preserving
+    // exact schema ids; ASL would map any ai:// resource to decision only).
+    // Templates may supply a richer initial definition.
+    const definition: unknown = opts?.initialDefinition ?? {
+      nodes: [
+        { schemaId: 'stepflow:utility:pass', label: 'Iteration Start' },
+        {
+          schemaId: 'stepflow:data:eav',
+          label: 'Read Row',
+          config: { operation: 'read', entityType: '<your-entity-type>' },
+        },
+        {
+          schemaId: 'stepflow:ai:text',
+          label: 'Generate Text',
+          config: {
+            systemPrompt:
+              'Summarize the current source row into a concise text description. Use only fields available on $input.row.',
+          },
+        },
+        {
+          schemaId: 'stepflow:ai:decision',
+          label: 'Decide',
+          config: {
+            prompt:
+              'Evaluate the generated summary for the current row and decide whether it is approved or needs manual review. Return a single-word decision.',
+          },
+        },
+      ],
+      edges: [
+        { source: 'Iteration Start', target: 'Read Row' },
+        { source: 'Read Row', target: 'Generate Text' },
+        { source: 'Generate Text', target: 'Decide' },
+      ],
+    };
+
+    const flowId = `flow-${Date.now()}`;
+    flows.push({
+      id: flowId,
+      name,
+      description: 'Iterator body for a Map node (auto-created). Each execution receives one item row.',
+      createdAt: new Date().toISOString(),
+      // Saved bodies may be ASL or AiFlowJson graph format — importFlow() handles both on load.
+      definition: definition as StateMachineDefinition,
+    });
+
+    try {
+      localStorage.setItem('stepflow-flows', JSON.stringify(flows));
+    } catch {
+      flows.pop(); // restore list if persistence failed
+      return { success: false, created: false, message: 'Failed to save the iterator flow — browser storage is full or blocked.' };
+    }
+
+    useNodeStore.getState().updateNodeData(mapNodeId, {
+      configuration: {
+        ...(mapNode.data?.configuration ?? {}),
+        targetFlowId: flowId,
+      },
+    });
+
+    return {
+      success: true,
+      created: true,
+      flowId,
+      flowName: name,
+      message: `Created iterator flow "${name}" and linked it to the Map node.`,
+    };
+  },
+
+  /**
+   * Instantiate a starter template from the palette.
+   * Imports the main flow (clears the canvas first) and, when the template
+   * defines an iterator body, links it to the first Map node in the imported graph.
+   */
+  async instantiateTemplate(templateId: string): Promise<{ success: boolean; message: string }> {
+    const template = flowTemplates.find((t) => t.id === templateId);
+    if (!template) return { success: false, message: 'Unknown template.' };
+
+    this.importFlow({ nodes: template.mainFlow.nodes, edges: template.mainFlow.edges });
+
+    let note = '';
+    if (template.iteratorBody) {
+      const mapNode = useNodeStore
+        .getState()
+        .nodes.find((n) => (n.data?.schemaId as string | undefined) === 'stepflow:flow:map');
+      if (mapNode) {
+        const body = await this.ensureIteratorBody(mapNode.id, {
+          initialDefinition: { nodes: template.iteratorBody.nodes, edges: template.iteratorBody.edges },
+          flowName: `${template.name} — Iterator Body`,
+        });
+        note = body.success && body.created
+          ? ` Its iterator body "${body.flowName}" was created and linked to the Map node.`
+          : ' The existing iterator link on the Map node was kept.';
+      } else {
+        note = ' No Map step found in this flow — add one, then scaffold its iterator from Properties.';
+      }
+    }
+
+    return { success: true, message: `Instantiated "${template.name}".${note}` };
   },
 };
 

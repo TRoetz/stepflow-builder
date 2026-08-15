@@ -97,7 +97,29 @@ export const mapStateSchema: StepSchema = {
     },
   ],
 
-  validation: [],
+  validation: [
+    {
+      id: 'iterator-flow-exists',
+      check: (nodeData) => {
+        const flowId = String(nodeData.configuration?.targetFlowId ?? '');
+        if (!flowId) return { isValid: true }; // required-field error is reported separately
+        try {
+          // Read localStorage directly to avoid a schemas → services import cycle.
+          const raw = localStorage.getItem('stepflow-flows');
+          const flows = raw ? (JSON.parse(raw) as Array<{ id: string }>) : [];
+          if (!flows.some((f) => f.id === flowId)) {
+            return {
+              isValid: false,
+              reason: `Linked iterator flow "${flowId.slice(0, 12)}…" is missing from saved flows — the Map would run with an empty body.`,
+            };
+          }
+        } catch {
+          /* storage unavailable or corrupt — skip */
+        }
+        return { isValid: true };
+      },
+    },
+  ],
 };
 
 // ── Parallel State ──

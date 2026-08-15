@@ -37,7 +37,16 @@ export const sqlQuerySchema: StepSchema = {
       type: 'code',
       default: 'SELECT * FROM table WHERE id = @id',
       required: true,
-      description: 'SQL query to execute. Use @param for parameters.',
+      description:
+        'SQL query to execute. Use @param for parameters or {{node.field}} variables to reference upstream data.',
+    },
+    {
+      id: 'outputColumns',
+      label: 'Output Columns',
+      type: 'text',
+      default: '',
+      description:
+        'Comma-separated result columns (e.g. "id, name"). Lets downstream nodes reference them as {{this_node.column}}.',
     },
     {
       id: 'commandTimeout',
@@ -115,7 +124,8 @@ export const duckDbQuerySchema: StepSchema = {
       type: 'code',
       default: 'SELECT * FROM data',
       required: true,
-      description: 'SQL query to execute against the input data',
+      description:
+        'SQL query to execute against the input data. Supports {{node.field}} variables from upstream nodes.',
     },
     {
       id: 'tableName',
@@ -140,6 +150,14 @@ export const duckDbQuerySchema: StepSchema = {
       max: 1000000,
       description: 'Maximum rows to return',
     },
+    {
+      id: 'outputColumns',
+      label: 'Output Columns',
+      type: 'text',
+      default: '',
+      description:
+        'Comma-separated result columns (e.g. "id, name"). Lets downstream nodes reference them as {{this_node.column}}.',
+    },
   ],
 
   validation: [
@@ -158,7 +176,8 @@ export const eavOperationSchema: StepSchema = {
   schemaId: 'stepflow:data:eav',
   name: 'EAV Operation',
   category: 'data',
-  description: 'Entity-Attribute-Value operations for flexible data modeling.',
+  description:
+    "Entity-Attribute-Value operations for flexible data modeling. Inside a Map loop, row columns are picked from the parent flow's data source.",
   icon: 'git-branch',
   color: '#3B82F6',
   version: '1.0.0',
@@ -204,6 +223,30 @@ export const eavOperationSchema: StepSchema = {
       type: 'text',
       default: '',
       description: 'Filter attributes by pattern (e.g., "address.*")',
+    },
+    {
+      id: 'rowPath',
+      label: 'Row Path',
+      type: 'text',
+      default: '$[0]',
+      condition: (data) => data.configuration?.operation === 'read' && !!data.inMapLoop,
+      description: 'JSONPath of the row to read inside a Map iteration (default is the current item).',
+    },
+    {
+      id: 'columnSelector',
+      label: 'Columns',
+      type: 'text',
+      default: '',
+      condition: (data) => !!data.inMapLoop,
+      description: 'Comma-separated column names to select, or empty for all columns of the row.',
+    },
+    {
+      id: 'entityTypeMapping',
+      label: 'Entity Type Mapping',
+      type: 'text',
+      default: '',
+      condition: (data) => !!data.inMapLoop,
+      description: 'Optional mapping from row column names to EAV entity types.',
     },
     {
       id: 'enableVersioning',

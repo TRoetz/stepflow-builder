@@ -1,9 +1,12 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { ChevronDown, ChevronRight, X, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, X, AlertCircle, CheckCircle, Loader2, Plus } from 'lucide-react';
 import { NodeData, StepInput, StepOutput, DataType } from '@schema-types/schema';
 import { schemaById } from '@schemas/index';
 import { useNodeStore } from '@stores/useNodeStore';
+import { useEdgeStore } from '@stores/useEdgeStore';
+import { getConfigIssues, getGraphHintsForNode } from '@hooks/useFlowValidation';
+import { useCanvasUiStore } from '@stores/useCanvasUiStore';
 import { useExecutionStore } from '@stores/useExecutionStore';
 import { getExecutionColor } from '@utils/validation';
 
@@ -94,6 +97,33 @@ export function BaseNodeWithHandles({
   const accentColor = (data.color as string) || schema?.color || '#6366f1';
   const disabled = data.isDisabled as boolean;
   const updateNodeData = useNodeStore((s) => s.updateNodeData);
+  const openAddNext = useCanvasUiStore((s) => s.openAddNext);
+
+  // P5: flow-health issues for this node (required fields, schema rules and
+  // lineage hints) — same source of truth as the header indicator.
+  const graphNodes = useNodeStore((s) => s.nodes);
+  const edges = useEdgeStore((s) => s.edges);
+  const healthIssues = useMemo(
+    () => [...getConfigIssues(data), ...getGraphHintsForNode(id, graphNodes, edges)],
+    [id, data, graphNodes, edges]
+  );
+
+  // Inline validation badge in the node header (first issue; full list on hover).
+  const issueBadge = healthIssues.length > 0 ? (
+    <span
+      title={healthIssues.join('\n')}
+      className="shrink-0 max-w-[150px] truncate px-1.5 py-0.5 rounded text-[9px] bg-amber-400/15 text-amber-300 border border-amber-400/40 cursor-help"
+    >
+      ⚠ {healthIssues[0]}
+    </span>
+  ) : null;
+
+  // P0: "+" chip in the header → opens the "Add next step" popover anchored to this node.
+  const handleAddNextClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    openAddNext(id, rect.right, rect.bottom);
+  };
 
   // Read execution state directly from store (avoids parent creating new node objects)
   const completedNodes = useExecutionStore((s) => s.completedNodes);
@@ -142,6 +172,7 @@ export function BaseNodeWithHandles({
           </div>
           <span className="text-xs font-medium text-gray-200 truncate flex-1">{data.label || 'Step'}</span>
           {disabled && <AlertCircle className="w-3 h-3 text-amber-400 shrink-0" />}
+          {issueBadge}
           {headerExtras}
         </div>
         <Handle type="source" position={Position.Right} style={{ background: accentColor, width: 20, height: 20 }} />
@@ -152,7 +183,7 @@ export function BaseNodeWithHandles({
   // ── Expanded mode ──
   return (
     <div
-      className={`step-node min-w-[240px] ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''} ${executionClass}`}
+      className={`group step-node min-w-[240px] ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''} ${executionClass}`}
       style={{
         border: `1px solid ${executionBorderColor || (selected ? accentColor : `${accentColor}50`)}`,
         boxShadow: selected ? `0 0 0 1px ${accentColor}30, 0 8px 24px ${accentColor}15` : 'none',
@@ -211,7 +242,22 @@ export function BaseNodeWithHandles({
               <span className="text-[9px] text-gray-500 font-mono shrink-0">v{schema.version}</span>
             )}
             {disabled && <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+            {issueBadge}
             {headerExtras}
+
+            {/* P0: Add next step (revealed on hover; only when the node has outputs) */}
+            {outputs.length > 0 && (
+              <button
+                type="button"
+                title="Add next step…"
+                aria-label={`Add next step after ${data.label || 'step'}`}
+                onClick={handleAddNextClick}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="p-1 rounded-md text-gray-500 hover:text-indigo-300 hover:bg-white/10 transition-all shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           {/* Children (category-specific content) */}

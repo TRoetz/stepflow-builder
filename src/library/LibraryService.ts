@@ -1,4 +1,5 @@
 import { StepLibraryEntry, StepCategory } from '@schema-types/schema';
+import { schemaById } from '@schemas/index';
 import { useStepLibraryStore } from './StepLibraryStore';
 import { useNodeStore } from '@stores/useNodeStore';
 import { XYPosition } from '@xyflow/react';
@@ -45,16 +46,19 @@ export const LibraryService = {
     const node = useNodeStore.getState().nodes.find((n) => n.id === nodeId);
     if (!node) return null;
 
-    const schema = node.data?.schemaId;
+    // Copy the schema's input/output port definitions so forked nodes keep their
+    // full handle set (a template saved with empty ports would render a single,
+    // unidentifiable handle and lose per-port edge anchoring).
+    const schemaDef = node.data?.schemaId ? schemaById.get(node.data.schemaId as string) : undefined;
     const template = useStepLibraryStore.getState().saveAsTemplate({
-      schemaId: schema as string,
+      schemaId: (node.data?.schemaId as string) ?? 'unknown',
       name,
       description: `Template created from node ${name}`,
-      category: node.data?.category as StepCategory || 'utility',
+      category: (node.data?.category as StepCategory | undefined) ?? schemaDef?.category ?? 'utility',
       version: '1.0.0',
       configuration: { ...(node.data?.configuration || {}) },
-      inputs: [],
-      outputs: [],
+      inputs: schemaDef?.inputs ?? [],
+      outputs: schemaDef?.outputs ?? [],
       tags,
       isPublished: false,
     });

@@ -29,6 +29,8 @@ export interface StepOutput {
   type: DataType;
   description?: string;
   position: 'right' | 'bottom';
+  /** Optional typed fields of a structured (json) output — enables `{{output.field}}` variable references. */
+  fields?: Array<{ name: string; type: DataType }>;
 }
 
 // ── Config Field (property panel form field) ──

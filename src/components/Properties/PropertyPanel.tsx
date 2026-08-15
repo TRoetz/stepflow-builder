@@ -6,6 +6,11 @@ import { ConfigField, Validity } from '@schema-types/schema';
 import { Trash2, Copy, AlertCircle, ArrowRight, CheckCircle, Settings, Info, GitBranch, Save, Play, Loader2, Terminal, Code, Sparkles } from 'lucide-react';
 import { useExecutionStore } from '@stores/useExecutionStore';
 import { ExecutionService } from '@services/executionService';
+import { FlowService } from '@services/flowService';
+import { useAutoLayout } from '@hooks/useAutoLayout';
+import { LibraryService } from '@library/LibraryService';
+import { showToast } from '@stores/useToastStore';
+import { TextAreaWithVariables, EavColumnPicker } from './VariablePicker';
 
 interface PropertyPanelProps {
   selectedNode: StepNode | undefined;
@@ -21,10 +26,15 @@ export function PropertyPanel({ selectedNode }: PropertyPanelProps) {
   const [isGeneratingRules, setIsGeneratingRules] = useState(false);
   const [testParamsJson, setTestParamsJson] = useState('{\n  "age": 25,\n  "is_vip": 1,\n  "total_spend": 600\n}');
   const [ruleTestResults, setRuleTestResults] = useState<Record<string, { passed: boolean; error?: string }> | null>(null);
+  const [isScaffoldingIterator, setIsScaffoldingIterator] = useState(false);
+
+  // Saved flows (for re-pointing a Map's iterator link)
+  const [savedFlows, setSavedFlows] = useState<Array<{ id: string; name: string }>>([]);
 
   const updateNodeData = useNodeStore((s) => s.updateNodeData);
   const removeNode = useNodeStore((s) => s.removeNode);
   const duplicateNode = useNodeStore((s) => s.duplicateNode);
+  const { autoLayout } = useAutoLayout();
 
   const logs = useExecutionStore((s) => s.logs);
   const nodeLog = selectedNode ? logs[selectedNode.id] : null;
@@ -47,6 +57,82 @@ export function PropertyPanel({ selectedNode }: PropertyPanelProps) {
       ...rule.check(selectedNode.data, new Set()),
     }));
   }, [selectedNode?.data, schema?.validation]);
+
+  // Load saved flows while a Map node is selected so its iterator link can be re-pointed.
+  useEffect(() => {
+    if (!selectedNode || selectedNode.data.schemaId !== 'stepflow:flow:map') return;
+    let cancelled = false;
+    FlowService.listFlows()
+      .then((flows) => { if (!cancelled) setSavedFlows(flows); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [selectedNode?.id, selectedNode?.data.schemaId]);
+
+  /** Re-point a Map node's iterator link at another saved flow. */
+  const handleSwitchIteratorFlow = useCallback(
+    (flowId: string) => {
+      if (!selectedNode || !flowId) return;
+      updateNodeData(selectedNode.id, {
+        configuration: {
+          ...(selectedNode.data.configuration ?? {}),
+          targetFlowId: flowId,
+          iterateOver: 'items',
+        },
+      });
+    },
+    [selectedNode, updateNodeData]
+  );
+
+  /** Create + link an iterator sub-flow body for a Map node (or report the existing link). */
+  const handleScaffoldIterator = useCallback(async () => {
+    if (!selectedNode) return;
+    setIsScaffoldingIterator(true);
+    try {
+      const res = await FlowService.ensureIteratorBody(selectedNode.id);
+      showToast({ type: res.success ? 'success' : 'error', message: res.message });
+    } finally {
+      setIsScaffoldingIterator(false);
+    }
+  }, [selectedNode]);
+
+  /** Open the Map's linked sub-flow directly in the main canvas for editing. */
+  const handleOpenIteratorInCanvas = useCallback(async () => {
+    if (!selectedNode) return;
+    const flowId = String(selectedNode.data.configuration?.targetFlowId ?? '');
+    try {
+      const definition = await FlowService.loadFlow(flowId);
+      if (!definition) {
+        showToast({ type: 'error', message: `Linked flow ${flowId.slice(0, 18)}… was not found in storage.` });
+        return;
+      }
+      const flows = await FlowService.listFlows();
+      const name = flows.find((f) => f.id === flowId)?.name ?? 'Iterator';
+      FlowService.importFlow(definition);
+      // Let App retarget Save at the sub-flow (otherwise saving would clobber the parent).
+      window.dispatchEvent(new CustomEvent('stepflow:flow-loaded', { detail: { name } }));
+      showToast({ type: 'success', message: `Opened "${name}" in the canvas — Save will write to it.` });
+      setTimeout(() => autoLayout(), 50);
+    } catch (err) {
+      console.error('Failed to open iterator flow:', err);
+      showToast({ type: 'error', message: 'Failed to open the linked iterator flow.' });
+    }
+  }, [selectedNode, autoLayout]);
+
+  /** Save the selected node's configuration as a reusable library template. */
+  const handleSaveAsTemplate = useCallback(async () => {
+    if (!selectedNode || !schema) return;
+    try {
+      const entry = await LibraryService.saveAsTemplate(
+        selectedNode.id,
+        selectedNode.data.label ?? schema.name,
+        ['from-canvas'],
+      );
+      showToast({ type: 'success', message: `Saved template "${entry?.name ?? schema.name}" to the library.` });
+    } catch (err) {
+      console.error('Failed to save as template:', err);
+      showToast({ type: 'error', message: 'Failed to save template.' });
+    }
+  }, [selectedNode, schema]);
 
   if (!selectedNode) {
     return (
@@ -167,23 +253,115 @@ export function PropertyPanel({ selectedNode }: PropertyPanelProps) {
                     if (field.condition && !field.condition(selectedNode.data)) {
                       return null;
                     }
-                    return (
-                      <ConfigFieldRenderer
-                        key={field.id}
-                        field={field}
-                        value={selectedNode.data?.configuration?.[field.id]}
-                        onChange={(value) => {
-                          updateNodeData(selectedNode.id, {
-                            configuration: {
-                              ...(selectedNode.data.configuration || {}),
-                              [field.id]: value,
-                            },
-                          });
-                        }}
-                      />
-                    );
+                    const fieldProps = {
+                      value: selectedNode.data?.configuration?.[field.id],
+                      onChange: (value: unknown) => {
+                        updateNodeData(selectedNode.id, {
+                          configuration: {
+                            ...(selectedNode.data.configuration || {}),
+                            [field.id]: value,
+                          },
+                        });
+                      },
+                    };
+
+                    // Textareas & code editors get the {{variable}} insertion picker.
+                    if (field.type === 'textarea' || field.type === 'code') {
+                      return (
+                        <TextAreaWithVariables
+                          key={field.id}
+                          {...fieldProps}
+                          field={field}
+                          defaultValue={field.default}
+                          contextNodeId={selectedNode.id}
+                        />
+                      );
+                    }
+
+                    return <ConfigFieldRenderer key={field.id} field={field} value={fieldProps.value} onChange={fieldProps.onChange} />;
                   })}
                 </div>
+              </div>
+            )}
+
+            {/* Iterator-body scaffolding for Map nodes */}
+            {selectedNode.data.schemaId === 'stepflow:flow:map' && (
+              <div className="px-4 py-3 border-b border-gray-800">
+                {(() => {
+                  const linkedFlowId = String(selectedNode.data.configuration?.targetFlowId ?? '');
+                  return (
+                    <div className="p-3 rounded-lg bg-violet-500/10 border border-violet-500/20 space-y-2">
+                      <div className="text-xs font-medium text-violet-300 flex items-center gap-1.5">
+                        <GitBranch className="w-3.5 h-3.5" />
+                        Iterator body
+                      </div>
+                      {linkedFlowId ? (
+                        <>
+                          <p className="text-[11px] leading-relaxed text-gray-400 m-0">
+                            Linked to saved flow{' '}
+                            <span className="font-mono text-violet-300">{linkedFlowId.slice(0, 18)}…</span>. Open it from the
+                            Flows menu in the header, edit its states (it receives one row per Map item), and re-save.
+                          </p>
+                          <select
+                            value={savedFlows.some((f) => f.id === linkedFlowId) ? linkedFlowId : ''}
+                            onChange={(e) => handleSwitchIteratorFlow(e.target.value)}
+                            className="w-full mt-2 px-2 py-1.5 text-[11px] rounded-lg bg-gray-800 border border-violet-600/30 text-gray-300 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                            title="Point this Map at a different saved flow"
+                          >
+                            {!savedFlows.some((f) => f.id === linkedFlowId) && (
+                              <option value="" disabled>⚠ linked flow not found in storage</option>
+                            )}
+                            {savedFlows.map((f) => (
+                              <option key={f.id} value={f.id}>{f.name}</option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={handleOpenIteratorInCanvas}
+                            disabled={!savedFlows.some((f) => f.id === linkedFlowId)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-gray-300 border border-violet-600/20 transition-colors"
+                            title="Load the linked sub-flow into the main canvas and edit its nodes directly"
+                          >
+                            <ArrowRight className="w-3.5 h-3.5" />
+                            Open in Canvas
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-[11px] leading-relaxed text-gray-400 m-0">
+                            Map runs a sub-flow once per item in <code className="font-mono">itemsPath</code>. Create and
+                            link an iterator flow to give it a body.
+                          </p>
+                          <button
+                            onClick={handleScaffoldIterator}
+                            disabled={isScaffoldingIterator}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium rounded-lg bg-violet-600/20 hover:bg-violet-600/30 disabled:opacity-50 text-violet-300 border border-violet-600/30 transition-colors"
+                          >
+                            {isScaffoldingIterator ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <GitBranch className="w-3.5 h-3.5" />
+                            )}
+                            Create &amp; Link Iterator Flow
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Row column picker for EAV nodes inside a Map loop */}
+            {selectedNode.data.schemaId === 'stepflow:data:eav' && (
+              <div className="px-4 py-3 border-b border-gray-800">
+                <EavColumnPicker
+                  value={selectedNode.data.configuration?.attributes}
+                  onChange={(v) =>
+                    updateNodeData(selectedNode.id, {
+                      configuration: { ...(selectedNode.data.configuration || {}), attributes: v },
+                    })
+                  }
+                />
               </div>
             )}
 
@@ -371,8 +549,7 @@ export function PropertyPanel({ selectedNode }: PropertyPanelProps) {
                           });
                           
                           setAiRulePrompt('');
-                          const setToast = (window as any).__setToast;
-                          if (setToast) setToast({ type: 'success', message: 'Rules generated successfully via AI!' });
+                          showToast({ type: 'success', message: 'Rules generated successfully via AI!' });
                         } finally {
                           setIsGeneratingRules(false);
                         }
@@ -647,10 +824,7 @@ export function PropertyPanel({ selectedNode }: PropertyPanelProps) {
                 </div>
                 <button
                   className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 border border-indigo-600/30 transition-colors"
-                  onClick={() => {
-                    // TODO: Save as template (Phase 7)
-                    console.log('Save as template:', selectedNode.data);
-                  }}
+                  onClick={handleSaveAsTemplate}
                 >
                   <Save className="w-3.5 h-3.5" />
                   Save as Template
@@ -719,10 +893,7 @@ export function PropertyPanel({ selectedNode }: PropertyPanelProps) {
                   await ExecutionService.testSingleNode(selectedNode, parsedInput);
                 } catch (e) {
                   console.error('Failed to run single step test:', e);
-                  const setToast = (window as any).__setToast;
-                  if (setToast) {
-                    setToast({ type: 'error', message: `Test failed: ${e instanceof Error ? e.message : String(e)}` });
-                  }
+                  showToast({ type: 'error', message: `Test failed: ${e instanceof Error ? e.message : String(e)}` });
                 } finally {
                   setIsTestingStep(false);
                 }

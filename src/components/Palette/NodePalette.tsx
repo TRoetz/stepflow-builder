@@ -1,12 +1,14 @@
 import { useState, useMemo, useCallback } from 'react';
 import { paletteData, schemaById } from '@schemas/index';
+import { flowTemplates } from '@schemas/templates';
 import { StepCategory } from '@schema-types/schema';
 
 interface NodePaletteProps {
   onNodeAdd: (schemaId: string) => void;
+  onInstantiateTemplate: (templateId: string) => void;
 }
 
-export function NodePalette({ onNodeAdd }: NodePaletteProps) {
+export function NodePalette({ onNodeAdd, onInstantiateTemplate }: NodePaletteProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [collapsedCategories, setCollapsedCategories] = useState<Set<StepCategory>>(new Set());
   const [favorites, setFavorites] = useState<Set<string>>(() => {
@@ -75,6 +77,15 @@ export function NodePalette({ onNodeAdd }: NodePaletteProps) {
       .filter((item) => favorites.has(item.id));
   }, [favorites]);
 
+  // Templates filtered by the current search query
+  const visibleTemplates = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return flowTemplates;
+    return flowTemplates.filter(
+      (t) => t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q)
+    );
+  }, [searchQuery]);
+
   // Handle node add (drag or double-click)
   const handleNodeAdd = useCallback(
     (schemaId: string) => {
@@ -115,6 +126,43 @@ export function NodePalette({ onNodeAdd }: NodePaletteProps) {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
+        {/* Starter Templates */}
+        {visibleTemplates.length > 0 && (
+          <div className="px-3 py-2">
+            <div className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
+              📋 Starter Templates
+            </div>
+            <p className="text-[11px] text-gray-500 mb-2 px-1 -mt-1">
+              Instantiates a pre-built flow (replaces the current canvas)
+            </p>
+            <div className="flex flex-col gap-1.5">
+              {visibleTemplates.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => onInstantiateTemplate(t.id)}
+                  title="Click to instantiate this template"
+                  className="w-full text-left px-3 py-2.5 rounded-lg border border-gray-700/60 hover:border-indigo-500/60 hover:bg-indigo-500/10 transition-all"
+                >
+                  <div className="flex items-center gap-2">
+                    <span>{t.icon}</span>
+                    <span className="text-sm font-medium text-gray-200 flex-1 truncate">{t.name}</span>
+                    {t.iteratorBody && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 shrink-0">
+                        + iterator flow
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1 leading-snug">{t.description}</p>
+                  <p className="text-[10px] text-gray-600 mt-1">
+                    {t.mainFlow.nodes.length} steps · {t.mainFlow.edges.length} connections
+                  </p>
+                </button>
+              ))}
+            </div>
+            <div className="border-t border-gray-800 my-3" />
+          </div>
+        )}
+
         {/* Favorites Section */}
         {favoriteItems.length > 0 && !searchQuery && (
           <div className="px-3 py-2">

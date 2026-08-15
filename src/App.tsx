@@ -13,13 +13,15 @@ import { FlowService } from '@services/flowService';
 import { useAutoLayout } from '@hooks/useAutoLayout';
 import { useKeyboardShortcuts } from '@hooks/useKeyboardShortcuts';
 import { CanvasAssistant } from '@components/Canvas/CanvasAssistant';
+import { ToastStack } from '@components/ToastStack';
 import { AgentPanel } from '@components/Agents/AgentPanel';
 import { useAiAssistantStore } from '@stores/useAiAssistantStore';
 import { summarizeConfigFields } from '@stores/aiAssistantPrompts';
 import { useAiModelConfigStore } from '@stores/useAiModelConfigStore';
+import { showToast } from '@stores/useToastStore';
 import { AiModelConfigModal } from '@components/AiModelConfigModal';
 import { ErrorBoundary } from '@components/ErrorBoundary';
-import { CheckCircle2, AlertCircle, Trash2, Terminal, Code, FolderOpen } from 'lucide-react';
+import { Trash2, Terminal, Code, FolderOpen } from 'lucide-react';
 import './styles/globals.css';
 export default function App() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -30,7 +32,6 @@ export default function App() {
   const [isCollapsedProperties, setIsCollapsedProperties] = useState(false);
   const [flowName, setFlowName] = useState('New Flow');
   const [showAgentPanel, setShowAgentPanel] = useState(false);
-  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [showLogPanel, setShowLogPanel] = useState(false);
   const [expandedLogNodeId, setExpandedLogNodeId] = useState<string | null>(null);
   const [showSaveProjectDialog, setShowSaveProjectDialog] = useState(false);
@@ -47,19 +48,11 @@ export default function App() {
   const { autoLayout } = useAutoLayout();
   const executionStatus = useExecutionStore((s) => s.status);
 
-  // Auto-hide toast after 3 seconds
+  // Register the toast helper on window for legacy global callers
   useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
-
-  // Register setToast on window for global access (e.g., execution service)
-  useEffect(() => {
-    (window as any).__setToast = setToast;
+    (window as any).__showToast = showToast;
     return () => {
-      delete (window as any).__setToast;
+      delete (window as any).__showToast;
     };
   }, []);
 
@@ -120,11 +113,35 @@ export default function App() {
     }
   }, [executionStatus]);
 
+  // Keep flowName in sync when another component (e.g. PropertyPanel's Map
+  // "Open in Canvas") loads a saved flow into the canvas — subsequent Saves then write to that flow.
+  useEffect(() => {
+    const onFlowLoaded = (event: Event) => {
+      const name = (event as CustomEvent<{ name?: string }>).detail?.name;
+      if (name) setFlowName(name);
+    };
+    window.addEventListener('stepflow:flow-loaded', onFlowLoaded);
+    return () => window.removeEventListener('stepflow:flow-loaded', onFlowLoaded);
+  }, []);
+
   // ── Handle Save ──
   const handleSave = useCallback(async () => {
     const res = await FlowService.saveFlow(flowName);
-    setToast({ type: res.success ? 'success' : 'error', message: res.message });
+    showToast({ type: res.success ? 'success' : 'error', message: res.message });
   }, [flowName]);
+
+  // ── Handle Instantiate Template (from the palette) ──
+  // Auto-saves any existing canvas first so work is not lost.
+  const handleInstantiateTemplate = useCallback(
+    async (templateId: string) => {
+      if (useNodeStore.getState().nodes.length > 0) {
+        await FlowService.saveFlow(flowName);
+      }
+      const res = await FlowService.instantiateTemplate(templateId);
+      showToast({ type: res.success ? 'success' : 'error', message: res.message });
+    },
+    [flowName]
+  );
 
   // Global Keyboard Shortcuts
   useKeyboardShortcuts({
@@ -163,11 +180,11 @@ export default function App() {
       }
 
       const result = await response.json();
-      setToast({ type: 'success', message: result.message || 'Project saved successfully!' });
+      showToast({ type: 'success', message: result.message || 'Project saved successfully!' });
       setShowSaveProjectDialog(false);
     } catch (err: any) {
       console.error('Failed to save project:', err);
-      setToast({ type: 'error', message: `Save failed: ${err.message}` });
+      showToast({ type: 'error', message: `Save failed: ${err.message}` });
     }
   }, [flowName, projectDirectoryPath]);
 
@@ -208,14 +225,14 @@ export default function App() {
           autoLayout();
         }, 50);
 
-        setToast({ type: 'success', message: result.message || 'Project loaded successfully!' });
+        showToast({ type: 'success', message: result.message || 'Project loaded successfully!' });
         setShowLoadProjectDialog(false);
       } else {
         throw new Error('Invalid project layout format');
       }
     } catch (err: any) {
       console.error('Failed to load project:', err);
-      setToast({ type: 'error', message: `Load failed: ${err.message}` });
+      showToast({ type: 'error', message: `Load failed: ${err.message}` });
     }
   }, [projectDirectoryPath, autoLayout]);
 
@@ -235,20 +252,20 @@ export default function App() {
     }
 
     if (!projectFile || !layoutFile) {
-      setToast({ type: 'error', message: 'Selected folder must contain project.json and layout.json' });
+      showToast({ type: 'error', message: 'Selected folder must contain project.json and layout.json' });
       return;
     }
 
     const projectReader = new FileReader();
     projectReader.onerror = () => {
-      setToast({ type: 'error', message: 'Failed to read project.json' });
+      showToast({ type: 'error', message: 'Failed to read project.json' });
     };
     projectReader.onload = (evProj) => {
       try {
         const projectData = JSON.parse(evProj.target?.result as string);
         const layoutReader = new FileReader();
         layoutReader.onerror = () => {
-          setToast({ type: 'error', message: 'Failed to read layout.json' });
+          showToast({ type: 'error', message: 'Failed to read layout.json' });
         };
         layoutReader.onload = (evLayout) => {
           try {
@@ -271,18 +288,18 @@ export default function App() {
                 autoLayout();
               }, 50);
 
-              setToast({ type: 'success', message: 'Project folder loaded successfully!' });
+              showToast({ type: 'success', message: 'Project folder loaded successfully!' });
               setShowLoadProjectDialog(false);
             } else {
-              setToast({ type: 'error', message: 'Invalid layout.json format inside selected folder.' });
+              showToast({ type: 'error', message: 'Invalid layout.json format inside selected folder.' });
             }
           } catch {
-            setToast({ type: 'error', message: 'Failed to parse layout.json' });
+            showToast({ type: 'error', message: 'Failed to parse layout.json' });
           }
         };
         layoutReader.readAsText(layoutFile!);
       } catch {
-        setToast({ type: 'error', message: 'Failed to parse project.json' });
+        showToast({ type: 'error', message: 'Failed to parse project.json' });
       }
     };
     projectReader.readAsText(projectFile);
@@ -313,10 +330,10 @@ export default function App() {
           if (definition && typeof definition === 'object' && 'name' in definition) {
             setFlowName((definition as Record<string, unknown>).name as string);
           }
-          setToast({ type: 'success', message: 'Flow imported successfully!' });
+          showToast({ type: 'success', message: 'Flow imported successfully!' });
         } catch (err) {
           console.error('Failed to import flow:', err);
-          setToast({ type: 'error', message: 'Failed to import flow. Please check the file format.' });
+          showToast({ type: 'error', message: 'Failed to import flow. Please check the file format.' });
         }
       };
       reader.readAsText(file);
@@ -360,7 +377,7 @@ export default function App() {
         setFlowName(selected.name);
       }
       setShowLoadDialog(false);
-      setToast({ type: 'success', message: 'Flow loaded successfully!' });
+      showToast({ type: 'success', message: 'Flow loaded successfully!' });
     }
   }, [savedFlows]);
 
@@ -377,9 +394,9 @@ export default function App() {
         description: f.description,
         createdAt: f.createdAt,
       })));
-      setToast({ type: 'success', message: 'Flow deleted' });
+      showToast({ type: 'success', message: 'Flow deleted' });
     } catch {
-      setToast({ type: 'error', message: 'Failed to delete flow' });
+      showToast({ type: 'error', message: 'Failed to delete flow' });
     }
   }, []);
   // ── Selected Node Data ──
@@ -413,7 +430,10 @@ export default function App() {
         {/* Left: Node Palette */}
         {!isCollapsedPalette && (
           <div className="app-palette">
-            <NodePalette onNodeAdd={handleNodeAdd} />
+            <NodePalette
+              onNodeAdd={handleNodeAdd}
+              onInstantiateTemplate={handleInstantiateTemplate}
+            />
           </div>
         )}
 
@@ -776,20 +796,7 @@ export default function App() {
       )}
 
       {/* Toast Notification Banner */}
-      {toast && (
-        <div className={`fixed bottom-10 right-6 z-[100] flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-xl border text-xs font-medium backdrop-blur-md transition-all duration-300 ${
-          toast.type === 'success'
-            ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-200'
-            : 'bg-red-950/90 border-red-500/40 text-red-200'
-        }`}>
-          {toast.type === 'success' ? (
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          ) : (
-            <AlertCircle className="w-4 h-4 text-red-400" />
-          )}
-          <span>{toast.message}</span>
-        </div>
-      )}
+      <ToastStack />
     </div>
   );
 }

@@ -4,10 +4,41 @@ import { useEdgeStore } from '@stores/useEdgeStore';
 import { StepNode } from '@stores/useNodeStore';
 import { StepEdge } from '@stores/useEdgeStore';
 import { FlowService } from '@services/flowService';
+import { interpolateVariables } from '@utils/variables';
+import { showToast } from '@stores/useToastStore';
 
 interface ExecutionContext {
   lastOutput: any;
   nodeOutputs: Record<string, any>;
+}
+
+/**
+ * Interpolate {{variables}} in string configuration values using the outputs of
+ * already-executed upstream nodes. Returns a shallow-copied node — the store's
+ * data is never mutated.
+ */
+function interpolateStepConfig(
+  node: StepNode,
+  allNodes: StepNode[],
+  context: ExecutionContext
+): StepNode {
+  const config = node.data?.configuration ?? {};
+  let changed = false;
+  const resolved: Record<string, unknown> = { ...config };
+
+  for (const [key, value] of Object.entries(resolved)) {
+    if (typeof value !== 'string' || !value.includes('{{')) continue;
+    const result = interpolateVariables(value, allNodes, context);
+    if (result.unresolved.length > 0) {
+      console.warn(
+        `[Variables] Unresolved tokens in "${node.data?.label ?? node.id}" (${key}): ${result.unresolved.join(', ')}`
+      );
+    }
+    resolved[key] = result.text;
+    changed = true;
+  }
+
+  return changed ? { ...node, data: { ...node.data, configuration: resolved } } : node;
 }
 
 /**
@@ -77,23 +108,14 @@ export const ExecutionService = {
           throw new Error(result.errorMessage || 'Execution failed on .NET engine');
         }
 
-        const message = `Backend execution succeeded! Output: ${JSON.stringify(result.output)}`;
-        const setToast = (window as any).__setToast;
-        if (setToast) {
-          setToast({ type: 'success', message });
-        } else {
-          alert(message);
-        }
+        showToast({ type: 'success', message: `Backend execution succeeded! Output: ${JSON.stringify(result.output)}` });
 
         useExecutionStore.setState({ status: 'completed', endTime: Date.now() });
       } catch (error) {
         console.error('[Backend Execution] Error during live backend execution:', error);
         executionStore.setNodeFailed('canvas', String(error));
         
-        const setToast = (window as any).__setToast;
-        if (setToast) {
-          setToast({ type: 'error', message: `Backend execution failed: ${String(error)}` });
-        }
+        showToast({ type: 'error', message: `Backend execution failed: ${String(error)}` });
       }
       return;
     }
@@ -226,9 +248,13 @@ async function traverseNode(
   });
 
   let output: any = {};
+
+  // Resolve {{variables}} in string configuration values using upstream outputs.
+  const step = interpolateStepConfig(node, nodes, context);
+
   try {
     if (node.type === 'stepflow:api:http') {
-      const config = node.data?.configuration || {};
+      const config = step.data?.configuration || {};
       const url = config.url as string;
       const method = (config.method as string || 'GET').toUpperCase();
       let headers: Record<string, string> = {};
@@ -267,7 +293,7 @@ async function traverseNode(
         }
       }
     } else if (node.type === 'stepflow:transform:script') {
-      const config = node.data?.configuration || {};
+      const config = step.data?.configuration || {};
       const script = config.script as string;
       const language = config.language as string || 'javascript';
 
@@ -305,13 +331,7 @@ async function traverseNode(
             URL.revokeObjectURL(downloadUrl);
 
             // Display standard, beautiful toast on screen!
-            const message = `Saved rate to "${fileName}" and downloaded automatically! (Browser prevents direct write to C:\\temp)`;
-            const setToast = (window as any).__setToast;
-            if (setToast) {
-              setToast({ type: 'success', message });
-            } else {
-              alert(message);
-            }
+            showToast({ type: 'success', message: `Saved rate to "${fileName}" and downloaded automatically! (Browser prevents direct write to C:\\temp)` });
           }
         }
       } else {
@@ -321,7 +341,7 @@ async function traverseNode(
     } else if (node.type === 'stepflow:utility:pass') {
       // Pass Through state: identity transform. Forward the incoming payload to
       // output unchanged so downstream steps see exactly what upstream produced.
-      const config = node.data?.configuration || {};
+      const config = step.data?.configuration || {};
       output = context.lastOutput;
       if (config.enableLogging) {
         console.log(`[Pass Through:${node.id}] Payload passed through unmodified:`, output);
