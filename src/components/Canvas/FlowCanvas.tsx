@@ -7,6 +7,7 @@ import {
   Controls,
   MiniMap,
   MarkerType,
+  ConnectionLineType,
   Connection,
   Edge,
   Node,
@@ -123,6 +124,8 @@ function FlowCanvasInner({
   // Execution state styling is handled inside the node components themselves.
 
   // ── Handle Connection ──
+  // NOTE: `...params` intentionally preserves sourceHandle/targetHandle so edges
+  // render at the exact ports the user connected (important for multi-port nodes).
   const onConnect = useCallback(
     (params: Connection) => {
       const edge: Edge = {
@@ -139,6 +142,106 @@ function FlowCanvasInner({
       addEdge(edge);
     },
     [addEdge]
+  );
+
+  // ── Handle Connection End (drop-on-node-body fallback) ──
+  // React Flow only completes a connection when the pointer is released within
+  // `connectionRadius` of a target handle dot. Users frequently aim at the node
+  // card (or its port label), so in that case we resolve the node under the
+  // pointer and wire it to the appropriate default port ourselves.
+  //
+  // This ref marks an *edge reconnection* drag in progress. React Flow fires
+  // onConnectEnd for those drags too — before onReconnectEnd — so without this
+  // guard, dropping a reconnect onto a node body would leave the original edge
+  // intact AND create a duplicate one.
+  const reconnectingEdgeRef = useRef(false);
+
+  const onConnectEnd = useCallback(
+    (
+      event: MouseEvent | TouchEvent,
+      connectionState: {
+        isValid?: boolean | null;
+        fromNode?: { id: string } | null;
+        fromHandle?: { id?: string | null; type?: 'source' | 'target' } | null;
+      }
+    ) => {
+      // A valid drop already created an edge via onConnect.
+      if (connectionState?.isValid === true) return;
+
+      // Ignore drops that end an edge reconnection: the original edge is kept,
+      // so creating another one here would duplicate it.
+      if (reconnectingEdgeRef.current) return;
+
+      const clientX =
+        event instanceof MouseEvent ? event.clientX : event.changedTouches[0]?.clientX;
+      const clientY =
+        event instanceof MouseEvent ? event.clientY : event.changedTouches[0]?.clientY;
+      if (clientX == null || clientY == null) return;
+
+      // Find the node under the pointer, skipping any overlay elements above it.
+      const targetEl: HTMLElement | undefined = document
+        .elementsFromPoint(clientX, clientY)
+        .map((el) => el.closest?.('.react-flow__node'))
+        .find(Boolean) as HTMLElement | undefined;
+      if (!targetEl) return;
+
+      const droppedNodeId = targetEl.getAttribute('data-id');
+      const fromNodeId = connectionState.fromNode?.id;
+      const fromHandle = connectionState.fromHandle;
+      if (!droppedNodeId || !fromNodeId || fromNodeId === droppedNodeId) return;
+
+      let source: string;
+      let target: string;
+      let sourceHandleId: string | null;
+      let targetHandleId: string | null;
+
+      if (fromHandle?.type !== 'target') {
+        // Dragged from an output port → connect it to the dropped node's first input port.
+        source = fromNodeId;
+        target = droppedNodeId;
+        sourceHandleId = fromHandle?.id ?? null;
+        const inputEl = targetEl.querySelector('.react-flow__handle.react-flow__target');
+        if (!inputEl) return; // Node has no input port (e.g. End).
+        targetHandleId = inputEl.getAttribute('data-handleid');
+      } else {
+        // Dragged from an input port → connect the dropped node's first output port to it.
+        source = droppedNodeId;
+        target = fromNodeId;
+        targetHandleId = fromHandle?.id ?? null;
+        const outputEl = targetEl.querySelector('.react-flow__handle.react-flow__source');
+        if (!outputEl) return; // Node has no output port (e.g. Start).
+        sourceHandleId = outputEl.getAttribute('data-handleid');
+      }
+
+      // data-handleid is absent for collapsed nodes' single unnamed handle;
+      // leaving the edge's handle undefined then matches that handle correctly.
+
+      const { edges: currentEdges, addEdge } = useEdgeStore.getState();
+      const duplicate = currentEdges.some(
+        (e) =>
+          e.source === source &&
+          e.target === target &&
+          (e.sourceHandle ?? null) === (sourceHandleId ?? null) &&
+          (e.targetHandle ?? null) === (targetHandleId ?? null)
+      );
+      if (duplicate) return;
+
+      addEdge({
+        id: uuidv4(),
+        source,
+        target,
+        sourceHandle: sourceHandleId ?? undefined,
+        targetHandle: targetHandleId ?? undefined,
+        type: 'step-edge',
+        animated: true,
+        style: { stroke: '#6366f1', strokeWidth: 2 },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color: '#6366f1',
+        },
+      });
+    },
+    []
   );
 
   // ── Handle Selection Change ──
@@ -182,6 +285,17 @@ function FlowCanvasInner({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onConnectEnd={onConnectEnd}
+        onReconnectStart={() => {
+          reconnectingEdgeRef.current = true;
+        }}
+        onReconnectEnd={() => {
+          // Fires immediately after the same pointer-up's onConnectEnd.
+          reconnectingEdgeRef.current = false;
+        }}
+        connectionRadius={30}
+        connectionLineType={ConnectionLineType.SmoothStep}
+        connectionLineStyle={{ stroke: '#6366f1', strokeWidth: 2 }}
         onSelectionChange={onSelectionChange}
         onEdgeClick={onEdgeClick}
         onNodeClick={(_, node: Node) => {

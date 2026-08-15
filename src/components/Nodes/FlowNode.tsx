@@ -77,7 +77,7 @@ export function FlowNode({ id, data, selected }: FlowNodeProps) {
           type="target"
           position={Position.Left}
           id="input_data"
-          style={{ background: accentColor, borderColor: accentColor, width: 14, height: 14 }}
+          style={{ background: accentColor, borderColor: accentColor, width: 20, height: 20 }}
         />
       )}
 
@@ -87,13 +87,13 @@ export function FlowNode({ id, data, selected }: FlowNodeProps) {
             type="source"
             position={Position.Right}
             id="output_true"
-            style={{ background: '#10B981', borderColor: '#10B981', top: '35%', width: 14, height: 14 }}
+            style={{ background: '#10B981', borderColor: '#10B981', top: '35%', width: 20, height: 20 }}
           />
           <Handle
             type="source"
             position={Position.Right}
             id="output_false"
-            style={{ background: '#EF4444', borderColor: '#EF4444', top: '65%', width: 14, height: 14 }}
+            style={{ background: '#EF4444', borderColor: '#EF4444', top: '65%', width: 20, height: 20 }}
           />
         </>
       )}
@@ -102,7 +102,7 @@ export function FlowNode({ id, data, selected }: FlowNodeProps) {
           type="source"
           position={Position.Right}
           id="output"
-          style={{ background: accentColor, borderColor: accentColor, width: 14, height: 14 }}
+          style={{ background: accentColor, borderColor: accentColor, width: 20, height: 20 }}
         />
       )}
 

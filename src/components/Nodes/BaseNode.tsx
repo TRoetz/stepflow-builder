@@ -11,14 +11,15 @@ import { getExecutionColor } from '@utils/validation';
 // Handle Style Helpers
 // ═══════════════════════════════════════════════════════════
 
+// Port dot sizes (px). Kept large so ports are easy to grab when connecting.
 export const HANDLE_SIZES: Record<DataType, number> = {
-  json: 18,
-  string: 14,
-  number: 14,
-  boolean: 13,
-  array: 18,
-  image: 15,
-  any: 14,
+  json: 24,
+  string: 20,
+  number: 20,
+  boolean: 19,
+  array: 24,
+  image: 21,
+  any: 20,
 };
 
 export const HANDLE_COLORS: Record<DataType, string> = {
@@ -128,7 +129,7 @@ export function BaseNodeWithHandles({
           boxShadow: selected ? `0 0 0 1px ${accentColor}40, 0 4px 12px ${accentColor}20` : 'none',
         }}
       >
-        <Handle type="target" position={Position.Left} style={{ background: accentColor, width: 14, height: 14 }} />
+        <Handle type="target" position={Position.Left} style={{ background: accentColor, width: 20, height: 20 }} />
         <div className="px-3 py-1.5 flex items-center gap-2 cursor-pointer select-none" onClick={toggleCollapse}>
           <button className="p-0.5 rounded hover:bg-white/10 transition-colors shrink-0">
             <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
@@ -143,7 +144,7 @@ export function BaseNodeWithHandles({
           {disabled && <AlertCircle className="w-3 h-3 text-amber-400 shrink-0" />}
           {headerExtras}
         </div>
-        <Handle type="source" position={Position.Right} style={{ background: accentColor, width: 14, height: 14 }} />
+        <Handle type="source" position={Position.Right} style={{ background: accentColor, width: 20, height: 20 }} />
       </div>
     );
   }
@@ -174,7 +175,7 @@ export function BaseNodeWithHandles({
                   right: 'auto',
                   left: '-8px',
                 }}
-                className="transition-all hover:scale-125"
+                className="transition-all duration-150 hover:brightness-125 hover:shadow-[0_0_0_4px_rgba(255,255,255,0.18)]"
               />
               <HandleLabel label={input.label} type={input.type} optional={input.optional} side="left" />
             </div>
@@ -239,8 +240,8 @@ export function BaseNodeWithHandles({
           </div>
         </div>
 
-        {/* ── Output Handles (right column) ── */}
-        <div className="flex flex-col py-2 pl-2 items-end" style={{ minWidth: '90px' }}>
+        {/* ── Output Handles (right column, bottom-aligned) ── */}
+        <div className="flex flex-col justify-end py-2 pl-2 items-end" style={{ minWidth: '90px' }}>
           {outputs.map((output) => (
             <div key={output.id} className="relative flex items-center justify-end mb-1">
               <HandleLabel label={output.label} type={output.type} optional={false} side="right" />
@@ -256,7 +257,7 @@ export function BaseNodeWithHandles({
                   left: 'auto',
                   right: '-8px',
                 }}
-                className="transition-all hover:scale-125"
+                className="transition-all duration-150 hover:brightness-125 hover:shadow-[0_0_0_4px_rgba(255,255,255,0.18)]"
               />
             </div>
           ))}

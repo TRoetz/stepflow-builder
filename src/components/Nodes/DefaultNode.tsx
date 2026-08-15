@@ -8,11 +8,11 @@ export function DefaultNode(props: { data?: NodeData }) {
 
   return (
     <div className="px-4 py-3 rounded-xl bg-gray-800/90 border border-gray-700 shadow-lg min-w-[160px]">
-      <Handle type="target" position={Position.Left} style={{ width: 14, height: 14, background: color }} />
+      <Handle type="target" position={Position.Left} style={{ width: 20, height: 20, background: color }} />
       <div className="text-sm font-medium" style={{ color }}>
         {data?.label || 'Step Node'}
       </div>
-      <Handle type="source" position={Position.Right} style={{ width: 14, height: 14, background: color }} />
+      <Handle type="source" position={Position.Right} style={{ width: 20, height: 20, background: color }} />
     </div>
   );
 }

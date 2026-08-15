@@ -101,6 +101,19 @@ export function UtilityNode({ id, data, selected }: { id: string; data: NodeData
           </>
         )}
 
+        {/* Pass Through identity — shows at a glance that data flows straight through */}
+        {data.schemaId === 'stepflow:utility:pass' && (
+          <div className="flex items-center justify-between gap-1 text-[9px] font-mono bg-gray-900/50 rounded px-2 py-1.5 border border-dashed border-gray-500/40">
+            <span className="text-emerald-400/80">IN</span>
+            <ArrowRight className="w-3 h-3 text-gray-500 shrink-0" />
+            <span className="px-1.5 py-0.5 rounded border border-indigo-500/30 bg-indigo-500/15 text-indigo-300 font-semibold tracking-wider">
+              PASS
+            </span>
+            <ArrowRight className="w-3 h-3 text-gray-500 shrink-0" />
+            <span className="text-emerald-400/80">OUT (unchanged)</span>
+          </div>
+        )}
+
         {/* Pass Through Label */}
         {data.schemaId === 'stepflow:utility:pass' && label && (
           <ConfigBadge label="Label" value={label} accentColor={accentColor} />

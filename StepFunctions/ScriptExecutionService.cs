@@ -30,6 +30,15 @@ namespace StepFunctionsApp.StepFunctions
         public async Task<JToken> ExecuteScriptAsync(string language, string script, JToken inputData, CancellationToken ct = default)
         {
             language = language.ToLowerInvariant();
+
+            // Auto-detect language from code content if it doesn't match the declared language
+            var detected = DetectScriptLanguage(script);
+            if (detected != null && detected != language)
+            {
+                _logger.LogWarning("Language mismatch: declared '{Declared}', detected '{Detected}'. Using detected language.", language, detected);
+                language = detected;
+            }
+
             _logger.LogInformation("Executing scripting task. Language: {Language}", language);
 
             try
@@ -56,6 +65,50 @@ namespace StepFunctionsApp.StepFunctions
                     ["details"] = ex.ToString()
                 };
             }
+        }
+
+        /// <summary>
+        /// Auto-detect script language from code heuristics.
+        /// Returns null if no confident detection, or the language key.
+        /// </summary>
+        private string? DetectScriptLanguage(string script)
+        {
+            var trimmed = script.Trim();
+
+            // Python indicators
+            bool hasPythonImport = trimmed.Contains("import os") || trimmed.Contains("import sys") || trimmed.Contains("import json") || trimmed.Contains("import re");
+            bool hasPythonWith = trimmed.Contains("with open(") || trimmed.Contains("with open (");
+            bool hasPythonDef = trimmed.Contains("def ") || trimmed.Contains("print(");
+            bool hasPythonFstring = trimmed.Contains("f\"") || trimmed.Contains("f'\"");
+            bool hasPythonSelf = trimmed.Contains("self.");
+            bool hasPythonIndent = trimmed.Contains(":\n    ") || trimmed.Contains(":\n        ");
+            int pythonScore = (hasPythonImport ? 3 : 0) + (hasPythonWith ? 3 : 0) + (hasPythonDef ? 1 : 0) + (hasPythonFstring ? 2 : 0) + (hasPythonSelf ? 2 : 0) + (hasPythonIndent ? 1 : 0);
+
+            // JavaScript indicators
+            bool hasConst = trimmed.Contains("const ") || trimmed.Contains("let ") || trimmed.Contains("var ");
+            bool hasRequire = trimmed.Contains("require(") || trimmed.Contains("require (");
+            bool hasArrow = trimmed.Contains("=>");
+            bool hasConsole = trimmed.Contains("console.");
+            bool hasImportFrom = trimmed.Contains("import {") || trimmed.Contains("import ") && trimmed.Contains(" from ");
+            int jsScore = (hasConst ? 1 : 0) + (hasRequire ? 2 : 0) + (hasArrow ? 1 : 0) + (hasConsole ? 2 : 0) + (hasImportFrom ? 2 : 0);
+
+            // C# indicators
+            bool hasNamespace = trimmed.Contains("namespace ");
+            bool hasUsing = trimmed.Contains("using System") || trimmed.Contains("using ");
+            bool hasCsharpTypes = trimmed.Contains("Console.WriteLine") || trimmed.Contains("var ") && trimmed.Contains(";\n");
+            int csharpScore = (hasNamespace ? 2 : 0) + (hasUsing ? 1 : 0) + (hasCsharpTypes ? 2 : 0);
+
+            // PowerShell indicators
+            bool hasDollarVar = trimmed.Contains("$") && (trimmed.Contains("Write-Output") || trimmed.Contains("ConvertTo-Json"));
+            int psScore = hasDollarVar ? 3 : 0;
+
+            // Threshold: need score >= 3 to override declared language
+            if (pythonScore >= 3 && pythonScore > jsScore && pythonScore > csharpScore) return "python";
+            if (jsScore >= 3 && jsScore > pythonScore && jsScore > csharpScore) return "javascript";
+            if (csharpScore >= 3 && csharpScore > pythonScore && csharpScore > jsScore) return "csharp";
+            if (psScore >= 3) return "powershell";
+
+            return null;
         }
 
         private async Task<JToken> ExecuteCSharpScriptAsync(string script, JToken inputData, CancellationToken ct)
@@ -141,6 +194,7 @@ namespace StepFunctionsApp.StepFunctions
             string extension;
             string executable;
             string wrapperCode;
+            bool useModuleMode = false;
 
             var contextJson = new JObject
             {
@@ -151,19 +205,23 @@ namespace StepFunctionsApp.StepFunctions
             {
                 extension = "js";
                 executable = "node";
+                useModuleMode = true;
                 wrapperCode = $@"
-const fs = require('fs');
+import fs from 'fs';
 const context = JSON.parse(fs.readFileSync(0, 'utf-8'));
-try {{
-    const execute = (context) => {{
-        {script}
-    }};
-    const result = execute(context);
-    console.log(JSON.stringify(result));
-}} catch (err) {{
-    console.error(err.message);
-    process.exit(1);
-}}";
+(async () => {{
+    try {{
+        const execute = async (ctx) => {{
+            const data = ctx?.input ?? ctx;
+            {script}
+        }};
+        const result = await execute(context);
+        console.log(JSON.stringify(result));
+    }} catch (err) {{
+        console.error(err.message);
+        process.exit(1);
+    }}
+}})();";
             }
             else if (language == "python" || language == "py")
             {
@@ -179,6 +237,7 @@ try:
     context = json.loads(sys.stdin.read())
     def execute(context):
         input = context.get('input', {{}})
+        data = input  # alias commonly used by LLM-generated code
 {indentedScript}
 
     result = execute(context)
@@ -214,7 +273,9 @@ ConvertTo-Json $result -Depth 10 | Write-Output";
                 var startInfo = new ProcessStartInfo
                 {
                     FileName = executable,
-                    Arguments = $"\"{tempFilePath}\"",
+                    Arguments = useModuleMode
+                        ? $"--input-type=module \"{tempFilePath}\""
+                        : $"\"{tempFilePath}\"",
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     RedirectStandardInput = true,

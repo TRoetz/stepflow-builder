@@ -182,6 +182,9 @@ export const ExecutionService = {
         } else {
           output = { status: 'simulated', language, message: 'Non-JS script tested successfully' };
         }
+      } else if (node.type === 'stepflow:utility:pass') {
+        // Pass Through state is an identity transform in single-node tests too.
+        output = inputData;
       } else {
         output = { status: 'success', message: 'Step tested successfully' };
       }
@@ -314,6 +317,15 @@ async function traverseNode(
       } else {
         // Mock non-JS script success
         output = { status: 'simulated', language, message: 'Script simulated successfully' };
+      }
+    } else if (node.type === 'stepflow:utility:pass') {
+      // Pass Through state: identity transform. Forward the incoming payload to
+      // output unchanged so downstream steps see exactly what upstream produced.
+      const config = node.data?.configuration || {};
+      output = context.lastOutput;
+      if (config.enableLogging) {
+        console.log(`[Pass Through:${node.id}] Payload passed through unmodified:`, output);
+        executionStore.setNodeLog(node.id, { status: 'running', passthrough: true });
       }
     } else {
       // Simulate processing delay for other nodes

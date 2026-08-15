@@ -10,6 +10,7 @@ export interface StepExecutionLog {
   input: any;
   output: any;
   error?: string;
+  passthrough?: boolean; // true when a Pass Through node forwarded its input unmodified (Enable Logging on)
   startTime: number;
   endTime?: number;
 }

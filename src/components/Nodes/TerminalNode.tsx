@@ -60,8 +60,8 @@ export function TerminalNode({ id, data, selected }: TerminalNodeProps) {
             borderColor: accentColor,
             top: '50%',
             right: '-8px',
-            width: 14,
-            height: 14,
+            width: 24,
+            height: 24,
           }}
         />
       ) : (
@@ -74,8 +74,8 @@ export function TerminalNode({ id, data, selected }: TerminalNodeProps) {
             borderColor: accentColor,
             top: '50%',
             left: '-8px',
-            width: 14,
-            height: 14,
+            width: 24,
+            height: 24,
           }}
         />
       )}

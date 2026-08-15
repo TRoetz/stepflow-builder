@@ -5,7 +5,8 @@ export const passThroughSchema: StepSchema = {
   schemaId: 'stepflow:utility:pass',
   name: 'Pass Through',
   category: 'utility',
-  description: 'Pass data through without modification. Useful for routing and debugging.',
+  description:
+    'Forwards input data to its output unchanged — a named checkpoint for routing & debugging (exports as an ASL "Pass" state). Enable logging to capture the exact payload in this node\'s execution log.',
   icon: 'arrow-right',
   color: '#6B7280',
   version: '1.0.0',
@@ -34,7 +35,8 @@ export const passThroughSchema: StepSchema = {
       label: 'Enable Logging',
       type: 'toggle',
       default: false,
-      description: 'Log data passing through this node',
+      description:
+        'Capture the exact payload in this node\'s execution log (Info tab) and browser console during simulation',
     },
   ],
 
