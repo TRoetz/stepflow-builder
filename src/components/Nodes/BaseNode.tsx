@@ -9,6 +9,7 @@ import { getConfigIssues, getGraphHintsForNode } from '@hooks/useFlowValidation'
 import { useCanvasUiStore } from '@stores/useCanvasUiStore';
 import { useExecutionStore } from '@stores/useExecutionStore';
 import { getExecutionColor } from '@utils/validation';
+import { stepIcon } from './stepIcons';
 
 // ═══════════════════════════════════════════════════════════
 // Handle Style Helpers
@@ -50,9 +51,13 @@ function HandleLabel({
   optional: boolean;
   side: 'left' | 'right';
 }) {
-  const sideClass = side === 'left' ? 'pr-1' : 'pl-1';
+  // Right side: pr-6 keeps the label 8px clear of the widest handle dot
+  // (24px, right-flush with the node border) so edge curves never cross text.
+  const sideClass = side === 'left' ? 'pr-2' : 'pl-2 pr-6';
   return (
-    <div className={`flex items-center gap-1.5 text-[10px] ${sideClass} whitespace-nowrap`}>
+    // Plate beside a port: long labels truncate with an ellipsis (full name in
+    // the title tooltip) so they can never spill into neighbouring text.
+    <div className={`flex items-center gap-1.5 text-[10px] ${sideClass} min-w-0`}>
       <span
         className="flex items-center justify-center shrink-0"
         style={{
@@ -63,8 +68,8 @@ function HandleLabel({
           opacity: 0.7,
         }}
       />
-      <span className="text-gray-400">{label}</span>
-      {optional && <span className="text-gray-600">?</span>}
+      <span title={label} className="text-gray-400 truncate max-w-[104px]">{label}</span>
+      {optional && <span className="text-gray-600 shrink-0" title="Optional input">?</span>}
     </div>
   );
 }
@@ -153,7 +158,7 @@ export function BaseNodeWithHandles({
   if (collapsed) {
     return (
       <div
-        className={`step-node rounded-lg min-w-[180px] ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''} ${executionClass}`}
+        className={`step-node rounded-lg min-w-[200px] ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''} ${executionClass}`}
         style={{
           borderLeft: executionBorderColor ? `3px solid ${executionBorderColor}` : `3px solid ${accentColor}`,
           boxShadow: selected ? `0 0 0 1px ${accentColor}40, 0 4px 12px ${accentColor}20` : 'none',
@@ -165,12 +170,12 @@ export function BaseNodeWithHandles({
             <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
           </button>
           <div
-            className="w-4 h-4 rounded flex items-center justify-center shrink-0"
+            className="w-4 h-4 rounded flex items-center justify-center shrink-0 overflow-hidden"
             style={{ backgroundColor: `${accentColor}40` }}
           >
-            <span className="text-[10px]">{schema?.icon || '📦'}</span>
+            <span style={{ color: accentColor }}>{stepIcon(schema?.icon, 'w-3 h-3')}</span>
           </div>
-          <span className="text-xs font-medium text-gray-200 truncate flex-1">{data.label || 'Step'}</span>
+          <span title={data.label} className="text-xs font-medium text-gray-200 truncate flex-1 min-w-0">{data.label || 'Step'}</span>
           {disabled && <AlertCircle className="w-3 h-3 text-amber-400 shrink-0" />}
           {issueBadge}
           {headerExtras}
@@ -183,7 +188,7 @@ export function BaseNodeWithHandles({
   // ── Expanded mode ──
   return (
     <div
-      className={`group step-node min-w-[240px] ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''} ${executionClass}`}
+      className={`group step-node min-w-[280px] ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''} ${executionClass}`}
       style={{
         border: `1px solid ${executionBorderColor || (selected ? accentColor : `${accentColor}50`)}`,
         boxShadow: selected ? `0 0 0 1px ${accentColor}30, 0 8px 24px ${accentColor}15` : 'none',
@@ -191,9 +196,9 @@ export function BaseNodeWithHandles({
     >
       <div className="flex">
         {/* ── Input Handles (left column) ── */}
-        <div className="flex flex-col py-2 pr-2" style={{ minWidth: '90px' }}>
+        <div className="flex flex-col py-2.5 pr-2" style={{ minWidth: '132px' }}>
           {inputs.map((input) => (
-            <div key={input.id} className="relative flex items-center mb-1">
+            <div key={input.id} className="relative flex items-center mb-2 last:mb-0">
               <Handle
                 id={input.id}
                 type="target"
@@ -230,12 +235,12 @@ export function BaseNodeWithHandles({
               <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
             </button>
             <div
-              className="w-5 h-5 rounded-md flex items-center justify-center shrink-0"
+              className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 overflow-hidden"
               style={{ backgroundColor: `${accentColor}40` }}
             >
-              <span className="text-sm">{schema?.icon || '📦'}</span>
+              <span style={{ color: accentColor }}>{stepIcon(schema?.icon, 'w-3.5 h-3.5')}</span>
             </div>
-            <span className="text-sm font-semibold text-gray-100 truncate flex-1">
+            <span title={data.label} className="text-sm font-semibold text-gray-100 truncate flex-1 min-w-0">
               {data.label || 'Step'}
             </span>
             {schema && (
@@ -287,9 +292,10 @@ export function BaseNodeWithHandles({
         </div>
 
         {/* ── Output Handles (right column, bottom-aligned) ── */}
-        <div className="flex flex-col justify-end py-2 pl-2 items-end" style={{ minWidth: '90px' }}>
+        {/* pr-2 pulls the output plates in from the node's clipped edge so they aren't cut off */}
+        <div className="flex flex-col justify-end py-2.5 pl-2 pr-2 items-end" style={{ minWidth: '140px' }}>
           {outputs.map((output) => (
-            <div key={output.id} className="relative flex items-center justify-end mb-1">
+            <div key={output.id} className="relative flex items-center justify-end mb-2 last:mb-0">
               <HandleLabel label={output.label} type={output.type} optional={false} side="right" />
               <Handle
                 id={output.id}
@@ -327,10 +333,13 @@ export function ConfigBadge({
   accentColor: string;
 }) {
   return (
-    <div className="flex items-center gap-1.5 text-xs text-gray-300">
-      <span className="text-gray-500">{label}:</span>
+    <div className="flex items-center gap-1.5 text-xs text-gray-300 min-w-0">
+      <span className="text-gray-500 shrink-0">{label}:</span>
+      {/* Long values (e.g. table/entity names on db nodes) truncate inside the
+          pill instead of spilling out and colliding with port label plates */}
       <span
-        className="px-1.5 py-0.5 rounded text-[10px] font-mono"
+        title={value}
+        className="px-1.5 py-0.5 rounded text-[10px] font-mono min-w-0 truncate"
         style={{ background: `${accentColor}15`, color: `${accentColor}cc` }}
       >
         {value}

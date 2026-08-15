@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { stepIcon } from '@components/Nodes/stepIcons';
 import { useNodeStore } from '@stores/useNodeStore';
 import { schemaById, stepSchemas } from '@schemas/index';
 import { categoryById } from '@schemas/categories';
@@ -128,8 +129,8 @@ export function AddNextPopover({ sourceNodeId, anchor, onPick, onClose }: AddNex
                 onClick={() => onPick(s.schemaId)}
                 className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left hover:bg-indigo-500/10 focus:bg-indigo-500/10 transition-colors outline-none"
               >
-                <span className="text-sm w-6 h-6 rounded-md bg-white/5 flex items-center justify-center shrink-0">
-                  {s.icon || '📦'}
+                <span className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center shrink-0 overflow-hidden">
+                  {stepIcon(s.icon, 'w-3.5 h-3.5')}
                 </span>
                 <span className="flex-1 min-w-0">
                   <span className="block text-xs font-medium text-gray-200 truncate">{s.name}</span>

@@ -192,8 +192,10 @@ body {
    Node Base Styles
    ═══════════════════════════════════════════════════════════ */
 
+/* Note: no fixed min-width here — each node root sets its own (e.g. min-w-[280px]).
+   An unlayered rule would override Tailwind utilities and lock every node to one width. */
 .step-node {
-  @apply rounded-xl shadow-lg min-w-[240px] overflow-hidden transition-all duration-150;
+  @apply rounded-xl shadow-lg overflow-hidden transition-all duration-150;
   @apply bg-gray-800/5 border border-gray-700;
 }
 

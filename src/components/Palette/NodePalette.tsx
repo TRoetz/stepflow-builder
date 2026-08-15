@@ -10,6 +10,7 @@ interface NodePaletteProps {
 
 export function NodePalette({ onNodeAdd, onInstantiateTemplate }: NodePaletteProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [templatesCollapsed, setTemplatesCollapsed] = useState(false);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<StepCategory>>(new Set());
   const [favorites, setFavorites] = useState<Set<string>>(() => {
     try {
@@ -126,40 +127,57 @@ export function NodePalette({ onNodeAdd, onInstantiateTemplate }: NodePalettePro
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        {/* Starter Templates */}
+        {/* Starter Templates — collapsible like node categories, list scrolls internally */}
         {visibleTemplates.length > 0 && (
-          <div className="px-3 py-2">
-            <div className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
-              📋 Starter Templates
-            </div>
-            <p className="text-[11px] text-gray-500 mb-2 px-1 -mt-1">
-              Instantiates a pre-built flow (replaces the current canvas)
-            </p>
-            <div className="flex flex-col gap-1.5">
-              {visibleTemplates.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => onInstantiateTemplate(t.id)}
-                  title="Click to instantiate this template"
-                  className="w-full text-left px-3 py-2.5 rounded-lg border border-gray-700/60 hover:border-indigo-500/60 hover:bg-indigo-500/10 transition-all"
-                >
-                  <div className="flex items-center gap-2">
-                    <span>{t.icon}</span>
-                    <span className="text-sm font-medium text-gray-200 flex-1 truncate">{t.name}</span>
-                    {t.iteratorBody && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 shrink-0">
-                        + iterator flow
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1 leading-snug">{t.description}</p>
-                  <p className="text-[10px] text-gray-600 mt-1">
-                    {t.mainFlow.nodes.length} steps · {t.mainFlow.edges.length} connections
-                  </p>
-                </button>
-              ))}
-            </div>
-            <div className="border-t border-gray-800 my-3" />
+          <div className="border-b border-gray-800/50">
+            <button
+              onClick={() => setTemplatesCollapsed((v) => !v)}
+              aria-expanded={!templatesCollapsed}
+              title={templatesCollapsed ? 'Show starter templates' : 'Hide starter templates'}
+              className="w-full flex items-center justify-between px-4 py-2 text-xs font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-200 transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <span>📋</span>
+                <span>Starter Templates</span>
+                <span className="text-xs font-normal text-gray-600">
+                  ({visibleTemplates.length})
+                </span>
+              </span>
+              <span className="text-gray-600">{templatesCollapsed ? '▸' : '▾'}</span>
+            </button>
+
+            {!templatesCollapsed && (
+              <div className="px-2 pb-2">
+                <p className="text-[11px] text-gray-500 px-1.5 py-1">
+                  Instantiates a pre-built flow (replaces the current canvas)
+                </p>
+                {/* Bounded, internally scrollable list so many templates don't push nodes out of view */}
+                <div className="max-h-[320px] overflow-y-auto flex flex-col gap-1.5 pr-1">
+                  {visibleTemplates.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => onInstantiateTemplate(t.id)}
+                      title="Click to instantiate this template"
+                      className="w-full text-left px-3 py-2.5 rounded-lg border border-gray-700/60 hover:border-indigo-500/60 hover:bg-indigo-500/10 transition-all shrink-0"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span>{t.icon}</span>
+                        <span className="text-sm font-medium text-gray-200 flex-1 truncate">{t.name}</span>
+                        {t.iteratorBody && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 shrink-0">
+                            + iterator flow
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1 leading-snug">{t.description}</p>
+                      <p className="text-[10px] text-gray-600 mt-1">
+                        {t.mainFlow.nodes.length} steps · {t.mainFlow.edges.length} connections
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
