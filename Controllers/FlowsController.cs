@@ -28,11 +28,7 @@ namespace StepFunctionsApp.Controllers
                 var description = payload["description"]?.ToString();
                 
                 // Parse definition
-                var statesObj = payload["states"] as JObject;
-                if (statesObj == null && payload["definition"]?["states"] != null)
-                {
-                    statesObj = payload["definition"]["states"] as JObject;
-                }
+                var statesObj = payload["states"] as JObject ?? payload["definition"]?["states"] as JObject;
 
                 if (statesObj == null)
                 {
@@ -45,7 +41,7 @@ namespace StepFunctionsApp.Controllers
                     States = statesObj.ToObject<Dictionary<string, StateDefinition>>()!
                 };
 
-                var sm = _stepService.RegisterStateMachine(name, definition, description);
+                var sm = _stepService.RegisterStateMachine(name, definition, description, payload["id"]?.ToString());
                 return Ok(new
                 {
                     id = sm.Id,
@@ -133,10 +129,16 @@ namespace StepFunctionsApp.Controllers
         // Get execution status
         [HttpGet("api/flows/executions/{id}")]
         [HttpGet("api/execution/{id}")]
-        public IActionResult GetExecution(string id)
+        public async Task<IActionResult> GetExecution(string id)
         {
             var execution = _stepService.GetExecution(id);
-            if (execution == null) return NotFound(new { error = $"Execution '{id}' not found" });
+            if (execution == null)
+            {
+                // Fall back to the durable store so executions survive a backend restart.
+                var record = await _stepService.LoadStoredExecutionAsync(id);
+                if (record?.Execution == null) return NotFound(new { error = $"Execution '{id}' not found" });
+                execution = record.Execution;
+            }
             return Ok(new
             {
                 executionId = execution.ExecutionId,
@@ -159,6 +161,41 @@ namespace StepFunctionsApp.Controllers
         {
             // Just return success for mock stop, since background services handles it
             return Ok(new { message = "Execution stop requested" });
+        }
+
+        // List all stored executions (survives restarts; includes terminal history)
+        [HttpGet("api/flows/executions")]
+        public async Task<IActionResult> ListExecutions()
+        {
+            var summaries = await _stepService.ListStoredExecutionsAsync();
+            return Ok(summaries);
+        }
+
+        // Resume a stored execution (Suspended, or recovered-but-not-auto-resumed)
+        [HttpPost("api/flows/executions/{id}/resume")]
+        public async Task<IActionResult> ResumeExecution(string id)
+        {
+            try
+            {
+                var execution = await _stepService.ResumeStoredExecutionAsync(id);
+                return Ok(new { message = $"Execution '{id}' queued for resume", status = execution.Status.ToString() });
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { error = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { error = ex.Message });
+            }
+        }
+
+        // Delete a stored execution's checkpoint
+        [HttpDelete("api/flows/executions/{id}")]
+        public async Task<IActionResult> DeleteExecution(string id)
+        {
+            await _stepService.DeleteStoredExecutionAsync(id);
+            return Ok(new { message = $"Execution '{id}' removed from the flow-state store" });
         }
 
         // Save and compile as a multi-file Project Structure on local disk

@@ -1,0 +1,49 @@
+{
+  "Comment": "Fetches the price of 2 troy ounces of gold in NZD, then chains that total value into a NZD-to-USD conversion via the fake exchange-rate API.",
+  "StartAt": "FetchGoldPrice",
+  "States": {
+    "FetchGoldPrice": {
+      "Type": "Task",
+      "Resource": "http://localhost:5095/api/fake/gold-price",
+      "Comment": "GET /api/fake/gold-price?currency=NZD&amount=2 - totalValue is the 2-ounce cost in NZD.",
+      "Parameters": {
+        "__handler": "http",
+        "method": "GET",
+        "query": { "currency": "NZD", "amount": 2 }
+      },
+      "Next": "ConvertToUsd"
+    },
+    "ConvertToUsd": {
+      "Type": "Task",
+      "Resource": "http://localhost:5095/api/fake/exchange-rate",
+      "Comment": "Chains $.totalValue from the gold response into the conversion amount.",
+      "Parameters": {
+        "__handler": "http",
+        "method": "GET",
+        "query": { "from": "NZD", "to": "USD", "amount.$": "$.totalValue" }
+      },
+      "Next": "ValidateConversion"
+    },
+    "ValidateConversion": {
+      "Type": "Choice",
+      "Comment": "Conversion must be NZD to USD with a numeric result.",
+      "Choices": [
+        {
+          "And": [
+            { "Variable": "$.from", "StringEquals": "NZD" },
+            { "Variable": "$.to", "StringEquals": "USD" },
+            { "Variable": "$.convertedAmount", "IsNumeric": true }
+          ],
+          "Next": "Succeeded"
+        }
+      ],
+      "Default": "ValidationFailed"
+    },
+    "Succeeded": { "Type": "Succeed" },
+    "ValidationFailed": {
+      "Type": "Fail",
+      "Error": "FxConversionValidationFailed",
+      "Cause": "Exchange-rate conversion failed validation"
+    }
+  }
+}

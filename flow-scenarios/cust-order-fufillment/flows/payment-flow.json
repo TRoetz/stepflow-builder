@@ -1,0 +1,86 @@
+{
+  "Id": "PaymentFlow",
+  "Comment": "Cust-order-fufillment scenario - sub-flow invoked when a reserved cart is converted to an order. Charges the card, generates a PDF receipt and emails it to the customer. Fails with PaymentDeclined when the provider declines.",
+  "StartAt": "ChargeCard",
+  "States": {
+    "ChargeCard": {
+      "Type": "Task",
+      "Resource": "http://localhost:5095/api/fake/payments/charge",
+      "Comment": "POST /api/fake/payments/charge - deterministic fake provider (last4 '0002' declines).",
+      "Parameters": {
+        "__handler": "http",
+        "method": "POST",
+        "body": {
+          "orderId.$": "$.orderId",
+          "amountCents.$": "$.totalCents",
+          "currency.$": "$.currency",
+          "cardLast4.$": "$.cardLast4"
+        }
+      },
+      "ResultPath": "$.payment",
+      "Next": "PaymentDecision"
+    },
+    "PaymentDecision": {
+      "Type": "Choice",
+      "Comment": "Route on the provider's verdict.",
+      "Choices": [
+        {
+          "Variable": "$.payment.status",
+          "StringEquals": "succeeded",
+          "Next": "GenerateReceipt"
+        }
+      ],
+      "Default": "PaymentDeclined"
+    },
+    "GenerateReceipt": {
+      "Type": "Task",
+      "Resource": "http://localhost:5095/api/fake/receipts",
+      "Comment": "POST /api/fake/receipts - renders a PDF receipt for the order.",
+      "Parameters": {
+        "__handler": "http",
+        "method": "POST",
+        "body": {
+          "orderId.$": "$.orderId",
+          "customer.$": "$.customer",
+          "items.$": "$.items",
+          "totalCents.$": "$.totalCents",
+          "currency.$": "$.currency",
+          "transactionId.$": "$.payment.transactionId"
+        }
+      },
+      "ResultPath": "$.receipt",
+      "Next": "EmailReceipt"
+    },
+    "EmailReceipt": {
+      "Type": "Task",
+      "Resource": "http://localhost:5095/api/fake/email/send",
+      "Comment": "POST /api/fake/email/send - emails the PDF receipt to the customer (lands in the observable outbox).",
+      "Parameters": {
+        "__handler": "http",
+        "method": "POST",
+        "body": {
+          "to.$": "$.customer.email",
+          "subject": "Your order receipt",
+          "bodyText": "Thank you for your purchase. Your PDF receipt is attached.",
+          "attachments": [
+            {
+              "name.$": "$.receipt.fileName",
+              "contentType": "application/pdf",
+              "contentBase64.$": "$.receipt.pdfBase64"
+            }
+          ]
+        }
+      },
+      "ResultPath": "$.email",
+      "Next": "PaymentComplete"
+    },
+    "PaymentComplete": {
+      "Type": "Succeed"
+    },
+    "PaymentDeclined": {
+      "Type": "Fail",
+      "Error": "PaymentDeclined",
+      "Cause": "The payment provider declined the card - see $.payment.declineReason"
+    }
+  }
+}

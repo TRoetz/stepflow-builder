@@ -1,0 +1,70 @@
+{
+  "Id": "CartInventoryCheck",
+  "Comment": "Cust-order-fufillment scenario - cart stage. Checks inventory for every cart item, blocks (reserves) stock while the cart is open and computes the order total with a DuckDB transform. Fails with InsufficientStock when any item cannot be fully reserved.",
+  "StartAt": "CheckInventory",
+  "States": {
+    "CheckInventory": {
+      "Type": "Task",
+      "Resource": "http://localhost:5095/api/fake/commerce/inventory/check",
+      "Comment": "POST /api/fake/commerce/inventory/check - per-item availability for the whole cart. Pure read, blocks nothing.",
+      "Parameters": {
+        "__handler": "http",
+        "method": "POST",
+        "body": {
+          "cartId.$": "$.cartId",
+          "items.$": "$.items"
+        }
+      },
+      "ResultPath": "$.inventoryCheck",
+      "Next": "ValidateAvailability"
+    },
+    "ValidateAvailability": {
+      "Type": "Choice",
+      "Comment": "Every item must be fully available before stock is blocked.",
+      "Choices": [
+        {
+          "Variable": "$.inventoryCheck.ok",
+          "BooleanEquals": true,
+          "Next": "ComputeTotals"
+        }
+      ],
+      "Default": "InsufficientStock"
+    },
+    "ComputeTotals": {
+      "Type": "Task",
+      "Resource": "transform://query",
+      "Comment": "DuckDB transform: sum qty * unitPriceCents over the cart items.",
+      "Parameters": {
+        "operation": "query",
+        "table": "cart_items",
+        "data.$": "$.items",
+        "sql": "SELECT SUM(qty * unitPriceCents) AS total_cents FROM cart_items"
+      },
+      "ResultPath": "$.totals",
+      "Next": "ReserveStock"
+    },
+    "ReserveStock": {
+      "Type": "Task",
+      "Resource": "http://localhost:5095/api/fake/commerce/inventory/reserve",
+      "Comment": "Blocks the checked stock until the cart is cleared (cart-cleared flow) or converted to an order (order-placed flow).",
+      "Parameters": {
+        "__handler": "http",
+        "method": "POST",
+        "body": {
+          "cartId.$": "$.cartId",
+          "items.$": "$.items"
+        }
+      },
+      "ResultPath": "$.reservation",
+      "Next": "CartReady"
+    },
+    "CartReady": {
+      "Type": "Succeed"
+    },
+    "InsufficientStock": {
+      "Type": "Fail",
+      "Error": "InsufficientStock",
+      "Cause": "One or more cart items have insufficient available stock - see $.inventoryCheck.shortages"
+    }
+  }
+}

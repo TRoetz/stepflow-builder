@@ -30,12 +30,20 @@ namespace StepFunctionsApp.StepFunctions
             _logger = logger;
         }
 
+        /// <summary>
+        /// Invoked at every state boundary — before each state executes, and once more on terminal status —
+        /// to persist a checkpoint. The callback must serialize the execution immediately; it may throw, in
+        /// which case the failure propagates to the caller (the service degrades gracefully).
+        /// </summary>
+        public delegate Task CheckpointCallback(Execution execution);
+
         public async Task<Execution> ExecuteAsync(
             StateMachineDefinition definition,
             JToken input,
             string executionId,
             string stateMachineId,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            CheckpointCallback? onCheckpoint = null)
         {
             var execution = new Execution
             {
@@ -46,11 +54,39 @@ namespace StepFunctionsApp.StepFunctions
                 CurrentState = definition.StartAt
             };
 
+            return await RunCoreAsync(definition, execution, input.DeepClone(), cancellationToken, onCheckpoint);
+        }
+
+        /// <summary>
+        /// Resumes a previously checkpointed execution from its CurrentState using PendingInput.
+        /// Completed states are not re-executed; the in-flight state (if any) may re-execute (at-least-once).
+        /// </summary>
+        public async Task<Execution> ResumeAsync(
+            StateMachineDefinition definition,
+            Execution execution,
+            CancellationToken cancellationToken = default,
+            CheckpointCallback? onCheckpoint = null)
+        {
+            if (string.IsNullOrEmpty(execution.CurrentState))
+                throw new StepEngineException("States.Resume", "Execution has no pending state to resume from");
+
+            var stateInput = execution.PendingInput?.DeepClone() ?? new JObject();
+            return await RunCoreAsync(definition, execution, stateInput, cancellationToken, onCheckpoint);
+        }
+
+        private async Task<Execution> RunCoreAsync(
+            StateMachineDefinition definition,
+            Execution execution,
+            JToken stateInput,
+            CancellationToken cancellationToken,
+            CheckpointCallback? onCheckpoint)
+        {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             if (definition.TimeoutSeconds.HasValue)
                 timeoutCts.CancelAfter(TimeSpan.FromSeconds(definition.TimeoutSeconds.Value));
 
-            var stateInput = input.DeepClone();
+            // Resume from a Suspended/Running checkpoint: the loop runs while Status == Running.
+            execution.Status = ExecutionStatus.Running;
 
             try
             {
@@ -64,6 +100,10 @@ namespace StepFunctionsApp.StepFunctions
                         throw new StepEngineException("States.Runtime", $"State '{stateName}' not found in definition");
                     }
 
+                    // Checkpoint boundary: CurrentState + PendingInput describe exactly where to resume.
+                    // Saved before StateEntered so recovery re-enters the in-flight state (at-least-once).
+                    execution.PendingInput = stateInput.DeepClone();
+                    if (onCheckpoint != null) await onCheckpoint(execution);
                     _logger.LogDebug("Executing state: {StateName} (Type: {Type})", stateName, state.Type);
                     AddEvent(execution, "StateEntered", stateName, new JObject { ["input"] = Truncate(stateInput) });
 
@@ -129,12 +169,18 @@ namespace StepFunctionsApp.StepFunctions
                     }
                 }
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
+                // Definition-level timeout expired.
                 execution.Status = ExecutionStatus.TimedOut;
                 execution.ErrorCode = "States.Timeout";
                 execution.ErrorMessage = "Execution timed out";
                 AddEvent(execution, "ExecutionTimedOut", execution.CurrentState ?? "");
+            }
+            catch (OperationCanceledException)
+            {
+                // Host shutdown or caller cancellation: the process is going away. Leave Status as-is and skip the terminal checkpoint so the last boundary record in the store stays authoritative — recovery on next startup resumes from there.
+                return execution;
             }
             catch (StepEngineException ex)
             {
@@ -152,6 +198,8 @@ namespace StepFunctionsApp.StepFunctions
             }
 
             execution.CompletedAt = DateTime.UtcNow;
+            // Terminal record so the store reflects the final status.
+            if (onCheckpoint != null) await onCheckpoint(execution);
             return execution;
         }
 

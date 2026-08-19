@@ -426,7 +426,8 @@ namespace StepFunctionsApp.StepFunctions
                 for (int i = 0; i < reader.FieldCount; i++)
                 {
                     var value = reader.GetValue(i);
-                    row[reader.GetName(i)] = value == DBNull.Value ? null : value;
+                    // SQL NULL is stored as a real null; rows are serialized via Json.NET, which maps it to JSON null.
+                    row[reader.GetName(i)] = value == DBNull.Value ? null! : value;
                 }
                 rows.Add(row);
             }

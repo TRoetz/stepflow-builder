@@ -1,0 +1,85 @@
+{
+  "Id": "OrderFulfillment",
+  "Comment": "Cust-order-fufillment scenario - sub-flow holding the fulfillment business rules: validates the delivery method, maps it to a carrier and schedules a pickup with that carrier.",
+  "StartAt": "ValidateDeliveryMethod",
+  "States": {
+    "ValidateDeliveryMethod": {
+      "Type": "Choice",
+      "Comment": "Business rule: map the requested delivery method onto a carrier.",
+      "Choices": [
+        {
+          "Variable": "$.deliveryMethod",
+          "StringEquals": "standard",
+          "Next": "SetStandardCarrier"
+        },
+        {
+          "Variable": "$.deliveryMethod",
+          "StringEquals": "express",
+          "Next": "SetExpressCarrier"
+        },
+        {
+          "Variable": "$.deliveryMethod",
+          "StringEquals": "overnight",
+          "Next": "SetOvernightCarrier"
+        }
+      ],
+      "Default": "InvalidDeliveryMethod"
+    },
+    "SetStandardCarrier": {
+      "Type": "Pass",
+      "Comment": "standard -> NZPost, pickup in 2 days.",
+      "Result": {
+        "carrier": "NZPost",
+        "serviceLevel": "standard"
+      },
+      "ResultPath": "$.fulfillment",
+      "Next": "RequestPickup"
+    },
+    "SetExpressCarrier": {
+      "Type": "Pass",
+      "Comment": "express -> CourierPost, pickup in 1 day.",
+      "Result": {
+        "carrier": "CourierPost",
+        "serviceLevel": "express"
+      },
+      "ResultPath": "$.fulfillment",
+      "Next": "RequestPickup"
+    },
+    "SetOvernightCarrier": {
+      "Type": "Pass",
+      "Comment": "overnight -> Aramex, pickup same day.",
+      "Result": {
+        "carrier": "Aramex",
+        "serviceLevel": "overnight"
+      },
+      "ResultPath": "$.fulfillment",
+      "Next": "RequestPickup"
+    },
+    "RequestPickup": {
+      "Type": "Task",
+      "Resource": "http://localhost:5095/api/fake/carriers/pickup",
+      "Comment": "POST /api/fake/carriers/pickup - schedules the pickup with the chosen carrier.",
+      "Parameters": {
+        "__handler": "http",
+        "method": "POST",
+        "body": {
+          "orderId.$": "$.orderId",
+          "carrier.$": "$.fulfillment.carrier",
+          "serviceLevel.$": "$.fulfillment.serviceLevel",
+          "address.$": "$.shippingAddress",
+          "weightKg": 2.5
+        }
+      },
+      "ResultPath": "$.fulfillment.pickup",
+      "Next": "FulfillmentScheduled"
+    },
+    "FulfillmentScheduled": {
+      "Type": "Succeed"
+    },
+    "InvalidDeliveryMethod": {
+      "Type": "Fail",
+      "Error": "InvalidDeliveryMethod",
+      "Cause": "deliveryMethod must be one of: standard, express, overnight"
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "Comment": "Fetches a 500-record nested JSON dataset, loads it into DuckDB and aggregates salary statistics per region.",
+  "StartAt": "FetchRecords",
+  "States": {
+    "FetchRecords": {
+      "Type": "Task",
+      "Resource": "http://localhost:5095/api/fake/json/records",
+      "Comment": "GET /api/fake/json/records?count=500&seed=42 - nested records with tags, address and orders.",
+      "Parameters": {
+        "__handler": "http",
+        "method": "GET",
+        "query": { "count": 500, "seed": 42 }
+      },
+      "Next": "AggregateByRegion"
+    },
+    "AggregateByRegion": {
+      "Type": "Task",
+      "Resource": "transform://query",
+      "Comment": "Loads $.records into DuckDB table 'employees' and groups salary stats by region.",
+      "Parameters": {
+        "operation": "query",
+        "table": "employees",
+        "data.$": "$.records",
+        "sql": "SELECT region, COUNT(*) AS employees, ROUND(AVG(salary), 2) AS avg_salary FROM employees GROUP BY region ORDER BY avg_salary DESC"
+      },
+      "Next": "ValidateAggregate"
+    },
+    "ValidateAggregate": {
+      "Type": "Choice",
+      "Comment": "All four regions must be present in the aggregate result.",
+      "Choices": [
+        {
+          "And": [
+            { "Variable": "$.rowCount", "IsNumeric": true },
+            { "Variable": "$.rowCount", "NumericGreaterThanEquals": 4 }
+          ],
+          "Next": "Succeeded"
+        }
+      ],
+      "Default": "ValidationFailed"
+    },
+    "Succeeded": { "Type": "Succeed" },
+    "ValidationFailed": {
+      "Type": "Fail",
+      "Error": "AggregateValidationFailed",
+      "Cause": "Expected at least 4 regions in the aggregate result"
+    }
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "Comment": "Downloads a raw CSV file, imports it through the CSV import endpoint (the file-reading process), then aggregates orders per region in DuckDB.",
+  "StartAt": "FetchCsvFile",
+  "States": {
+    "FetchCsvFile": {
+      "Type": "Task",
+      "Resource": "http://localhost:5095/api/fake/csv/sample",
+      "Comment": "GET /api/fake/csv/sample?rows=20&seed=3 - raw CSV file, arrives as $.body string.",
+      "Parameters": {
+        "__handler": "http",
+        "method": "GET",
+        "query": { "rows": 20, "seed": 3 }
+      },
+      "Next": "ImportCsv"
+    },
+    "ImportCsv": {
+      "Type": "Task",
+      "Resource": "http://localhost:5095/api/fake/csv/import",
+      "Comment": "POSTs the downloaded CSV text to the import endpoint; response rows are type-coerced.",
+      "Parameters": {
+        "__handler": "http",
+        "method": "POST",
+        "body": { "csv.$": "$.body", "fileName": "sample-orders.csv" }
+      },
+      "Next": "AggregateOrders"
+    },
+    "AggregateOrders": {
+      "Type": "Task",
+      "Resource": "transform://query",
+      "Comment": "Loads the imported rows into DuckDB table 'orders' and totals amount per region.",
+      "Parameters": {
+        "operation": "query",
+        "table": "orders",
+        "data.$": "$.rows",
+        "sql": "SELECT region, COUNT(*) AS orders, ROUND(SUM(amount), 2) AS total_amount FROM orders GROUP BY region ORDER BY total_amount DESC"
+      },
+      "Next": "ValidatePipeline"
+    },
+    "ValidatePipeline": {
+      "Type": "Choice",
+      "Comment": "The pipeline must produce at least one aggregated row.",
+      "Choices": [
+        {
+          "And": [
+            { "Variable": "$.rowCount", "IsNumeric": true },
+            { "Variable": "$.rowCount", "NumericGreaterThanEquals": 1 }
+          ],
+          "Next": "Succeeded"
+        }
+      ],
+      "Default": "ValidationFailed"
+    },
+    "Succeeded": { "Type": "Succeed" },
+    "ValidationFailed": {
+      "Type": "Fail",
+      "Error": "CsvPipelineValidationFailed",
+      "Cause": "CSV import pipeline produced no aggregated rows"
+    }
+  }
+}

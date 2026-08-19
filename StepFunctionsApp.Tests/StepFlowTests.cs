@@ -40,7 +40,7 @@ namespace StepFunctionsApp.Tests
             _aiDecision = new AiDecisionService(mockFactory.Object, aiDecisionLogger);
 
             // Circular reference Lazy resolver mock
-            var mockStepService = new Moq.Mock<StepFunctionService>(null!, null!, null!);
+            var mockStepService = new Moq.Mock<StepFunctionService>(null!, null!, null!, null!, null!);
             var lazyStepService = new Lazy<StepFunctionService>(() => mockStepService.Object);
 
             _resourceInvoker = new CompositeResourceInvoker(

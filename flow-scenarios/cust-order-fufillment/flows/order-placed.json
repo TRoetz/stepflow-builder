@@ -1,0 +1,63 @@
+{
+  "Id": "OrderPlaced",
+  "Comment": "Cust-order-fufillment scenario - converts a reserved cart into a placed order. Calls the PaymentFlow sub-flow, deducts the blocked stock on success and routes to the OrderFulfillment sub-flow. On a declined payment it releases the blocked stock and fails with OrderPaymentFailed.",
+  "StartAt": "PayForOrder",
+  "States": {
+    "PayForOrder": {
+      "Type": "Task",
+      "Resource": "flow://PaymentFlow",
+      "Comment": "Sub-flow: charge card, generate PDF receipt, email it to the customer.",
+      "Catch": [
+        {
+          "ErrorEquals": ["PaymentDeclined"],
+          "Next": "ReleaseBlockedStock",
+          "ResultPath": "$.paymentError"
+        }
+      ],
+      "Next": "DeductStock"
+    },
+    "ReleaseBlockedStock": {
+      "Type": "Task",
+      "Resource": "http://localhost:5095/api/fake/commerce/inventory/release",
+      "Comment": "Payment failed - unblock the stock so it is available to other carts.",
+      "Parameters": {
+        "__handler": "http",
+        "method": "POST",
+        "body": {
+          "reservationId.$": "$.reservation.reservationId"
+        }
+      },
+      "ResultPath": "$.release",
+      "Next": "OrderFailed"
+    },
+    "OrderFailed": {
+      "Type": "Fail",
+      "Error": "OrderPaymentFailed",
+      "Cause": "Payment declined; blocked stock was released and the order was not placed"
+    },
+    "DeductStock": {
+      "Type": "Task",
+      "Resource": "http://localhost:5095/api/fake/commerce/inventory/deduct",
+      "Comment": "Converts the reservation into a real stock deduction (order is now committed).",
+      "Parameters": {
+        "__handler": "http",
+        "method": "POST",
+        "body": {
+          "reservationId.$": "$.reservation.reservationId",
+          "orderId.$": "$.orderId"
+        }
+      },
+      "ResultPath": "$.inventory",
+      "Next": "RouteToFulfillment"
+    },
+    "RouteToFulfillment": {
+      "Type": "Task",
+      "Resource": "flow://OrderFulfillment",
+      "Comment": "Sub-flow: business rules pick the carrier and schedule a pickup.",
+      "Next": "OrderPlacedDone"
+    },
+    "OrderPlacedDone": {
+      "Type": "Succeed"
+    }
+  }
+}

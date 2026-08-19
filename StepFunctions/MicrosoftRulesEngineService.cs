@@ -152,9 +152,9 @@ namespace StepFunctionsApp.StepFunctions
         /// Convert JObject to Dictionary<string,object> with properly typed values
         /// so RulesEngine lambda expressions can compare them.
         /// </summary>
-        private Dictionary<string, object> JObjectToDictionary(JObject obj)
+        private Dictionary<string, object?> JObjectToDictionary(JObject obj)
         {
-            var dict = new Dictionary<string, object>();
+            var dict = new Dictionary<string, object?>();
             foreach (var prop in obj.Properties())
             {
                 dict[prop.Name] = prop.Value.ToObject<object>();

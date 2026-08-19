@@ -194,7 +194,6 @@ namespace StepFunctionsApp.StepFunctions
             string extension;
             string executable;
             string wrapperCode;
-            bool useModuleMode = false;
 
             var contextJson = new JObject
             {
@@ -203,9 +202,10 @@ namespace StepFunctionsApp.StepFunctions
 
             if (language == "javascript" || language == "node")
             {
-                extension = "js";
+                // .mjs forces ESM by file extension on all modern Node versions.
+                // (--input-type=module is rejected by Node when a file argument is given.)
+                extension = "mjs";
                 executable = "node";
-                useModuleMode = true;
                 wrapperCode = $@"
 import fs from 'fs';
 const context = JSON.parse(fs.readFileSync(0, 'utf-8'));
@@ -273,9 +273,7 @@ ConvertTo-Json $result -Depth 10 | Write-Output";
                 var startInfo = new ProcessStartInfo
                 {
                     FileName = executable,
-                    Arguments = useModuleMode
-                        ? $"--input-type=module \"{tempFilePath}\""
-                        : $"\"{tempFilePath}\"",
+                    Arguments = $"\"{tempFilePath}\"",
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     RedirectStandardInput = true,

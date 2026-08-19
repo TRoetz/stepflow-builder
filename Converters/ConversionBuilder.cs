@@ -3,7 +3,6 @@ using System.Text.Json;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 using StepFunctionsApp.Converters;
 
 namespace StepFunctionsApp.Converters

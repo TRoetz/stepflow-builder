@@ -1,0 +1,41 @@
+{
+  "Comment": "Fetches a deterministic weather report from the fake data API and validates its structure and value ranges.",
+  "StartAt": "FetchWeather",
+  "States": {
+    "FetchWeather": {
+      "Type": "Task",
+      "Resource": "http://localhost:5095/api/fake/weather",
+      "Comment": "GET /api/fake/weather?city=Wellington&units=celsius - deterministic per city.",
+      "Parameters": {
+        "__handler": "http",
+        "method": "GET",
+        "query": { "city": "Wellington", "units": "celsius" }
+      },
+      "Next": "ValidateWeather"
+    },
+    "ValidateWeather": {
+      "Type": "Choice",
+      "Comment": "Report must be for the requested city/units with plausible temperature and humidity.",
+      "Choices": [
+        {
+          "And": [
+            { "Variable": "$.city", "StringEquals": "Wellington" },
+            { "Variable": "$.units", "StringEquals": "celsius" },
+            { "Variable": "$.temperature", "IsNumeric": true },
+            { "Variable": "$.temperature", "NumericGreaterThanEquals": -5 },
+            { "Variable": "$.temperature", "NumericLessThanEquals": 38 },
+            { "Variable": "$.humidityPercent", "IsNumeric": true }
+          ],
+          "Next": "Succeeded"
+        }
+      ],
+      "Default": "ValidationFailed"
+    },
+    "Succeeded": { "Type": "Succeed" },
+    "ValidationFailed": {
+      "Type": "Fail",
+      "Error": "WeatherValidationFailed",
+      "Cause": "Weather report failed shape/range validation"
+    }
+  }
+}

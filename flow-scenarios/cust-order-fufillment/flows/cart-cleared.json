@@ -1,0 +1,24 @@
+{
+  "Id": "CartCleared",
+  "Comment": "Cust-order-fufillment scenario - cart abandoned or cleared before checkout. Releases the blocked stock so it is available to other carts again.",
+  "StartAt": "ReleaseReservation",
+  "States": {
+    "ReleaseReservation": {
+      "Type": "Task",
+      "Resource": "http://localhost:5095/api/fake/commerce/inventory/release",
+      "Comment": "POST /api/fake/commerce/inventory/release - unblocks the stock held by this cart's reservation.",
+      "Parameters": {
+        "__handler": "http",
+        "method": "POST",
+        "body": {
+          "reservationId.$": "$.reservationId"
+        }
+      },
+      "ResultPath": "$.release",
+      "Next": "CartCleared"
+    },
+    "CartCleared": {
+      "Type": "Succeed"
+    }
+  }
+}

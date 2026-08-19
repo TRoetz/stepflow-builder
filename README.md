@@ -39,6 +39,7 @@ A professional node-based flow builder for designing [Amazon Step Functions](htt
 - [Testing](#testing)
 - [State Management](#state-management)
 - [Backend Integration](#backend-integration)
+- [MCP Server](#mcp-server)
 - [Flow Migration](#flow-migration)
 - [Roadmap](#roadmap)
 
@@ -62,22 +63,20 @@ StepFlow Builder replaces the original div-based drag-and-drop UI with a profess
 
 ## Architecture
 
-The frontend is a complete rewrite of the original `StepFunctionsApp/src/` directory. The **.NET 10 backend** (`StepFunctions/`) is kept as-is — it provides the execution engine, resource invoker, and flow storage.
+The frontend lives in the sibling **`StepFlow-UI/`** folder (React + xyflow). The **.NET 10 backend** (`StepFunctions/`) is kept as-is — it provides the execution engine, resource invoker, and flow storage. Vite builds into `StepFunctionsApp/dist/`, which the backend serves at `/`.
 
-```
-StepFlow Builder
-├── Frontend (React + xyflow)          ← This README
+stepflow-builder/
+├── StepFlow-UI/                   ← Frontend (React + xyflow) - this README
 │   ├── Canvas with custom nodes       ← Drag, drop, connect, layout
 │   ├── Property Panel                 ← Dynamic config forms
 │   ├── Palette with search            ← 15 step types, 7 categories
 │   └── Zustand stores                 ← State management
 │
-└── Backend (.NET 10)                  ← Kept as-is
+└── StepFunctionsApp/              ← Backend (.NET 10) - serves built UI from dist/
     ├── StepFunctionInterpreter        ← Amazon States Language
     ├── ResourceInvoker               ← ai://, rule://, sql://, etc.
     ├── DuckDB, RulesEngine, JSONata  ← Execution engines
     └── Flow storage (Flows/*.json)    ← JSON-based persistence
-```
 
 ### Key Design Decisions
 
@@ -121,7 +120,7 @@ StepFlow Builder
 ### 1. Install Dependencies
 
 ```bash
-cd StepFunctionsApp
+cd StepFlow-UI
 npm install
 ```
 
@@ -131,7 +130,7 @@ npm install
 npm run dev
 ```
 
-The app opens at `http://localhost:5173` by default. The dev server supports hot module replacement (HMR).
+The app opens at `http://localhost:3001`. The dev server proxies `/api` to the .NET backend (port 5001) and supports hot module replacement (HMR). Alternatively, run `start.ps1` from `StepFunctionsApp/` to launch backend + frontend together.
 
 ### 3. Build for Production
 
@@ -139,7 +138,7 @@ The app opens at `http://localhost:5173` by default. The dev server supports hot
 npm run build
 ```
 
-This runs TypeScript type-checking then Vite production build. Output goes to `dist/`.
+This runs TypeScript type-checking then Vite production build. Output goes to `../StepFunctionsApp/dist/`, which the .NET backend serves at `/`.
 
 ### 4. Preview Production Build
 
@@ -292,115 +291,132 @@ interface StepSchema {
 ## Project Structure
 
 ```
-StepFunctionsApp/
-├── src/
-│   ├── App.tsx                    ← Main app (3-panel layout)
-│   ├── main.tsx                   ← Entry point
+stepflow-builder/
+├── StepFlow-UI/                   ← Frontend (React + xyflow) - this README
+│   ├── src/
+│   │   ├── App.tsx                    ← Main app (3-panel layout)
+│   │   ├── main.tsx                   ← Entry point
+│   │   │
+│   │   ├── components/
+│   │   │   ├── Canvas/
+│   │   │   │   ├── FlowCanvas.tsx     ← xyflow canvas wrapper
+│   │   │   │   └── StepEdge.tsx       ← Custom edge with animations
+│   │   │   ├── Header/
+│   │   │   │   ├── AppHeader.tsx      ← Toolbar with Run/Save/Layout
+│   │   │   │   └── StatusBar.tsx      ← Zoom, node count, execution status
+│   │   │   ├── Nodes/                 ← Custom node per category
+│   │   │   │   ├── BaseNode.tsx       ← Shared foundation (handles, drag)
+│   │   │   │   ├── AiNode.tsx         ← AI Decision, AI Text
+│   │   │   │   ├── RuleNode.tsx       ← Rule Engine, MS Rules
+│   │   │   │   ├── DataNode.tsx       ← SQL, DuckDB, EAV
+│   │   │   │   ├── ApiNode.tsx        ← HTTP, Registered API
+│   │   │   │   ├── TransformNode.tsx  ← JSONata, Script
+│   │   │   │   ├── UtilityNode.tsx    ← Pass, Wait, Branch
+│   │   │   │   └── SubFlowNode.tsx    ← Sub-flow invocation
+│   │   │   ├── Palette/
+│   │   │   │   └── NodePalette.tsx    ← Category browser + search
+│   │   │   └── Properties/
+│   │   │       └── PropertyPanel.tsx  ← Config / Info / Template tabs
+│   │   │
+│   │   ├── hooks/                     ← Custom React hooks
+│   │   │   ├── useAutoLayout.ts       ← ELKJS auto-arrange
+│   │   │   ├── useDragDrop.ts         ← Palette → canvas drag
+│   │   │   ├── useExecutionProgress.ts ← Execution animation
+│   │   │   ├── useFavorites.ts        ← Favorite persistence
+│   │   │   ├── useKeyboardShortcuts.ts ← Keyboard shortcuts
+│   │   │   └── useNodeValidity.ts     ← Real-time validation
+│   │   │
+│   │   ├── library/                   ← Reusable step library
+│   │   │   ├── LibraryService.ts      ← Template CRUD
+│   │   │   └── StepLibraryStore.ts    ← Zustand store
+│   │   │
+│   │   ├── schema-types/
+│   │   │   └── schema.ts              ← TypeScript interfaces
+│   │   │
+│   │   ├── schemas/                   ← 15 step schemas
+│   │   │   ├── index.ts               ← Registry + node type map
+│   │   │   ├── categories.ts          ← Category definitions
+│   │   │   └── steps/                 ← Per-category schemas
+│   │   │       ├── ai.ts              ← AI Decision, AI Text
+│   │   │       ├── rule.ts            ← Rule Engine, MS Rules
+│   │   │       ├── data.ts            ← SQL, DuckDB, EAV
+│   │   │       ├── api.ts             ← HTTP, Registered API
+│   │   │       ├── transform.ts       ← JSONata, Script
+│   │   │       ├── utility.ts         ← Pass, Wait, Branch
+│   │   │       └── subflow.ts         ← Sub-flow invoke
+│   │   │
+│   │   ├── services/                  ← Backend API services
+│   │   │   ├── flowService.ts         ← Flow save/load
+│   │   │   ├── executionService.ts    ← Start/stop execution
+│   │   │   ├── flowMigrationService.ts ← Import legacy flows
+│   │   │   └── apiRegistryService.ts  ← API registry
+│   │   │
+│   │   ├── stores/                    ← Zustand state stores
+│   │   │   ├── useNodeStore.ts        ← Canvas nodes
+│   │   │   ├── useEdgeStore.ts        ← Canvas edges
+│   │   │   ├── useExecutionStore.ts   ← Execution state
+│   │   │   ├── useUndoRedoStore.ts    ← Undo/redo history
+│   │   │   ├── useViewportStore.ts    ← Zoom, pan, selection
+│   │   │   ├── usePaletteStore.ts     ← Palette search/collapse
+│   │   │   └── useSettingsStore.ts    ← Theme, snap-to-grid
+│   │   │
+│   │   ├── utils/                     ← Utilities
+│   │   │   ├── validation.ts          ← Validation helpers
+│   │   │   ├── colors.ts              ← Category accent colors
+│   │   │   ├── id.ts                  ← UUID generation
+│   │   │   └── layout.ts              ← Position helpers
+│   │   │
+│   │   ├── test/                      ← Vitest test suite
+│   │   │   ├── schema.test.ts         ← Schema validation (111 tests)
+│   │   │   ├── stores.test.ts         ← Store operations (36 tests)
+│   │   │   ├── library.test.ts        ← Template CRUD (9 tests)
+│   │   │   ├── flowService.test.ts    ← Flow export/import (6 tests)
+│   │   │   ├── validation.test.ts     ← Validation logic (12 tests)
+│   │   │   └── utils.test.ts          ← Utility functions (12 tests)
+│   │   │
+│   │   └── styles/
+│   │       └── globals.css            ← Tailwind + custom styles
 │   │
-│   ├── components/
-│   │   ├── Canvas/
-│   │   │   ├── FlowCanvas.tsx     ← xyflow canvas wrapper
-│   │   │   └── StepEdge.tsx       ← Custom edge with animations
-│   │   ├── Header/
-│   │   │   ├── AppHeader.tsx      ← Toolbar with Run/Save/Layout
-│   │   │   └── StatusBar.tsx      ← Zoom, node count, execution status
-│   │   ├── Nodes/                 ← Custom node per category
-│   │   │   ├── BaseNode.tsx       ← Shared foundation (handles, drag)
-│   │   │   ├── AiNode.tsx         ← AI Decision, AI Text
-│   │   │   ├── RuleNode.tsx       ← Rule Engine, MS Rules
-│   │   │   ├── DataNode.tsx       ← SQL, DuckDB, EAV
-│   │   │   ├── ApiNode.tsx        ← HTTP, Registered API
-│   │   │   ├── TransformNode.tsx  ← JSONata, Script
-│   │   │   ├── UtilityNode.tsx    ← Pass, Wait, Branch
-│   │   │   └── SubFlowNode.tsx    ← Sub-flow invocation
-│   │   ├── Palette/
-│   │   │   └── NodePalette.tsx    ← Category browser + search
-│   │   └── Properties/
-│   │       └── PropertyPanel.tsx  ← Config / Info / Template tabs
-│   │
-│   ├── hooks/                     ← Custom React hooks
-│   │   ├── useAutoLayout.ts       ← ELKJS auto-arrange
-│   │   ├── useDragDrop.ts         ← Palette → canvas drag
-│   │   ├── useExecutionProgress.ts ← Execution animation
-│   │   ├── useFavorites.ts        ← Favorite persistence
-│   │   ├── useKeyboardShortcuts.ts ← Keyboard shortcuts
-│   │   └── useNodeValidity.ts     ← Real-time validation
-│   │
-│   ├── library/                   ← Reusable step library
-│   │   ├── LibraryService.ts      ← Template CRUD
-│   │   └── StepLibraryStore.ts    ← Zustand store
-│   │
-│   ├── schema-types/
-│   │   └── schema.ts              ← TypeScript interfaces
-│   │
-│   ├── schemas/                   ← 15 step schemas
-│   │   ├── index.ts               ← Registry + node type map
-│   │   ├── categories.ts          ← Category definitions
-│   │   └── steps/                 ← Per-category schemas
-│   │       ├── ai.ts              ← AI Decision, AI Text
-│   │       ├── rule.ts            ← Rule Engine, MS Rules
-│   │       ├── data.ts            ← SQL, DuckDB, EAV
-│   │       ├── api.ts             ← HTTP, Registered API
-│   │       ├── transform.ts       ← JSONata, Script
-│   │       ├── utility.ts         ← Pass, Wait, Branch
-│   │       └── subflow.ts         ← Sub-flow invoke
-│   │
-│   ├── services/                  ← Backend API services
-│   │   ├── flowService.ts         ← Flow save/load
-│   │   ├── executionService.ts    ← Start/stop execution
-│   │   ├── flowMigrationService.ts ← Import legacy flows
-│   │   └── apiRegistryService.ts  ← API registry
-│   │
-│   ├── stores/                    ← Zustand state stores
-│   │   ├── useNodeStore.ts        ← Canvas nodes
-│   │   ├── useEdgeStore.ts        ← Canvas edges
-│   │   ├── useExecutionStore.ts   ← Execution state
-│   │   ├── useUndoRedoStore.ts    ← Undo/redo history
-│   │   ├── useViewportStore.ts    ← Zoom, pan, selection
-│   │   ├── usePaletteStore.ts     ← Palette search/collapse
-│   │   └── useSettingsStore.ts    ← Theme, snap-to-grid
-│   │
-│   ├── utils/                     ← Utilities
-│   │   ├── validation.ts          ← Validation helpers
-│   │   ├── colors.ts              ← Category accent colors
-│   │   ├── id.ts                  ← UUID generation
-│   │   └── layout.ts              ← Position helpers
-│   │
-│   ├── test/                      ← Vitest test suite
-│   │   ├── schema.test.ts         ← Schema validation (111 tests)
-│   │   ├── stores.test.ts         ← Store operations (36 tests)
-│   │   ├── library.test.ts        ← Template CRUD (9 tests)
-│   │   ├── flowService.test.ts    ← Flow export/import (6 tests)
-│   │   ├── validation.test.ts     ← Validation logic (12 tests)
-│   │   └── utils.test.ts          ← Utility functions (12 tests)
-│   │
-│   └── styles/
-│       └── globals.css            ← Tailwind + custom styles
+│   ├── package.json
+│   ├── vite.config.ts                 ← Builds into ../StepFunctionsApp/dist/
+│   ├── tsconfig.json
+│   ├── tailwind.config.js
+│   └── vitest.config.ts
 │
-├── StepFunctions/                 ← .NET backend (execution engine)
-├── Flows/                         ← Flow definitions (JSON)
-├── Converters/                    ← BPMN converter
-├── package.json
-├── vite.config.ts
-├── tsconfig.json
-├── tailwind.config.js
-└── vitest.config.ts
+└── StepFunctionsApp/              ← Backend (.NET 10) - serves built UI from dist/
+    ├── Program.cs                 ← Host; serves frontend from dist/
+    ├── StepFunctions/             ← Execution engine (interpreter, invoker, state store)
+    ├── Controllers/               ← REST API: flows, tests, fake data endpoints
+    ├── Flows/                     ← Flow definitions (JSON)
+    ├── Converters/                ← BPMN converter
+    ├── Mcp/                       ← MCP endpoint for AI harnesses
+    ├── StepFunctionsApp.Tests/    ← xUnit backend test suite (engine, flow state, MCP, scenarios)
+    ├── Stepflow-Builder-Tests/    ← Standalone fake test API host (http://localhost:5095)
+    ├── start.ps1                  ← One-command dev launcher (backend + frontend)
+    └── dist/                      ← Vite build output, served by .NET at /
 ```
 
 ---
 
 ## Testing
 
-The test suite covers **186 tests** across 6 files:
+The frontend test suite covers **283 tests** across 13 files:
 
 | Test File | Count | Coverage |
 |:----------|:-----:|:---------|
-| `schema.test.ts` | 111 | Schema structure, inputs/outputs, config fields, validation rules |
-| `stores.test.ts` | 36 | Node, edge, execution, undo/redo store operations |
-| `library.test.ts` | 9 | Template CRUD, search, category filtering |
-| `flowService.test.ts` | 6 | Flow save/load, export format |
+| `schema.test.ts` | 153 | Schema structure, inputs/outputs, config fields, validation rules |
+| `stores.test.ts` | 31 | Node, edge, execution, undo/redo store operations |
+| `execution.test.ts` | 13 | Execution mode/store, ASL state translation, simulated browser engine |
 | `validation.test.ts` | 12 | Validation logic, type checking |
 | `utils.test.ts` | 12 | ID generation, color utilities, layout helpers |
+| `connectionCompat.test.ts` | 11 | Port type compatibility and connectability checks |
+| `variables.test.ts` | 11 | Variable interpolation, in-scope collection, subflow row fields |
+| `flowHealth.test.ts` | 9 | Flow health hints (e.g. Map without iterator flow) |
+| `library.test.ts` | 9 | Template CRUD, search, category filtering |
+| `mapIterator.test.ts` | 8 | Map iterator body scaffolding and validation |
+| `flowService.test.ts` | 6 | Flow save/load, export format (2 skipped) |
+| `aiAssistant.test.ts` | 5 | AI assistant store behavior |
+| `templates.test.ts` | 3 | Canonical EAV row-processing template |
 
 ```bash
 # Run all tests
@@ -415,6 +431,40 @@ npx vitest run schema.test
 # Watch mode with UI
 npm run test:ui
 ```
+
+### Backend Tests (.NET)
+
+The .NET side has an xUnit suite (`StepFunctionsApp.Tests/`) covering the execution engine, durable flow-state checkpoint/recovery, MCP endpoints, and end-to-end scenario flows that run against the fake test APIs below:
+
+```bash
+dotnet test StepFunctionsApp.Tests --nologo
+```
+
+### Fake Test APIs (port 5095)
+
+`Stepflow-Builder-Tests/` is a standalone .NET host exposing deterministic fake endpoints so flows can be tested without external services. Dev runs bind `http://localhost:5095`; the test suite hosts the same entry point in-memory via `WebApplicationFactory`.
+
+```bash
+dotnet run --project Stepflow-Builder-Tests    # or just run .\start.ps1, which starts it too
+```
+
+The sample flows in `Flows/FakeData_*.json` target these endpoints directly:
+
+| Endpoint | Method | Purpose |
+|:---------|:-------|:--------|
+| `/api/fake/weather?city=&units=` | GET | Deterministic weather per city |
+| `/api/fake/gold-price?currency=&amount=` | GET | Gold price; `amount` returns the total in `totalValue` |
+| `/api/fake/exchange-rate?from=&to=&amount=` | GET | FX conversion (e.g. USD→NZD) with optional amount |
+| `/api/fake/json/records?count=&seed=` | GET | Large nested JSON array (default 1000 records) for DuckDB transforms |
+| `/api/fake/xml/invoices?count=&seed=` | GET | XML invoice document as text |
+| `/api/fake/csv/sample?rows=&seed=` | GET | Raw CSV file content |
+| `/api/fake/csv/import` | POST | Import CSV (multipart file upload, raw `text/csv` body, or JSON `{csv}`) into type-coerced rows |
+| `/api/fake/payments/charge` | POST | Card charge; last4 `0002` declines deterministically |
+| `/api/fake/receipts` | POST | Base64-encoded PDF receipt |
+| `/api/fake/email/send`, `/api/fake/email/outbox` | POST/GET | In-memory email outbox for assertions |
+| `/api/fake/carriers/pickup` | POST | Schedule carrier pickup; rejects unknown carriers |
+
+Responses are deterministic (seeded where applicable), so flow tests can assert exact values.
 
 ---
 
@@ -481,6 +531,44 @@ The frontend communicates with the backend via these endpoints:
 | `api://` | Registered API | `api://payment_api_001` |
 | `transform://` | JSONata/script | `transform://query` |
 | `flow://` | Sub-flow call | `flow://CustomerValidation` |
+
+---
+
+## MCP Server
+
+The backend exposes a **Model Context Protocol (MCP)** server at `/mcp`, letting AI agents (Claude Desktop, VS Code Copilot, or any MCP client) list, create, inspect and run flows through the same .NET engine as the UI. Transport: streamable HTTP — stateless, so no session handshake is required per request.
+
+### Tools
+
+| Tool | Purpose | Parameters |
+|:-----|:--------|:-----------|
+| `list_flows` | List registered flows (id, name, description, updatedAt) | — |
+| `get_flow` | Full flow definition as camelCase ASL + metadata | `idOrName` |
+| `save_flow` | Create or replace a flow by name; validates `startAt` and state references | `name`, `statesJson`, `description?`, `startAt?` (defaults to first key) |
+| `run_flow` | Run synchronously; returns status, final output and per-state history | `idOrName`, `inputJson?` |
+
+Definitions use the same camelCase Amazon States Language format the React UI exports (`startAt`, `states`, `type`, `next`, …), so a flow fetched via MCP can be re-imported into the canvas unchanged. State names keep their original casing. Supported state types: `Task`, `Pass`, `Choice`, `Wait`, `Parallel`, `Map`, `Succeed`, `Fail`. Errors are returned as JSON (`{"error": "…"}`) rather than thrown, so agents can read and react to them.
+
+### Client Configuration
+
+```json
+{
+  "mcpServers": {
+    "stepflow": {
+      "url": "http://localhost:5001/mcp"
+    }
+  }
+}
+```
+
+Start the backend first (`dotnet run --project StepFunctionsApp`), then add the config to your MCP client. Example manual call:
+
+```bash
+curl -s http://localhost:5001/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
 
 ---
 

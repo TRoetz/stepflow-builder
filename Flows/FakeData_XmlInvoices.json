@@ -1,0 +1,35 @@
+{
+  "Comment": "Fetches an XML invoice document from the fake data API. Non-JSON responses arrive wrapped as $.body; validates that wrapping.",
+  "StartAt": "FetchInvoices",
+  "States": {
+    "FetchInvoices": {
+      "Type": "Task",
+      "Resource": "http://localhost:5095/api/fake/xml/invoices",
+      "Comment": "GET /api/fake/xml/invoices?count=5&seed=7 - XML document, arrives as $.body string.",
+      "Parameters": {
+        "__handler": "http",
+        "method": "GET",
+        "query": { "count": 5, "seed": 7 }
+      },
+      "Next": "ValidateXml"
+    },
+    "ValidateXml": {
+      "Type": "Choice",
+      "Comment": "Non-JSON response must be wrapped as a string body.",
+      "Choices": [
+        {
+          "Variable": "$.body",
+          "IsString": true,
+          "Next": "Succeeded"
+        }
+      ],
+      "Default": "ValidationFailed"
+    },
+    "Succeeded": { "Type": "Succeed" },
+    "ValidationFailed": {
+      "Type": "Fail",
+      "Error": "XmlValidationFailed",
+      "Cause": "XML response was not wrapped as a string body"
+    }
+  }
+}

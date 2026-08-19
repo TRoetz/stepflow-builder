@@ -35,7 +35,7 @@
 ### Installation
 
 ```bash
-cd StepFunctionsApp
+cd StepFlow-UI
 npm install
 ```
 
@@ -43,7 +43,7 @@ npm install
 
 | Command | Description |
 |---|---|
-| `npm run dev` | Start development server (port 5173) |
+| `npm run dev` | Start development server (port 3001) |
 | `npm run build` | Production build |
 | `npm run preview` | Preview production build |
 

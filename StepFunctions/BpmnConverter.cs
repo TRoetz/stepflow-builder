@@ -273,7 +273,7 @@ namespace StepFunctionsApp.StepFunctions
             return url ?? $"internal://echo";
         }
 
-        private string ResolveSendTaskResource(BpmnSendTask task)
+        private string? ResolveSendTaskResource(BpmnSendTask task)
         {
             var url = ExtractHttpUrlFromExtensions(task.ExtensionElements);
             if (!string.IsNullOrEmpty(url)) return url;
@@ -397,7 +397,7 @@ namespace StepFunctionsApp.StepFunctions
 
         // ── Condition Expression Conversion ─────────────────────────────────
 
-        private ChoiceRule? ConvertConditionToChoiceRule(string condition, string next, string? flowName)
+        private ChoiceRule? ConvertConditionToChoiceRule(string condition, string? next, string? flowName)
         {
             // BPMN conditions are typically FEEL expressions
             // We convert common patterns to ASL choice rules
@@ -547,7 +547,7 @@ namespace StepFunctionsApp.StepFunctions
 
             try
             {
-                return (BpmnDefinitions)serializer.Deserialize(reader);
+                return (BpmnDefinitions?)serializer.Deserialize(reader);
             }
             catch (Exception ex)
             {
@@ -563,7 +563,6 @@ namespace StepFunctionsApp.StepFunctions
             try
             {
                 var doc = System.Xml.Linq.XDocument.Parse(xml);
-                var bpmnNs = "http://www.omg.org/spec/BPMN/20100524/MODEL";
                 var zeebeNs = "http://camunda.org/schema/zeebe/1.0";
                 var camundaNs = "http://camunda.org/schema/1.0/bpmn";
 
@@ -581,17 +580,20 @@ namespace StepFunctionsApp.StepFunctions
                     // Extract zeebe:taskDefinition
                     var taskDef = taskEl.Descendants()
                         .FirstOrDefault(e => e.Name.LocalName == "taskDefinition" && e.Name.Namespace == zeebeNs);
-                    if (taskDef != null && st.ZeebeTaskDefinition == null)
+                    if (taskDef != null)
                     {
-                        st.ZeebeTaskDefinition = new BpmnZeebeTaskDefinition
+                        if (st.ZeebeTaskDefinition == null)
                         {
-                            Type = taskDef.Attribute("type")?.Value,
-                            Retries = taskDef.Attribute("retries")?.Value
-                        };
-                    }
-                    else if (taskDef != null)
-                    {
-                        st.ZeebeTaskDefinition.Type ??= taskDef.Attribute("type")?.Value;
+                            st.ZeebeTaskDefinition = new BpmnZeebeTaskDefinition
+                            {
+                                Type = taskDef.Attribute("type")?.Value,
+                                Retries = taskDef.Attribute("retries")?.Value
+                            };
+                        }
+                        else
+                        {
+                            st.ZeebeTaskDefinition.Type ??= taskDef.Attribute("type")?.Value;
+                        }
                     }
 
                     // Extract zeebe:ioMapping
@@ -739,11 +741,11 @@ namespace StepFunctionsApp.StepFunctions
             }
 
             // ResultPath from zeebe outputs
-            if (mapping.Outputs.Count > 0 && mapping.Outputs[0].Target != null)
+            var outputTarget = mapping.Outputs.Count > 0 ? mapping.Outputs[0].Target : null;
+            if (outputTarget != null)
             {
-                var target = mapping.Outputs[0].Target;
-                if (!target.StartsWith("$")) target = "$." + target;
-                state.ResultPath = target;
+                if (!outputTarget.StartsWith("$")) outputTarget = "$." + outputTarget;
+                state.ResultPath = outputTarget;
             }
         }
 
