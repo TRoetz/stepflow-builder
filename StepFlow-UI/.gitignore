@@ -1,0 +1,13 @@
+# Node
+node_modules/
+dist/
+
+# Build artifacts
+*.tsbuildinfo
+
+# Logs
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
