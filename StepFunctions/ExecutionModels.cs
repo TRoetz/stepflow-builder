@@ -16,7 +16,9 @@ namespace StepFunctionsApp.StepFunctions
         public string StateMachineId { get; set; } = "";
         public string StateMachineName { get; set; } = "";
         
+        [JsonConverter(typeof(NullableJTokenConverter))]
         public JToken Input { get; set; } = new JObject();
+        [JsonConverter(typeof(NullableJTokenConverter))]
         public JToken Output { get; set; } = new JObject();
         
         [JsonConverter(typeof(StringEnumConverter))]
@@ -35,6 +37,7 @@ namespace StepFunctionsApp.StepFunctions
         /// state boundary so a checkpoint always describes an exact resume point (at-least-once:
         /// the in-flight state may re-execute, completed states never do).
         /// </summary>
+        [JsonConverter(typeof(NullableJTokenConverter))]
         public JToken? PendingInput { get; set; }
         
         public List<HistoryEvent> History { get; set; } = new();
@@ -56,6 +59,7 @@ namespace StepFunctionsApp.StepFunctions
         public DateTime Timestamp { get; set; } = DateTime.UtcNow;
         public string Type { get; set; } = "";
         public string? State { get; set; }
+        [JsonConverter(typeof(NullableJTokenConverter))]
         public JToken? Data { get; set; }
     }
 

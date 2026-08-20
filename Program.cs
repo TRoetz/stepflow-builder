@@ -75,6 +75,19 @@ public class Startup
                 : new DiskFlowStateStore(options.DiskPath, provider.GetService<ILogger<DiskFlowStateStore>>());
         });
 
+        // Human task subsystem — disk store, completion providers and the polling monitor (see StepFunctions/HumanTasks.cs)
+        services.Configure<HumanTaskOptions>(_config.GetSection(HumanTaskOptions.SectionName));
+        services.AddSingleton<IHumanTaskStore>(provider =>
+        {
+            var options = provider.GetRequiredService<IOptions<HumanTaskOptions>>().Value;
+            return new DiskHumanTaskStore(options.DiskPath, provider.GetService<ILogger<DiskHumanTaskStore>>());
+        });
+        services.AddSingleton<ApiCompletionProvider>();
+        services.AddSingleton<FileMonitorCompletionProvider>();
+        services.AddSingleton<IHumanTaskCompletionProvider>(provider => provider.GetRequiredService<ApiCompletionProvider>());
+        services.AddSingleton<IHumanTaskCompletionProvider>(provider => provider.GetRequiredService<FileMonitorCompletionProvider>());
+        services.AddHostedService<HumanTaskCompletionMonitorService>();
+
         // MCP (Model Context Protocol) endpoint for AI harnesses — see Mcp/FlowTools.cs.
         services.AddMcpServer()
             .WithHttpTransport()

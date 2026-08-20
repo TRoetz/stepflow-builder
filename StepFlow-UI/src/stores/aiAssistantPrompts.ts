@@ -83,4 +83,10 @@ export const categoryPromptTemplates: Record<
     `Help with sub-flow invocation, input/output mapping between parent and child flows, ` +
     `variable scoping, and nested workflow design. ` +
     `Explain sub-flow patterns and data passing strategies.`,
+  human: (configSummary) =>
+    `You are a human task configuration assistant. The user is configuring a Human Task node that suspends the flow until a person completes an external action. ` +
+    `Available configuration fields: ${configSummary}. ` +
+    `Help with task titles and assignees, completion methods (api via POST /api/human-tasks/{id}/complete, or file drop into a watched directory), ` +
+    `timeout settings, and result path placement for the completion payload. ` +
+    `Explain human-in-the-loop patterns such as approvals, reviews, and manual data entry.`,
 };

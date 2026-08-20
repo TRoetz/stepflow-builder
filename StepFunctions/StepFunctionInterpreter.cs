@@ -21,13 +21,16 @@ namespace StepFunctionsApp.StepFunctions
     {
         private readonly IResourceInvoker _resourceInvoker;
         private readonly ILogger<StepFunctionInterpreter> _logger;
+        private readonly IHumanTaskStore? _humanTaskStore;
 
         public StepFunctionInterpreter(
             IResourceInvoker resourceInvoker,
-            ILogger<StepFunctionInterpreter> logger)
+            ILogger<StepFunctionInterpreter> logger,
+            IHumanTaskStore? humanTaskStore = null)
         {
             _resourceInvoker = resourceInvoker;
             _logger = logger;
+            _humanTaskStore = humanTaskStore;
         }
 
         /// <summary>
@@ -118,6 +121,7 @@ namespace StepFunctionsApp.StepFunctions
                             StateType.Pass => ExecutePassState(state, stateInput, definition.QueryLanguage),
                             StateType.Choice => ExecuteChoiceState(state, stateInput, execution, definition.QueryLanguage),
                             StateType.Wait => await ExecuteWaitState(state, stateInput, definition.QueryLanguage, timeoutCts.Token),
+                            StateType.HumanTask => await ExecuteHumanTaskState(state, stateInput, execution, definition.QueryLanguage),
                             StateType.Succeed => ExecuteSucceedState(state, stateInput, definition.QueryLanguage, execution),
                             StateType.Fail => ExecuteFailState(state, execution),
                             StateType.Parallel => await ExecuteParallelState(state, stateInput, execution, definition.QueryLanguage, timeoutCts.Token),
@@ -169,6 +173,14 @@ namespace StepFunctionsApp.StepFunctions
                     }
                 }
             }
+            catch (ExecutionSuspendedException ex)
+            {
+                // A human task is waiting for external completion. Point at the state to run on resume;
+                // PendingInput keeps the input heading into the human task so completion can merge against it.
+                execution.Status = ExecutionStatus.Suspended;
+                if (!string.IsNullOrEmpty(ex.NextState)) execution.CurrentState = ex.NextState;
+                AddEvent(execution, "HumanTaskWaiting", ex.StateName, new JObject { ["taskId"] = ex.TaskId });
+            }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 // Definition-level timeout expired.
@@ -197,7 +209,7 @@ namespace StepFunctionsApp.StepFunctions
                 AddEvent(execution, "ExecutionFailed", execution.CurrentState ?? "", new JObject { ["error"] = "States.Runtime", ["cause"] = ex.Message });
             }
 
-            execution.CompletedAt = DateTime.UtcNow;
+            if (execution.Status != ExecutionStatus.Suspended) execution.CompletedAt = DateTime.UtcNow;
             // Terminal record so the store reflects the final status.
             if (onCheckpoint != null) await onCheckpoint(execution);
             return execution;
@@ -245,6 +257,41 @@ namespace StepFunctionsApp.StepFunctions
             var output = ApplyResultPath(state, input, result, queryLanguage);
             output = ApplyOutputPath(state, output, queryLanguage);
             return output;
+        }
+
+        private async Task<JToken> ExecuteHumanTaskState(StateDefinition state, JToken input, Execution execution, string queryLanguage)
+        {
+            if (_humanTaskStore == null)
+                throw new StepEngineException("States.Runtime", "HumanTask states require a human task store (not configured)");
+
+            if (state.End != true && string.IsNullOrEmpty(state.Next))
+                throw new StepEngineException("States.Runtime", $"HumanTask state '{execution.CurrentState}' has no Next and is not an End state");
+
+            var effectiveInput = ApplyInputPath(state, input, queryLanguage);
+            effectiveInput = ApplyParameters(state, effectiveInput, input, execution, queryLanguage);
+
+            var taskId = Guid.NewGuid().ToString("N")[..8];
+            var record = new HumanTaskRecord
+            {
+                TaskId = taskId,
+                ExecutionId = execution.ExecutionId,
+                StateMachineName = execution.StateMachineName ?? "",
+                StateName = execution.CurrentState!,
+                NextState = state.Next,
+                IsEnd = state.End == true,
+                ResultPath = state.ResultPath,
+                Title = state.Task?["title"]?.ToString(),
+                Assignee = state.Task?["assignee"]?.ToString(),
+                Payload = new JObject { ["task"] = state.Task ?? new JObject(), ["input"] = effectiveInput },
+                CompletionType = (state.Completion?["Type"]?.ToString() ?? "api").ToLowerInvariant(),
+                CompletionConfig = state.Completion,
+                Status = HumanTaskStatus.Pending,
+                CreatedAtUtc = DateTime.UtcNow
+            };
+
+            await _humanTaskStore.SaveAsync(record);
+            AddEvent(execution, "HumanTaskCreated", execution.CurrentState!, new JObject { ["taskId"] = taskId, ["completionType"] = record.CompletionType });
+            throw new ExecutionSuspendedException(execution.CurrentState!, taskId, state.Next);
         }
 
         private JToken ExecutePassState(StateDefinition state, JToken input, string queryLanguage)
@@ -442,21 +489,7 @@ namespace StepFunctionsApp.StepFunctions
             }
         }
 
-        private void SetPath(JToken root, string path, JToken value, string queryLanguage)
-        {
-            if (path == "$") return;
-            var segments = path.StartsWith("$.") ? path[2..].Split('.') : path.StartsWith("$") ? path[1..].Split('.') : path.Split('.');
-            JToken current = root;
-            for (int i = 0; i < segments.Length - 1; i++)
-            {
-                if (current is JObject obj)
-                {
-                    if (obj[segments[i]] == null) obj[segments[i]] = new JObject();
-                    current = obj[segments[i]]!;
-                }
-            }
-            if (current is JObject parent) parent[segments[^1]] = value;
-        }
+        private void SetPath(JToken root, string path, JToken value, string queryLanguage) => JsonPaths.Set(root, path, value);
 
         private JToken EvaluateIntrinsic(string expression, JToken input)
         {

@@ -1,6 +1,6 @@
 import { CategoryDefinition, StepCategory } from '@schema-types/schema';
 
-// ── 9 Category Definitions ──
+// ── 10 Category Definitions ──
 export const categoryDefinitions: CategoryDefinition[] = [
   {
     id: 'terminal',
@@ -74,6 +74,14 @@ export const categoryDefinitions: CategoryDefinition[] = [
     color: '#06B6D4',
     nodeComponent: 'SubFlowNode',
   },
+  {
+    id: 'human',
+    name: 'Human Tasks',
+    description: 'Suspend the flow until a person completes an external action (approval, review, file drop)',
+    icon: '👤',
+    color: '#FB923C',
+    nodeComponent: 'HumanTaskNode',
+  },
 ];
 
 // ── Lookup Maps ──
@@ -95,4 +103,5 @@ export const categoryNodeComponentMap: Record<StepCategory, string> = {
   transform: 'TransformNode',
   utility: 'UtilityNode',
   subflow: 'SubFlowNode',
+  human: 'HumanTaskNode',
 };

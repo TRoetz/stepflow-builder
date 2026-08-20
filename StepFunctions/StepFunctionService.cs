@@ -27,19 +27,22 @@ namespace StepFunctionsApp.StepFunctions
         private readonly ILogger<StepFunctionService> _logger;
         private readonly IFlowStateStore? _stateStore;
         private readonly FlowStateOptions _flowStateOptions = new();
+        private readonly IHumanTaskStore? _humanTaskStore;
 
         public StepFunctionService(
             StepFunctionInterpreter interpreter,
             BpmnConverter bpmnConverter,
             ILogger<StepFunctionService> logger,
             IFlowStateStore? stateStore = null,
-            IOptions<FlowStateOptions>? flowStateOptions = null)
+            IOptions<FlowStateOptions>? flowStateOptions = null,
+            IHumanTaskStore? humanTaskStore = null)
         {
             _interpreter = interpreter;
             _bpmnConverter = bpmnConverter;
             _logger = logger;
             _stateStore = stateStore;
             if (flowStateOptions != null) _flowStateOptions = flowStateOptions.Value;
+            _humanTaskStore = humanTaskStore;
         }
 
         public StoredStateMachine RegisterStateMachine(string name, StateMachineDefinition definition, string? description = null, string? id = null)
@@ -141,6 +144,7 @@ namespace StepFunctionsApp.StepFunctions
                             tracked.ErrorMessage = result.ErrorMessage;
                             tracked.History = result.History;
                             tracked.CurrentState = result.CurrentState;
+                            tracked.PendingInput = result.PendingInput;
                         }
                         catch (Exception ex)
                         {
@@ -303,6 +307,79 @@ namespace StepFunctionsApp.StepFunctions
             _executions.TryRemove(executionId, out _);
         }
 
+        /// <summary>
+        /// Completes a pending human task with an external result. Merges the result into the suspended
+        /// execution's input at ResultPath, then resumes from the state after the human task — or ends
+        /// the flow when the human task was terminal.
+        /// </summary>
+        public async Task<HumanTaskRecord?> CompleteHumanTaskAsync(string taskId, JToken? result = null, CancellationToken ct = default)
+        {
+            if (_humanTaskStore == null) throw new InvalidOperationException("No human task store configured");
+
+            var record = await _humanTaskStore.LoadAsync(taskId);
+            if (record == null) return null;
+            if (record.Status != HumanTaskStatus.Pending)
+                throw new InvalidOperationException($"Human task {taskId} is already {record.Status}");
+
+            result ??= JValue.CreateNull();
+            record.Result = result;
+            record.CompletedAtUtc = DateTime.UtcNow;
+            record.Status = HumanTaskStatus.Completed;
+            await _humanTaskStore.SaveAsync(record);
+
+            if (_stateStore == null) throw new InvalidOperationException("No flow-state store configured");
+            var stored = await _stateStore.LoadAsync(record.ExecutionId, ct);
+            if (stored?.Definition == null || stored.Definition.States.Count == 0)
+                throw new InvalidOperationException($"Execution {record.ExecutionId} not found in the state store");
+
+            var execution = stored.Execution;
+            if (execution.Status != ExecutionStatus.Suspended)
+                throw new InvalidOperationException($"Execution {record.ExecutionId} is {execution.Status}, expected Suspended");
+
+            // Merge the completion result into the suspended input at ResultPath.
+            var baseInput = execution.PendingInput ?? new JObject();
+            JToken merged;
+            if (string.IsNullOrEmpty(record.ResultPath))
+            {
+                merged = result.DeepClone();
+            }
+            else
+            {
+                merged = baseInput.DeepClone();
+                JsonPaths.Set(merged, record.ResultPath, result.DeepClone());
+            }
+
+            execution.History.Add(new HistoryEvent
+            {
+                Type = "HumanTaskCompleted",
+                State = record.StateName,
+                Data = new JObject { ["taskId"] = taskId, ["result"] = result }
+            });
+
+            if (record.IsEnd)
+            {
+                execution.Status = ExecutionStatus.Succeeded;
+                execution.Output = merged;
+                execution.CompletedAt = DateTime.UtcNow;
+                await _stateStore.SaveAsync(new FlowStateRecord { ExecutionId = record.ExecutionId, Definition = stored.Definition, Execution = execution }, ct);
+                // Reflect the terminal state in memory so GetExecution agrees with the store.
+                _executions[record.ExecutionId] = execution;
+                return record;
+            }
+
+            if (string.IsNullOrEmpty(record.NextState))
+                throw new InvalidOperationException($"Human task {taskId} has no next state and is not terminal");
+
+            execution.Status = ExecutionStatus.Running;
+            execution.CurrentState = record.NextState;
+            execution.PendingInput = merged;
+            await _stateStore.SaveAsync(new FlowStateRecord { ExecutionId = record.ExecutionId, Definition = stored.Definition, Execution = execution }, ct);
+
+            // Replace the stale suspended instance so the queue worker can track the resumed execution.
+            _executions[record.ExecutionId] = execution;
+            _pendingQueue.Enqueue(new PendingExecution(stored.Definition, execution, Resume: true));
+            return record;
+        }
         /// <summary>Load a stored execution's latest checkpoint, or null when absent (or no store configured).</summary>
         public Task<FlowStateRecord?> LoadStoredExecutionAsync(string executionId, CancellationToken ct = default) =>
             _stateStore == null ? Task.FromResult<FlowStateRecord?>(null) : _stateStore.LoadAsync(executionId, ct);

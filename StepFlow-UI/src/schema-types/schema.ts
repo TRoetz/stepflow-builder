@@ -83,7 +83,8 @@ export type StepCategory =
   | 'api'
   | 'transform'
   | 'utility'
-  | 'subflow';
+  | 'subflow'
+  | 'human';   // Human-in-the-loop approval / manual action states
 
 // ── Category Definition ──
 export interface CategoryDefinition {

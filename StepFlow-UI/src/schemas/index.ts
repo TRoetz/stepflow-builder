@@ -13,6 +13,7 @@ import { httpRequestSchema, registeredApiSchema } from './steps/api';
 import { jsonataSchema, scriptSchema } from './steps/transform';
 import { passThroughSchema, waitSchema, branchSchema } from './steps/utility';
 import { subFlowSchema } from './steps/subflow';
+import { humanTaskSchema } from './steps/human';
 import { startStateSchema, endStateSchema } from './steps/terminal';
 import { choiceStateSchema, mapStateSchema, parallelStateSchema, succeedStateSchema, failStateSchema } from './steps/flow';
 
@@ -49,6 +50,8 @@ export const stepSchemas: StepSchema[] = [
   branchSchema,
   // SubFlow (1)
   subFlowSchema,
+  // Human (1)
+  humanTaskSchema,
 ];
 
 // ═══════════════════════════════════════════════════════════
@@ -85,6 +88,7 @@ import { UtilityNode } from '@components/Nodes/UtilityNode';
 import { SubFlowNode } from '@components/Nodes/SubFlowNode';
 import { TerminalNode } from '@components/Nodes/TerminalNode';
 import { FlowNode } from '@components/Nodes/FlowNode';
+import { HumanTaskNode } from '@components/Nodes/HumanTaskNode';
 
 export const categoryNodeComponents: Record<StepCategory, React.ComponentType<{ id: string; data: NodeData; selected?: boolean }>> = {
   terminal: TerminalNode,
@@ -96,6 +100,7 @@ export const categoryNodeComponents: Record<StepCategory, React.ComponentType<{ 
   transform: TransformNode,
   utility: UtilityNode,
   subflow: SubFlowNode,
+  human: HumanTaskNode,
 };
 
 // Build xyflow nodeTypes map: { "stepflow:ai:decision": AiNode, ... }

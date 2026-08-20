@@ -20,6 +20,7 @@ import {
   Square,
   Table,
   Terminal,
+  UserCheck,
   XCircle,
 } from 'lucide-react';
 
@@ -53,6 +54,7 @@ const STEP_ICONS: Record<string, React.ElementType> = {
   stop: Square,
   table: Table,
   terminal: Terminal,
+  'user-check': UserCheck,
   'x-circle': XCircle,
 };
 

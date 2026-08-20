@@ -55,6 +55,7 @@ namespace StepFunctionsApp.StepFunctions
         public int? HeartbeatSeconds { get; set; }
 
         [JsonProperty("Result")]
+        [JsonConverter(typeof(NullableJTokenConverter))]
         public JToken? Result { get; set; }
 
         [JsonProperty("Seconds")]
@@ -103,10 +104,20 @@ namespace StepFunctionsApp.StepFunctions
         public string? ResultPath { get; set; }
 
         [JsonProperty("Parameters")]
+        [JsonConverter(typeof(NullableJTokenConverter))]
         public JToken? Parameters { get; set; }
 
         [JsonProperty("ResultSelector")]
+        [JsonConverter(typeof(NullableJTokenConverter))]
         public JToken? ResultSelector { get; set; }
+
+        [JsonProperty("Task")]
+        [JsonConverter(typeof(NullableJTokenConverter))]
+        public JToken? Task { get; set; }
+
+        [JsonProperty("Completion")]
+        [JsonConverter(typeof(NullableJTokenConverter))]
+        public JToken? Completion { get; set; }
 
         [JsonProperty("Retry")]
         public List<RetryRule>? Retry { get; set; }
@@ -121,6 +132,7 @@ namespace StepFunctionsApp.StepFunctions
         Pass,
         Choice,
         Wait,
+        HumanTask,
         Succeed,
         Fail,
         Parallel,

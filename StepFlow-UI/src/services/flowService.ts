@@ -16,6 +16,8 @@ export interface StateDefinition {
   resource?: string;
   next?: string;
   parameters?: Record<string, unknown>;
+  task?: Record<string, unknown>;
+  completion?: Record<string, unknown>;
   comment?: string;
   inputs?: string[];
   outputs?: string[];
@@ -76,6 +78,22 @@ export const FlowService = {
             }
           },
           next: nextNodes[0] || undefined
+        };
+      } else if (aslType === 'HumanTask') {
+        const config = (node.data?.configuration || {}) as Record<string, unknown>;
+        states[node.id] = {
+          type: 'HumanTask',
+          next: nextNodes[0] || undefined,
+          task: {
+            title: config.taskTitle ?? '',
+            assignee: config.assignee ?? '',
+          },
+          completion: {
+            Type: (config.completionMethod as string) || 'api',
+            ...(config.completionMethod === 'file' && config.watchDirectory ? { Directory: config.watchDirectory } : {}),
+          },
+          resultPath: (config.resultPath as string) || undefined,
+          comment: node.data?.description || undefined,
         };
       } else {
         states[node.id] = {
@@ -176,7 +194,7 @@ export const FlowService = {
         
         useNodeStore.getState().updateNodeData(newNode.id, {
           label: nodeId, // Set label to match the ASL state key (e.g. "ValidateOrder")
-          configuration: state.parameters || {},
+          configuration: reconstructConfiguration(state),
           description: state.comment,
         });
       }
@@ -450,6 +468,7 @@ function buildResourceUri(node: StepNode): string {
   if (schemaId?.startsWith('stepflow:transform:jsonata')) return `transform://jsonata`;
   if (schemaId?.startsWith('stepflow:transform:script')) return `transform://${config?.language || 'javascript'}`;
   if (schemaId?.startsWith('stepflow:utility:')) return `utility://${schemaId.split(':').pop()}`;
+  if (schemaId?.startsWith('stepflow:human:')) return `human://task`;
   if (schemaId?.startsWith('stepflow:subflow:')) return `flow://${config?.targetFlowId || 'default'}`;
   return `utility://default`;
 }
@@ -463,6 +482,7 @@ function mapSchemaIdToAslStateType(schemaId: string, category: string): string {
   if (schemaId === 'stepflow:utility:map' || schemaId === 'stepflow:flow:map') return 'Map';
   if (schemaId === 'stepflow:terminal:succeed' || schemaId === 'stepflow:flow:succeed') return 'Succeed';
   if (schemaId === 'stepflow:terminal:fail' || schemaId === 'stepflow:flow:fail') return 'Fail';
+  if (schemaId === 'stepflow:human:task') return 'HumanTask';
 
   // Default standard categories: api, transform, rule, data, ai are all "Task" in ASL
   if (['api', 'transform', 'rule', 'data', 'ai'].includes(category)) return 'Task';
@@ -472,6 +492,7 @@ function mapSchemaIdToAslStateType(schemaId: string, category: string): string {
 function resolveSchemaId(state: StateDefinition): string {
   // Map resource URI back to schemaId
   const resource = state.resource || '';
+  if (state.type === 'HumanTask' || resource.startsWith('human://')) return 'stepflow:human:task';
   if (resource.startsWith('ai://')) return 'stepflow:ai:decision';
   if (resource.startsWith('rule://')) return 'stepflow:rule:rule_engine';
   if (resource.startsWith('sql://')) return 'stepflow:data:sql';
@@ -487,6 +508,22 @@ function resolveSchemaId(state: StateDefinition): string {
   if (resource.startsWith('utility://branch')) return 'stepflow:utility:branch';
 
   return 'stepflow:utility:pass';
+}
+
+/** Rebuild node configuration from an imported ASL state (handles HumanTask's Task/Completion contract). */
+function reconstructConfiguration(state: StateDefinition): Record<string, unknown> {
+  if (state.type === 'HumanTask') {
+    const task = (state.task || {}) as Record<string, unknown>;
+    const completion = (state.completion || {}) as Record<string, unknown>;
+    return {
+      taskTitle: task.title ?? '',
+      assignee: task.assignee ?? '',
+      completionMethod: String(completion.Type ?? 'api').toLowerCase(),
+      watchDirectory: completion.Directory ?? '',
+      resultPath: state.resultPath ?? '',
+    };
+  }
+  return state.parameters || {};
 }
 
 function loadSavedFlows(): Array<{ id: string; name: string; description?: string; createdAt: string; definition: StateMachineDefinition }> {

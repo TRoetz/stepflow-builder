@@ -14,6 +14,7 @@ export const CATEGORY_COLORS: Record<StepCategory, string> = {
   transform: '#EC4899',
   utility: '#6B7280',
   subflow: '#06B6D4',
+  human: '#FB923C',
 };
 
 /**

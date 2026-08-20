@@ -4,12 +4,12 @@ import { categoryById } from '@schemas/categories';
 
 describe('Schema System', () => {
   describe('Registry', () => {
-    it('should have all 22 step schemas registered', () => {
-      expect(stepSchemas.length).toBe(22);
+    it('should have all 23 step schemas registered', () => {
+      expect(stepSchemas.length).toBe(23);
     });
 
-    it('should have all 9 categories defined', () => {
-      expect(categoryById.size).toBe(9);
+    it('should have all 10 categories defined', () => {
+      expect(categoryById.size).toBe(10);
     });
 
     it('should map all schemas by ID', () => {
@@ -20,12 +20,12 @@ describe('Schema System', () => {
     });
 
     it('should have palette data for all categories', () => {
-      expect(paletteData.length).toBe(9);
+      expect(paletteData.length).toBe(10);
     });
 
     it('should have schema service working', () => {
-      expect(schemaService.getAllSchemas().length).toBe(22);
-      expect(schemaService.getCategories().length).toBe(9);
+      expect(schemaService.getAllSchemas().length).toBe(23);
+      expect(schemaService.getCategories().length).toBe(10);
     });
   });
 
@@ -45,7 +45,7 @@ describe('Schema System', () => {
         });
 
         it('should have valid category', () => {
-          const validCategories = ['ai', 'rule', 'data', 'api', 'transform', 'utility', 'subflow', 'terminal', 'flow'];
+          const validCategories = ['ai', 'rule', 'data', 'api', 'transform', 'utility', 'subflow', 'terminal', 'flow', 'human'];
           expect(validCategories).toContain(schema.category);
         });
 
@@ -113,6 +113,10 @@ describe('Schema System', () => {
 
     it('should have SubFlow schemas (1)', () => {
       expect(stepSchemas.filter((s) => s.category === 'subflow').length).toBe(1);
+    });
+
+    it('should have Human schemas (1)', () => {
+      expect(stepSchemas.filter((s) => s.category === 'human').length).toBe(1);
     });
   });
 
