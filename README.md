@@ -388,7 +388,6 @@ stepflow-builder/
     ├── Flows/                     ← Flow definitions (JSON)
     ├── Converters/                ← BPMN converter
     ├── Mcp/                       ← MCP endpoint for AI harnesses
-    ├── StepUI/                    ← Legacy UI prototype (early canvas + config modals); unused — superseded by StepFlow-UI/src
     ├── StepFunctionsApp.Tests/    ← xUnit backend test suite (engine, flow state, MCP, scenarios)
     ├── Stepflow-Builder-Tests/    ← Standalone fake test API host (http://localhost:5095)
     ├── start.ps1                  ← One-command dev launcher (backend + frontend)
