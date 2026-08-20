@@ -19,8 +19,8 @@ export default defineConfig({
     },
   },
   build: {
-    // Build into the sibling backend's dist/ so StepFunctionsApp serves it unchanged (see Program.cs).
-    outDir: '../StepFunctionsApp/dist',
+    // Build into the parent backend's dist/ so StepFunctionsApp serves it unchanged (see Program.cs).
+    outDir: '../dist',
     emptyOutDir: true,
     rollupOptions: {
       input: {

@@ -3,8 +3,8 @@
 
 $ErrorActionPreference = 'Stop'
 
-# Frontend project lives in the sibling StepFlow-UI folder
-$uiRoot = Join-Path $PSScriptRoot '..\StepFlow-UI'
+# Frontend project lives in the StepFlow-UI subfolder of this repo
+$uiRoot = Join-Path $PSScriptRoot 'StepFlow-UI'
 
 Write-Host ''
 Write-Host '  StepFlow Builder' -ForegroundColor Cyan

@@ -35,7 +35,7 @@
 ### Installation
 
 ```bash
-cd StepFlow-UI
+cd StepFunctionsApp/StepFlow-UI
 npm install
 ```
 
