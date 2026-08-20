@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Net.Http;
 using System.Web;
+using StepFunctionsApp.DataExchange;
 
 namespace StepFunctionsApp.StepFunctions
 {
@@ -30,6 +31,7 @@ namespace StepFunctionsApp.StepFunctions
         private readonly EavRegistryService _eavRegistry;
         private readonly ScriptExecutionService _scriptExecution;
         private readonly Lazy<StepFunctionService> _stepService;
+        private readonly DataExchangeExecutor _dataExchange;
         private readonly ILogger<CompositeResourceInvoker> _logger;
         private readonly string _callbackBaseUrl = "http://localhost:5000"; // Should come from config
 
@@ -41,6 +43,7 @@ namespace StepFunctionsApp.StepFunctions
             EavRegistryService eavRegistry,
             ScriptExecutionService scriptExecution,
             Lazy<StepFunctionService> stepService,
+            DataExchangeExecutor dataExchange,
             ILogger<CompositeResourceInvoker> logger)
         {
             _httpClientFactory = httpClientFactory;
@@ -50,6 +53,7 @@ namespace StepFunctionsApp.StepFunctions
             _eavRegistry = eavRegistry;
             _scriptExecution = scriptExecution;
             _stepService = stepService;
+            _dataExchange = dataExchange;
             _logger = logger;
         }
 
@@ -80,6 +84,14 @@ namespace StepFunctionsApp.StepFunctions
 
             if (resource.StartsWith("internal://"))
                 return await HandleInternalAsync(resource, input, ct);
+
+            // Data Exchange profile pipeline: dataexchange://<profileId>
+            if (resource.StartsWith("dataexchange://"))
+            {
+                var profileId = resource["dataexchange://".Length..].Trim('/');
+                _logger.LogInformation("Executing DataExchange profile: {Profile}", profileId);
+                return await _dataExchange.ExecuteAsync(profileId, input as JObject ?? new JObject(), ct);
+            }
 
             throw new StepEngineException("States.TaskFailed", $"Unknown resource scheme: {resource}");
         }

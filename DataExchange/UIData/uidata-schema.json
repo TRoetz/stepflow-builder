@@ -1,0 +1,572 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "UIPage",
+    "description": "Represents the complete page structure, containing a hierarchy of UI elements.",
+    "type": "object",
+    "properties": {
+        "Id": {
+            "type": "integer",
+            "description": "Unique identifier for the page."
+        },
+        "Title": {
+            "type": "string",
+            "description": "Title of the page."
+        },
+        "Description": {
+            "type": "string",
+            "description": "Optional description of the page."
+        },
+        "Author": {
+            "type": "string",
+            "description": "Author of the page."
+        },
+        "PageName": {
+            "type": "integer",
+            "description": "Name of the page."
+        },
+        "PageVersion": {
+            "type": "string",
+            "description": "Version of the page."
+        },
+        "RootElements": {
+            "type": "array",
+            "description": "Collection of root UI elements on the page.",
+            "items": {
+                "$ref": "#/definitions/UIElement"
+            }
+        }
+    },
+    "required": [
+        "Id",
+        "Title",
+        "PageName",
+        "PageVersion",
+        "RootElements"
+    ],
+    "definitions": {
+        "UIElement": {
+            "type": "object",
+            "description": "Base class for all UI elements",
+            "properties": {
+                "Id": {
+                    "type": "integer",
+                    "description": "Unique identifier for the UI element."
+                },
+                "Type": {
+                    "type": "string",
+                    "description": "Type of the UI element.",
+                    "enum": [
+                        "Wizard",
+                        "Step",
+                        "TextBox",
+                        "Dropdown",
+                        "DropdownOption",
+                        "FileUpload",
+                        "InputGroup",
+                        "Checkbox",
+                        "RadioButton",
+                        "TextArea",
+                        "DatePicker",
+                        "Button",
+                        "Slider",
+                        "GridItem",
+                        "Grid",
+                        "Section",
+                        "StaticText",
+                        "Map"
+                    ]
+                },
+                "Label": {
+                    "type": "string",
+                    "description": "Display label for the element."
+                },
+                "Description": {
+                    "type": "string",
+                    "description": "Optional description of the element."
+                },
+                "AttributeDomainId": {
+                    "type": "integer",
+                    "description": "Maps the UI element to an AttributeDomain for data storage."
+                },
+                "EntityAttributeId": {
+                    "type": "integer",
+                    "description": "Identifier for the attribute within the AttributeDomain."
+                },
+                "UIPageId": {
+                    "type": "integer",
+                    "description": "ID of the page this element belongs to."
+                },
+                "ParentId": {
+                    "type": "integer",
+                    "description": "ID of the parent element, if any."
+                },
+                "Children": {
+                    "type": "array",
+                    "description": "Collection of child UI elements.",
+                    "items": {
+                        "$ref": "#/definitions/UIElement"
+                    }
+                }
+            },
+            "required": [
+                "Id",
+                "Type",
+                "Label",
+                "AttributeDomainId",
+                "EntityAttributeId"
+            ],
+            "oneOf": [
+                { "$ref": "#/definitions/Wizard" },
+                { "$ref": "#/definitions/Step" },
+                { "$ref": "#/definitions/TextBox" },
+                { "$ref": "#/definitions/Dropdown" },
+                { "$ref": "#/definitions/DropdownOption" },
+                { "$ref": "#/definitions/FileUpload" },
+                { "$ref": "#/definitions/InputGroup" },
+                { "$ref": "#/definitions/Checkbox" },
+                { "$ref": "#/definitions/RadioButton" },
+                { "$ref": "#/definitions/TextArea" },
+                { "$ref": "#/definitions/DatePicker" },
+                { "$ref": "#/definitions/Button" },
+                { "$ref": "#/definitions/Slider" },
+                { "$ref": "#/definitions/GridItem" },
+                { "$ref": "#/definitions/Grid" },
+                { "$ref": "#/definitions/Section" },
+                { "$ref": "#/definitions/StaticText" },
+                { "$ref": "#/definitions/Map" }
+            ]
+        },
+        "MapLayer": {
+            "type": "object",
+            "description": "Defines a layer for the Map element.",
+            "properties": {
+                "Id": {
+                    "type": "integer",
+                    "description": "Unique identifier for the layer."
+                },
+                "Type": {
+                    "type": "string",
+                    "description": "Type of the layer (e.g., 'GeoJson', 'Symbol', 'Heatmap')."
+                },
+                "DataSource": {
+                    "type": "string",
+                    "description": "URL or inline GeoJSON data for the layer."
+                },
+                "StyleOptions": {
+                    "type": "string",
+                    "description": "JSON string for layer styling options."
+                },
+                "MapId": {
+                    "type": "integer",
+                    "description": "ID of the Map this layer belongs to."
+                }
+            },
+            "required": [
+                "Id",
+                "Type",
+                "DataSource",
+                "StyleOptions"
+            ]
+        },
+        "Map": {
+            "allOf": [
+                { "$ref": "#/definitions/UIElement" },
+                {
+                    "type": "object",
+                    "properties": {
+                        "InitialCenter": {
+                            "type": "string",
+                            "description": "Initial center coordinates of the map (latitude, longitude)."
+                        },
+                        "InitialZoom": {
+                            "type": "integer",
+                            "description": "Initial zoom level of the map."
+                        },
+                        "MapStyle": {
+                            "type": "string",
+                            "description": "Visual style of the map (e.g., 'road', 'satellite', 'night')."
+                        },
+                        "Layers": {
+                            "type": "array",
+                            "description": "Layers to display on the map.",
+                            "items": {
+                                "$ref": "#/definitions/MapLayer"
+                            }
+                        }
+                    },
+                    "required": [
+                        "InitialCenter",
+                        "InitialZoom",
+                        "MapStyle",
+                        "Layers"
+                    ]
+                }
+            ]
+        },
+        "GridItem": {
+            "allOf": [
+                { "$ref": "#/definitions/UIElement" },
+                {
+                    "type": "object",
+                    "properties": {
+                        "Column": {
+                            "type": "integer",
+                            "description": "Column position of the grid item."
+                        },
+                        "Row": {
+                            "type": "integer",
+                            "description": "Row position of the grid item."
+                        },
+                        "ColumnSpan": {
+                            "type": "integer",
+                            "description": "Number of columns the item spans."
+                        },
+                        "RowSpan": {
+                            "type": "integer",
+                            "description": "Number of rows the item spans."
+                        }
+                    },
+                    "required": [
+                        "Column",
+                        "Row",
+                        "ColumnSpan",
+                        "RowSpan"
+                    ]
+                }
+            ]
+        },
+        "Grid": {
+            "allOf": [
+                { "$ref": "#/definitions/UIElement" },
+                {
+                    "type": "object",
+                    "properties": {
+                        "Columns": {
+                            "type": "integer",
+                            "description": "Number of columns in the grid."
+                        },
+                        "Rows": {
+                            "type": "integer",
+                            "description": "Number of rows in the grid."
+                        },
+                        "CellSpacing": {
+                            "type": "integer",
+                            "description": "Spacing between grid cells."
+                        },
+                        "CellPadding": {
+                            "type": "integer",
+                            "description": "Padding within grid cells."
+                        }
+                    },
+                    "required": [
+                        "Columns",
+                        "Rows",
+                        "CellSpacing",
+                        "CellPadding"
+                    ]
+                }
+            ]
+        },
+        "Section": {
+            "allOf": [
+                { "$ref": "#/definitions/UIElement" },
+                {
+                    "type": "object",
+                    "properties": {
+                        "Heading": {
+                            "type": "string",
+                            "description": "Heading text for the section."
+                        }
+                    },
+                    "required": [
+                        "Heading"
+                    ]
+                }
+            ]
+        },
+        "Wizard": {
+            "allOf": [
+                { "$ref": "#/definitions/UIElement" }
+            ]
+        },
+        "Step": {
+            "allOf": [
+                { "$ref": "#/definitions/UIElement" },
+                {
+                    "type": "object",
+                    "properties": {
+                        "StepNumber": {
+                            "type": "integer",
+                            "description": "Order of the step in the wizard."
+                        }
+                    },
+                    "required": [
+                        "StepNumber"
+                    ]
+                }
+            ]
+        },
+        "TextBox": {
+            "allOf": [
+                { "$ref": "#/definitions/UIElement" },
+                {
+                    "type": "object",
+                    "properties": {
+                        "Placeholder": {
+                            "type": "string",
+                            "description": "Placeholder text for the TextBox."
+                        },
+                        "MaxLength": {
+                            "type": "integer",
+                            "description": "Maximum allowed length of input."
+                        },
+                        "ValidationRegex": {
+                            "type": "string",
+                            "description": "Regular expression for input validation."
+                        }
+                    },
+                    "required": [
+                        "Placeholder",
+                        "MaxLength"
+                    ]
+                }
+            ]
+        },
+        "Dropdown": {
+            "allOf": [
+                { "$ref": "#/definitions/UIElement" }
+            ]
+        },
+        "DropdownOption": {
+            "allOf": [
+                { "$ref": "#/definitions/UIElement" },
+                {
+                    "type": "object",
+                    "properties": {
+                        "Value": {
+                            "type": "string",
+                            "description": "The value of the option."
+                        },
+                        "DisplayText": {
+                            "type": "string",
+                            "description": "Display text for the option."
+                        }
+                    },
+                    "required": [
+                        "Value",
+                        "DisplayText"
+                    ]
+                }
+            ]
+        },
+        "InputGroup": {
+            "allOf": [
+                { "$ref": "#/definitions/UIElement" },
+                {
+                    "type": "object",
+                    "properties": {
+                        "InputElementType": {
+                            "type": "string",
+                            "description": "Type of input element within the InputGroup.",
+                            "enum": [
+                                "Text",
+                                "Email",
+                                "Number",
+                                "Url"
+                            ]
+                        }
+                    },
+                    "required": [
+                        "InputElementType"
+                    ]
+                }
+            ]
+        },
+        "Checkbox": {
+            "allOf": [
+                { "$ref": "#/definitions/UIElement" },
+                {
+                    "type": "object",
+                    "properties": {
+                        "Checked": {
+                            "type": "boolean",
+                            "description": "Whether the checkbox is checked."
+                        }
+                    },
+                    "required": [
+                        "Checked"
+                    ]
+                }
+            ]
+        },
+        "RadioButton": {
+            "allOf": [
+                { "$ref": "#/definitions/UIElement" },
+                {
+                    "type": "object",
+                    "properties": {
+                        "GroupName": {
+                            "type": "string",
+                            "description": "Name of the radio button group."
+                        },
+                        "Checked": {
+                            "type": "boolean",
+                            "description": "Whether the radio button is checked."
+                        }
+                    },
+                    "required": [
+                        "GroupName",
+                        "Checked"
+                    ]
+                }
+            ]
+        },
+        "TextArea": {
+            "allOf": [
+                { "$ref": "#/definitions/UIElement" },
+                {
+                    "type": "object",
+                    "properties": {
+                        "Placeholder": {
+                            "type": "string",
+                            "description": "Placeholder text for the TextArea."
+                        },
+                        "Rows": {
+                            "type": "integer",
+                            "description": "Number of rows in the TextArea."
+                        },
+                        "Cols": {
+                            "type": "integer",
+                            "description": "Number of columns in the TextArea."
+                        }
+                    },
+                    "required": [
+                        "Placeholder",
+                        "Rows",
+                        "Cols"
+                    ]
+                }
+            ]
+        },
+        "FileUpload": {
+            "allOf": [
+                { "$ref": "#/definitions/UIElement" },
+                {
+                    "type": "object",
+                    "properties": {
+                        "AcceptedFileTypes": {
+                            "type": "array",
+                            "description": "List of accepted file types.",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "required": [
+                        "AcceptedFileTypes"
+                    ]
+                }
+            ]
+        },
+        "DatePicker": {
+            "allOf": [
+                { "$ref": "#/definitions/UIElement" },
+                {
+                    "type": "object",
+                    "properties": {
+                        "MinDate": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "Minimum selectable date."
+                        },
+                        "MaxDate": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "Maximum selectable date."
+                        },
+                        "DateFormat": {
+                            "type": "string",
+                            "description": "Date format string."
+                        }
+                    },
+                    "required": [
+                        "MinDate",
+                        "MaxDate",
+                        "DateFormat"
+                    ]
+                }
+            ]
+        },
+        "Slider": {
+            "allOf": [
+                { "$ref": "#/definitions/UIElement" },
+                {
+                    "type": "object",
+                    "properties": {
+                        "MinValue": {
+                            "type": "integer",
+                            "description": "Minimum value of the slider."
+                        },
+                        "MaxValue": {
+                            "type": "integer",
+                            "description": "Maximum value of the slider."
+                        },
+                        "Step": {
+                            "type": "integer",
+                            "description": "Increment step of the slider."
+                        },
+                        "Value": {
+                            "type": "integer",
+                            "description": "Current value of the slider."
+                        }
+                    },
+                    "required": [
+                        "MinValue",
+                        "MaxValue",
+                        "Step",
+                        "Value"
+                    ]
+                }
+            ]
+        },
+        "StaticText": {
+            "allOf": [
+                { "$ref": "#/definitions/UIElement" },
+                {
+                    "type": "object",
+                    "properties": {
+                        "Text": {
+                            "type": "string",
+                            "description": "Text content to display."
+                        }
+                    },
+                    "required": [
+                        "Text"
+                    ]
+                }
+            ]
+        },
+        "Button": {
+            "allOf": [
+                { "$ref": "#/definitions/UIElement" },
+                {
+                    "type": "object",
+                    "properties": {
+                        "Action": {
+                            "type": "string",
+                            "description": "Action to perform when the button is clicked.",
+                            "enum": [
+                                "Submit",
+                                "Next",
+                                "Previous"
+                            ]
+                        }
+                    },
+                    "required": [
+                        "Action"
+                    ]
+                }
+            ]
+        }
+    }
+}

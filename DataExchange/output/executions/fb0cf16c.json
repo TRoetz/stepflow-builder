@@ -1,0 +1,114 @@
+{
+  "success": true,
+  "executionId": "fb0cf16c",
+  "profileId": "customer-orders-import",
+  "source": "file:C:/temp/dx-e2e/cust_orders.csv",
+  "rowsIn": 3,
+  "rowsOut": 3,
+  "rejectedCount": 0,
+  "rejected": [],
+  "enrichedRows": [
+    {
+      "OrderID": "ORD-1001",
+      "CustomerCode": "cust-a",
+      "Region": "North",
+      "Amount": 100.0,
+      "CurrencyCode": "USD",
+      "OrderNumber": "ORD-1001",
+      "CustomerRef": "CUST-A",
+      "RegionName": "North",
+      "AmountUSD": 100.0,
+      "Currency": "USD",
+      "AmountNZD": 1.6327
+    },
+    {
+      "OrderID": "ORD-1002",
+      "CustomerCode": "cust-b",
+      "Region": "South",
+      "Amount": 50.0,
+      "CurrencyCode": "EUR",
+      "OrderNumber": "ORD-1002",
+      "CustomerRef": "CUST-B",
+      "RegionName": "South",
+      "AmountUSD": 50.0,
+      "Currency": "EUR",
+      "AmountNZD": 1.5044
+    },
+    {
+      "OrderID": "ORD-1003",
+      "CustomerCode": "cust-c",
+      "Region": "North",
+      "Amount": 25.5,
+      "CurrencyCode": "USD",
+      "OrderNumber": "ORD-1003",
+      "CustomerRef": "CUST-C",
+      "RegionName": "North",
+      "AmountUSD": 25.5,
+      "Currency": "USD",
+      "AmountNZD": 1.6327
+    }
+  ],
+  "stages": [
+    {
+      "pipeline": "CustomerOrdersToInternal",
+      "stageType": "DataTreatment",
+      "order": 1,
+      "actions": [
+        {
+          "name": "MapToInternalSchema",
+          "type": "Transformation",
+          "messages": []
+        }
+      ]
+    },
+    {
+      "pipeline": "CustomerOrdersToInternal",
+      "stageType": "DataTreatment",
+      "order": 2,
+      "actions": [
+        {
+          "name": "EnrichWithNzdRate",
+          "type": "EnrichmentLookup",
+          "messages": []
+        }
+      ]
+    },
+    {
+      "pipeline": "CustomerOrdersToInternal",
+      "stageType": "PreRouting",
+      "order": 3,
+      "actions": [
+        {
+          "name": "DispatchAllEnrichedCsv",
+          "type": "Dispatch",
+          "messages": [
+            "wrote 3 rows to file://C:/temp/dx-e2e/out/enriched-orders.csv"
+          ]
+        },
+        {
+          "name": "DispatchNorthOnlyJson",
+          "type": "Dispatch",
+          "messages": [
+            "wrote 2 rows to file://C:/temp/dx-e2e/out/north-orders.json"
+          ]
+        }
+      ]
+    }
+  ],
+  "dispatched": [
+    {
+      "endpoint": "file://C:/temp/dx-e2e/out/enriched-orders.csv",
+      "method": "FILE",
+      "rows": 3,
+      "ok": 3,
+      "failed": 0
+    },
+    {
+      "endpoint": "file://C:/temp/dx-e2e/out/north-orders.json",
+      "method": "FILE",
+      "rows": 2,
+      "ok": 2,
+      "failed": 0
+    }
+  ]
+}

@@ -1,11 +1,12 @@
 using System;
+using System.IO;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Xunit;
 using Newtonsoft.Json.Linq;
 using Microsoft.Extensions.Logging.Abstractions;
 using StepFunctionsApp.StepFunctions;
-
+using StepFunctionsApp.DataExchange;
 namespace StepFunctionsApp.Tests
 {
     public class StepFlowTests
@@ -43,6 +44,13 @@ namespace StepFunctionsApp.Tests
             var mockStepService = new Moq.Mock<StepFunctionService>(null!, null!, null!, null!, null!, null!);
             var lazyStepService = new Lazy<StepFunctionService>(() => mockStepService.Object);
 
+            // Data Exchange executor (profiles in an isolated temp dir)
+            var dataExchange = new DataExchangeExecutor(
+                new DataExchangeProfileStore(Path.Combine(Path.GetTempPath(), "dataexchange-tests", Guid.NewGuid().ToString("N"))),
+                _duckDb,
+                mockFactory.Object,
+                NullLogger<DataExchangeExecutor>.Instance);
+
             _resourceInvoker = new CompositeResourceInvoker(
                 mockFactory.Object,
                 _ruleEngine,
@@ -51,6 +59,7 @@ namespace StepFunctionsApp.Tests
                 new EavRegistryService(), // blank
                 _scriptExecution,
                 lazyStepService,
+                dataExchange,
                 invokerLogger
             );
 

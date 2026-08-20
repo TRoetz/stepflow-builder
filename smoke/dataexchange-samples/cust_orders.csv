@@ -1,0 +1,4 @@
+OrderID,CustomerCode,Region,Amount,CurrencyCode
+ORD-1001,cust-a,North,100.00,USD
+ORD-1002,cust-b,South,50.00,EUR
+ORD-1003,cust-c,North,25.50,USD

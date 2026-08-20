@@ -1,0 +1,297 @@
+{
+  "DataExchangeProfileId": 0,
+  "DataExchangeProfileName": "Customer Orders Import",
+  "ProfileId": "customer-orders-import",
+  "IsActive": true,
+  "DataExchangeId": 0,
+  "DataSourceId": 0,
+  "DataSource": {
+    "DataSourceId": 0,
+    "DataSourceName": "cust_orders.csv",
+    "MediumType": 3,
+    "MediumConfigurationJson": "{\"filePath\": \"C:/temp/dx-e2e/cust_orders.csv\"}",
+    "ImportSchemaId": 0
+  },
+  "PipelineId": 0,
+  "Pipeline": {
+    "PipelineId": 0,
+    "PipelineName": "CustomerOrdersToInternal",
+    "Description": "Map customer CSV to internal schema, enrich with NZD FX rate via lookup API, dispatch enriched set (CSV) and North-region subset (JSON).",
+    "PipelineStages": [
+      {
+        "PipelineStageId": 0,
+        "PipelineId": 0,
+        "StageType": 0,
+        "ExecutionOrder": 1,
+        "PipelineStageActions": [
+          {
+            "PipelineStageActionId": 0,
+            "PipelineStageId": 0,
+            "ActionId": 0,
+            "Action": {
+              "ActionId": 0,
+              "ActionName": "MapToInternalSchema",
+              "Type": 1,
+              "ActionRules": [],
+              "SchemaMap": {
+                "ActionSchemaMapId": 0,
+                "SourceSchemaId": 0,
+                "TargetSchemaId": 0,
+                "AttributeMappings": [
+                  {
+                    "SchemaMapId": 0,
+                    "ActionSchemaMapId": 0,
+                    "TargetAttributeId": 0,
+                    "TargetAttribute": {
+                      "EntityAttributeId": 0,
+                      "PrimaryKey": false,
+                      "AttributeName": "OrderNumber",
+                      "DataType": 0,
+                      "Visible": true,
+                      "ReadOnly": false,
+                      "AttributeDomainId": 0,
+                      "AttributeValueData": [],
+                      "Rules": []
+                    },
+                    "SourceAttributes": [
+                      {
+                        "EntityAttributeId": 0,
+                        "PrimaryKey": false,
+                        "AttributeName": "OrderID",
+                        "DataType": 0,
+                        "Visible": true,
+                        "ReadOnly": false,
+                        "AttributeDomainId": 0,
+                        "AttributeValueData": [],
+                        "Rules": []
+                      }
+                    ],
+                    "TransformType": 0,
+                    "MergeStrategy": 1,
+                    "Parameters": {}
+                  },
+                  {
+                    "SchemaMapId": 0,
+                    "ActionSchemaMapId": 0,
+                    "TargetAttributeId": 0,
+                    "TargetAttribute": {
+                      "EntityAttributeId": 0,
+                      "PrimaryKey": false,
+                      "AttributeName": "CustomerRef",
+                      "DataType": 0,
+                      "Visible": true,
+                      "ReadOnly": false,
+                      "AttributeDomainId": 0,
+                      "AttributeValueData": [],
+                      "Rules": []
+                    },
+                    "SourceAttributes": [
+                      {
+                        "EntityAttributeId": 0,
+                        "PrimaryKey": false,
+                        "AttributeName": "CustomerCode",
+                        "DataType": 0,
+                        "Visible": true,
+                        "ReadOnly": false,
+                        "AttributeDomainId": 0,
+                        "AttributeValueData": [],
+                        "Rules": []
+                      }
+                    ],
+                    "TransformType": 5,
+                    "MergeStrategy": 1,
+                    "Parameters": {}
+                  },
+                  {
+                    "SchemaMapId": 0,
+                    "ActionSchemaMapId": 0,
+                    "TargetAttributeId": 0,
+                    "TargetAttribute": {
+                      "EntityAttributeId": 0,
+                      "PrimaryKey": false,
+                      "AttributeName": "RegionName",
+                      "DataType": 0,
+                      "Visible": true,
+                      "ReadOnly": false,
+                      "AttributeDomainId": 0,
+                      "AttributeValueData": [],
+                      "Rules": []
+                    },
+                    "SourceAttributes": [
+                      {
+                        "EntityAttributeId": 0,
+                        "PrimaryKey": false,
+                        "AttributeName": "Region",
+                        "DataType": 0,
+                        "Visible": true,
+                        "ReadOnly": false,
+                        "AttributeDomainId": 0,
+                        "AttributeValueData": [],
+                        "Rules": []
+                      }
+                    ],
+                    "TransformType": 0,
+                    "MergeStrategy": 1,
+                    "Parameters": {}
+                  },
+                  {
+                    "SchemaMapId": 0,
+                    "ActionSchemaMapId": 0,
+                    "TargetAttributeId": 0,
+                    "TargetAttribute": {
+                      "EntityAttributeId": 0,
+                      "PrimaryKey": false,
+                      "AttributeName": "AmountUSD",
+                      "DataType": 0,
+                      "Visible": true,
+                      "ReadOnly": false,
+                      "AttributeDomainId": 0,
+                      "AttributeValueData": [],
+                      "Rules": []
+                    },
+                    "SourceAttributes": [
+                      {
+                        "EntityAttributeId": 0,
+                        "PrimaryKey": false,
+                        "AttributeName": "Amount",
+                        "DataType": 0,
+                        "Visible": true,
+                        "ReadOnly": false,
+                        "AttributeDomainId": 0,
+                        "AttributeValueData": [],
+                        "Rules": []
+                      }
+                    ],
+                    "TransformType": 0,
+                    "MergeStrategy": 1,
+                    "Parameters": {}
+                  },
+                  {
+                    "SchemaMapId": 0,
+                    "ActionSchemaMapId": 0,
+                    "TargetAttributeId": 0,
+                    "TargetAttribute": {
+                      "EntityAttributeId": 0,
+                      "PrimaryKey": false,
+                      "AttributeName": "Currency",
+                      "DataType": 0,
+                      "Visible": true,
+                      "ReadOnly": false,
+                      "AttributeDomainId": 0,
+                      "AttributeValueData": [],
+                      "Rules": []
+                    },
+                    "SourceAttributes": [
+                      {
+                        "EntityAttributeId": 0,
+                        "PrimaryKey": false,
+                        "AttributeName": "CurrencyCode",
+                        "DataType": 0,
+                        "Visible": true,
+                        "ReadOnly": false,
+                        "AttributeDomainId": 0,
+                        "AttributeValueData": [],
+                        "Rules": []
+                      }
+                    ],
+                    "TransformType": 0,
+                    "MergeStrategy": 1,
+                    "Parameters": {}
+                  }
+                ]
+              },
+              "PipelineStageActions": [],
+              "SubPipelines": [],
+              "Parameters": {}
+            },
+            "ExecutionOrder": 1
+          }
+        ]
+      },
+      {
+        "PipelineStageId": 0,
+        "PipelineId": 0,
+        "StageType": 0,
+        "ExecutionOrder": 2,
+        "PipelineStageActions": [
+          {
+            "PipelineStageActionId": 0,
+            "PipelineStageId": 0,
+            "ActionId": 0,
+            "Action": {
+              "ActionId": 0,
+              "ActionName": "EnrichWithNzdRate",
+              "Type": 2,
+              "OutputParameterName": "AmountNZD",
+              "Lookup": {
+                "LookupId": 0,
+                "LookupName": "fx-rate-nzd",
+                "LookupVersion": 0,
+                "LookupEndpoint": "http://localhost:5095/api/fake/exchange-rate?from={Currency}&to=NZD&amt={AmountUSD}",
+                "Type": 0,
+                "ValueFieldToReturn": "convertedAmount",
+                "CreatedAtUtc": "0001-01-01T00:00:00"
+              },
+              "ActionRules": [],
+              "PipelineStageActions": [],
+              "SubPipelines": [],
+              "Parameters": {}
+            },
+            "ExecutionOrder": 1
+          }
+        ]
+      },
+      {
+        "PipelineStageId": 0,
+        "PipelineId": 0,
+        "StageType": 1,
+        "ExecutionOrder": 3,
+        "PipelineStageActions": [
+          {
+            "PipelineStageActionId": 0,
+            "PipelineStageId": 0,
+            "ActionId": 0,
+            "Action": {
+              "ActionId": 0,
+              "ActionName": "DispatchAllEnrichedCsv",
+              "Type": 3,
+              "ActionRules": [],
+              "Endpoint": {
+                "ActionEndpointId": 0,
+                "ActionEndpointURL": "file://C:/temp/dx-e2e/out/enriched-orders.csv"
+              },
+              "PipelineStageActions": [],
+              "SubPipelines": [],
+              "Parameters": {
+                "OutputFormat": "csv"
+              }
+            },
+            "ExecutionOrder": 1
+          },
+          {
+            "PipelineStageActionId": 0,
+            "PipelineStageId": 0,
+            "ActionId": 0,
+            "Action": {
+              "ActionId": 0,
+              "ActionName": "DispatchNorthOnlyJson",
+              "Type": 3,
+              "ActionRules": [],
+              "Endpoint": {
+                "ActionEndpointId": 0,
+                "ActionEndpointURL": "file://C:/temp/dx-e2e/out/north-orders.json"
+              },
+              "PipelineStageActions": [],
+              "SubPipelines": [],
+              "Parameters": {
+                "Filter": "\"RegionName\" = 'North'",
+                "OutputFormat": "json"
+              }
+            },
+            "ExecutionOrder": 2
+          }
+        ]
+      }
+    ]
+  }
+}

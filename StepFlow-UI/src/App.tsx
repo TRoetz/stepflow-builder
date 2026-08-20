@@ -15,6 +15,7 @@ import { useKeyboardShortcuts } from '@hooks/useKeyboardShortcuts';
 import { CanvasAssistant } from '@components/Canvas/CanvasAssistant';
 import { ToastStack } from '@components/ToastStack';
 import { AgentPanel } from '@components/Agents/AgentPanel';
+import { DataExchangePanel } from '@components/DataExchange/DataExchangePanel';
 import { useAiAssistantStore } from '@stores/useAiAssistantStore';
 import { useAiModelConfigStore } from '@stores/useAiModelConfigStore';
 import { showToast } from '@stores/useToastStore';
@@ -31,6 +32,7 @@ export default function App() {
   const [isCollapsedProperties, setIsCollapsedProperties] = useState(false);
   const [flowName, setFlowName] = useState('New Flow');
   const [showAgentPanel, setShowAgentPanel] = useState(false);
+  const [showDataExchangePanel, setShowDataExchangePanel] = useState(false);
   const [showLogPanel, setShowLogPanel] = useState(false);
   const [expandedLogNodeId, setExpandedLogNodeId] = useState<string | null>(null);
   const [showSaveProjectDialog, setShowSaveProjectDialog] = useState(false);
@@ -397,6 +399,7 @@ export default function App() {
         onToggleProperties={() => setIsCollapsedProperties((p) => !p)}
         onToggleAiAssistant={toggleAiAssistant}
         onToggleAgentPanel={() => setShowAgentPanel((p) => !p)}
+        onToggleDataExchange={() => setShowDataExchangePanel((p) => !p)}
         onToggleAiConfig={toggleAiConfig}
         onAutoLayout={handleAutoLayout}
         onResetFlow={handleResetFlow}
@@ -558,6 +561,9 @@ export default function App() {
           <div className="app-properties">
             <AgentPanel />
           </div>
+        )}
+        {showDataExchangePanel && (
+          <DataExchangePanel onClose={() => setShowDataExchangePanel(false)} />
         )}
       </div>
 

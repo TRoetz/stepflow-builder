@@ -9,7 +9,7 @@ using StepFunctionsApp.Controllers;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
-
+using StepFunctionsApp.DataExchange;
 namespace StepFunctionsApp;
 
 public class Program
@@ -45,6 +45,14 @@ public class Startup
         var eavRegistry = new EavRegistryService();
         eavRegistry.Initialize("eav_registry.json");
         services.AddSingleton(eavRegistry);
+
+        // Data Exchange subsystem - customer file -> internal schema pipeline (profiles + executor)
+        services.Configure<DataExchangeOptions>(_config.GetSection(DataExchangeOptions.SectionName));
+        services.AddSingleton(provider => new DataExchangeProfileStore(
+            provider.GetRequiredService<IOptions<DataExchangeOptions>>().Value.ProfilesDirectory));
+        services.AddSingleton<DataExchangeExecutor>();
+        services.AddSingleton<DataExchangeExecutionLog>();
+        services.AddHostedService<DataExchangeFileMonitorService>();
 
         // StepFlow Services
         services.AddSingleton<RuleEngineService>();
