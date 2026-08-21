@@ -1,0 +1,369 @@
+{
+  "DataExchangeProfileId": 0,
+  "DataExchangeProfileName": "Supplier Invoice Import",
+  "IsActive": true,
+  "DataExchangeId": 0,
+  "DataSourceId": 0,
+  "DataSource": {
+    "DataSourceId": 0,
+    "DataSourceName": "Supplier Invoices CSV",
+    "MediumType": 3,
+    "MediumConfigurationJson": "{\"filePath\":\"C:/temp/dx-e2e/in/supplier-invoices.csv\"}",
+    "ImportSchemaId": 101,
+    "ImportSchema": {
+      "AttributeDomainId": 0,
+      "Version": "1",
+      "AttributeDomainName": "SupplierInvoiceImport",
+      "SchemaDefinitionId": 0,
+      "IsCurrentVersion": true,
+      "Attributes": [
+        {
+          "EntityAttributeId": 10,
+          "PrimaryKey": false,
+          "AttributeName": "invoice_id",
+          "DataType": 0,
+          "Visible": true,
+          "ReadOnly": false,
+          "AttributeDomainId": 0,
+          "AttributeValueData": [],
+          "Rules": []
+        },
+        {
+          "EntityAttributeId": 11,
+          "PrimaryKey": false,
+          "AttributeName": "supplier",
+          "DataType": 0,
+          "Visible": true,
+          "ReadOnly": false,
+          "AttributeDomainId": 0,
+          "AttributeValueData": [],
+          "Rules": []
+        },
+        {
+          "EntityAttributeId": 12,
+          "PrimaryKey": false,
+          "AttributeName": "total",
+          "DataType": 0,
+          "Visible": true,
+          "ReadOnly": false,
+          "AttributeDomainId": 0,
+          "AttributeValueData": [],
+          "Rules": []
+        },
+        {
+          "EntityAttributeId": 13,
+          "PrimaryKey": false,
+          "AttributeName": "currency",
+          "DataType": 0,
+          "Visible": true,
+          "ReadOnly": false,
+          "AttributeDomainId": 0,
+          "AttributeValueData": [],
+          "Rules": []
+        }
+      ],
+      "Domain": []
+    }
+  },
+  "PipelineId": 0,
+  "Pipeline": {
+    "PipelineId": 0,
+    "PipelineStages": [
+      {
+        "PipelineStageId": 0,
+        "PipelineId": 0,
+        "StageType": 0,
+        "ExecutionOrder": 1,
+        "PipelineStageActions": [
+          {
+            "PipelineStageActionId": 0,
+            "PipelineStageId": 0,
+            "ActionId": 0,
+            "Action": {
+              "ActionId": 0,
+              "ActionName": "Map and Transform Invoice Data",
+              "Type": 1,
+              "InputSchema": {
+                "AttributeDomainId": 0,
+                "Version": "1",
+                "AttributeDomainName": "SupplierInvoiceImport",
+                "SchemaDefinitionId": 0,
+                "IsCurrentVersion": true,
+                "Attributes": [
+                  {
+                    "EntityAttributeId": 10,
+                    "PrimaryKey": false,
+                    "AttributeName": "invoice_id",
+                    "DataType": 0,
+                    "Visible": true,
+                    "ReadOnly": false,
+                    "AttributeDomainId": 0,
+                    "AttributeValueData": [],
+                    "Rules": []
+                  },
+                  {
+                    "EntityAttributeId": 11,
+                    "PrimaryKey": false,
+                    "AttributeName": "supplier",
+                    "DataType": 0,
+                    "Visible": true,
+                    "ReadOnly": false,
+                    "AttributeDomainId": 0,
+                    "AttributeValueData": [],
+                    "Rules": []
+                  },
+                  {
+                    "EntityAttributeId": 12,
+                    "PrimaryKey": false,
+                    "AttributeName": "total",
+                    "DataType": 0,
+                    "Visible": true,
+                    "ReadOnly": false,
+                    "AttributeDomainId": 0,
+                    "AttributeValueData": [],
+                    "Rules": []
+                  },
+                  {
+                    "EntityAttributeId": 13,
+                    "PrimaryKey": false,
+                    "AttributeName": "currency",
+                    "DataType": 0,
+                    "Visible": true,
+                    "ReadOnly": false,
+                    "AttributeDomainId": 0,
+                    "AttributeValueData": [],
+                    "Rules": []
+                  }
+                ],
+                "Domain": []
+              },
+              "ActionSchema": {
+                "AttributeDomainId": 0,
+                "Version": "1",
+                "AttributeDomainName": "InternalInvoice",
+                "SchemaDefinitionId": 0,
+                "IsCurrentVersion": true,
+                "Attributes": [
+                  {
+                    "EntityAttributeId": 20,
+                    "PrimaryKey": false,
+                    "AttributeName": "InvoiceId",
+                    "DataType": 0,
+                    "Visible": true,
+                    "ReadOnly": false,
+                    "AttributeDomainId": 0,
+                    "AttributeValueData": [],
+                    "Rules": []
+                  },
+                  {
+                    "EntityAttributeId": 21,
+                    "PrimaryKey": false,
+                    "AttributeName": "SupplierName",
+                    "DataType": 0,
+                    "Visible": true,
+                    "ReadOnly": false,
+                    "AttributeDomainId": 0,
+                    "AttributeValueData": [],
+                    "Rules": []
+                  },
+                  {
+                    "EntityAttributeId": 22,
+                    "PrimaryKey": false,
+                    "AttributeName": "TotalAmount",
+                    "DataType": 2,
+                    "Visible": true,
+                    "ReadOnly": false,
+                    "AttributeDomainId": 0,
+                    "AttributeValueData": [],
+                    "Rules": []
+                  },
+                  {
+                    "EntityAttributeId": 23,
+                    "PrimaryKey": false,
+                    "AttributeName": "CurrencyCode",
+                    "DataType": 0,
+                    "Visible": true,
+                    "ReadOnly": false,
+                    "AttributeDomainId": 0,
+                    "AttributeValueData": [],
+                    "Rules": []
+                  }
+                ],
+                "Domain": []
+              },
+              "ActionRules": [],
+              "SchemaMap": {
+                "ActionSchemaMapId": 0,
+                "SourceSchemaId": 0,
+                "TargetSchemaId": 0,
+                "AttributeMappings": [
+                  {
+                    "SchemaMapId": 0,
+                    "ActionSchemaMapId": 0,
+                    "TargetAttributeId": 0,
+                    "TargetAttribute": {
+                      "EntityAttributeId": 0,
+                      "PrimaryKey": false,
+                      "AttributeName": "InvoiceId",
+                      "DataType": 0,
+                      "Visible": true,
+                      "ReadOnly": false,
+                      "AttributeDomainId": 0,
+                      "AttributeValueData": [],
+                      "Rules": []
+                    },
+                    "SourceAttributes": [
+                      {
+                        "EntityAttributeId": 0,
+                        "PrimaryKey": false,
+                        "AttributeName": "invoice_id",
+                        "DataType": 0,
+                        "Visible": true,
+                        "ReadOnly": false,
+                        "AttributeDomainId": 0,
+                        "AttributeValueData": [],
+                        "Rules": []
+                      }
+                    ],
+                    "TransformType": 0,
+                    "MergeStrategy": 0,
+                    "Parameters": {}
+                  },
+                  {
+                    "SchemaMapId": 0,
+                    "ActionSchemaMapId": 0,
+                    "TargetAttributeId": 0,
+                    "TargetAttribute": {
+                      "EntityAttributeId": 0,
+                      "PrimaryKey": false,
+                      "AttributeName": "SupplierName",
+                      "DataType": 0,
+                      "Visible": true,
+                      "ReadOnly": false,
+                      "AttributeDomainId": 0,
+                      "AttributeValueData": [],
+                      "Rules": []
+                    },
+                    "SourceAttributes": [
+                      {
+                        "EntityAttributeId": 0,
+                        "PrimaryKey": false,
+                        "AttributeName": "supplier",
+                        "DataType": 0,
+                        "Visible": true,
+                        "ReadOnly": false,
+                        "AttributeDomainId": 0,
+                        "AttributeValueData": [],
+                        "Rules": []
+                      }
+                    ],
+                    "TransformType": 5,
+                    "MergeStrategy": 0,
+                    "Parameters": {}
+                  },
+                  {
+                    "SchemaMapId": 0,
+                    "ActionSchemaMapId": 0,
+                    "TargetAttributeId": 0,
+                    "TargetAttribute": {
+                      "EntityAttributeId": 0,
+                      "PrimaryKey": false,
+                      "AttributeName": "TotalAmount",
+                      "DataType": 2,
+                      "Visible": true,
+                      "ReadOnly": false,
+                      "AttributeDomainId": 0,
+                      "AttributeValueData": [],
+                      "Rules": []
+                    },
+                    "SourceAttributes": [
+                      {
+                        "EntityAttributeId": 0,
+                        "PrimaryKey": false,
+                        "AttributeName": "total",
+                        "DataType": 0,
+                        "Visible": true,
+                        "ReadOnly": false,
+                        "AttributeDomainId": 0,
+                        "AttributeValueData": [],
+                        "Rules": []
+                      }
+                    ],
+                    "TransformType": 0,
+                    "MergeStrategy": 0,
+                    "Parameters": {}
+                  },
+                  {
+                    "SchemaMapId": 0,
+                    "ActionSchemaMapId": 0,
+                    "TargetAttributeId": 0,
+                    "TargetAttribute": {
+                      "EntityAttributeId": 0,
+                      "PrimaryKey": false,
+                      "AttributeName": "CurrencyCode",
+                      "DataType": 0,
+                      "Visible": true,
+                      "ReadOnly": false,
+                      "AttributeDomainId": 0,
+                      "AttributeValueData": [],
+                      "Rules": []
+                    },
+                    "SourceAttributes": [
+                      {
+                        "EntityAttributeId": 0,
+                        "PrimaryKey": false,
+                        "AttributeName": "currency",
+                        "DataType": 0,
+                        "Visible": true,
+                        "ReadOnly": false,
+                        "AttributeDomainId": 0,
+                        "AttributeValueData": [],
+                        "Rules": []
+                      }
+                    ],
+                    "TransformType": 5,
+                    "MergeStrategy": 0,
+                    "Parameters": {}
+                  }
+                ]
+              },
+              "PipelineStageActions": [],
+              "SubPipelines": [],
+              "Parameters": {}
+            },
+            "ExecutionOrder": 1
+          }
+        ]
+      },
+      {
+        "PipelineStageId": 0,
+        "PipelineId": 0,
+        "StageType": 3,
+        "ExecutionOrder": 2,
+        "PipelineStageActions": [
+          {
+            "PipelineStageActionId": 0,
+            "PipelineStageId": 0,
+            "ActionId": 0,
+            "Action": {
+              "ActionId": 0,
+              "ActionName": "Dispatch Processed Invoices",
+              "Type": 3,
+              "ActionRules": [],
+              "Endpoint": {
+                "ActionEndpointId": 0,
+                "ActionEndpointURL": "file://C:/temp/dx-e2e/out/ai-invoices.csv"
+              },
+              "PipelineStageActions": [],
+              "SubPipelines": [],
+              "Parameters": {
+                "OutputFormat": "csv"
+              }
+            },
+            "ExecutionOrder": 1
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,103 @@
+{
+  "DataExchangeProfileName": "Stock File To Store Page",
+  "ProfileId": "stock-store-page",
+  "IsActive": true,
+  "DataSource": {
+    "DataSourceName": "live-stock.csv",
+    "MediumType": "File",
+    "MediumConfigurationJson": "{\"filePath\": \"C:/Source/stepflow-builder/StepFunctionsApp/dataexchange/live-stock.csv\"}"
+  },
+  "Pipeline": {
+    "PipelineName": "StockToStorePage",
+    "Description": "Map customer stock CSV to the internal store-page schema, enrich WEB-BREAD-CRUM via a category lookup API, and dispatch each row into the store-page inventory API.",
+    "PipelineStages": [
+      {
+        "StageType": "DataTreatment",
+        "ExecutionOrder": 1,
+        "PipelineStageActions": [
+          {
+            "ExecutionOrder": 1,
+            "Action": {
+              "ActionName": "MapToStorePageSchema",
+              "Type": "Transformation",
+              "SchemaMap": {
+                "AttributeMappings": [
+                  {
+                    "TargetAttribute": { "AttributeName": "SKU-ID" },
+                    "SourceAttributes": [{ "AttributeName": "SKU-ID" }],
+                    "TransformType": "DirectCopy",
+                    "MergeStrategy": "OverwriteExisting"
+                  },
+                  {
+                    "TargetAttribute": { "AttributeName": "PRODUCT_ID" },
+                    "SourceAttributes": [{ "AttributeName": "PRODUCT-CODE" }],
+                    "TransformType": "DirectCopy",
+                    "MergeStrategy": "OverwriteExisting"
+                  },
+                  {
+                    "TargetAttribute": { "AttributeName": "CATEGORY" },
+                    "SourceAttributes": [{ "AttributeName": "PRODUCT-CATAGORY" }],
+                    "TransformType": "Trim",
+                    "MergeStrategy": "OverwriteExisting"
+                  },
+                  {
+                    "TargetAttribute": { "AttributeName": "PRODUCTNAME" },
+                    "SourceAttributes": [{ "AttributeName": "PRODUCT-NAME" }],
+                    "TransformType": "DirectCopy",
+                    "MergeStrategy": "OverwriteExisting"
+                  },
+                  {
+                    "TargetAttribute": { "AttributeName": "QTY" },
+                    "SourceAttributes": [{ "AttributeName": "QTY" }],
+                    "TransformType": "DirectCopy",
+                    "MergeStrategy": "OverwriteExisting"
+                  },
+                  {
+                    "TargetAttribute": { "AttributeName": "PRICE" },
+                    "SourceAttributes": [{ "AttributeName": "RETAIL-PRICE" }],
+                    "TransformType": "DirectCopy",
+                    "MergeStrategy": "OverwriteExisting"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "StageType": "DataTreatment",
+        "ExecutionOrder": 2,
+        "PipelineStageActions": [
+          {
+            "ExecutionOrder": 1,
+            "Action": {
+              "ActionName": "EnrichWebBreadCrum",
+              "Type": "EnrichmentLookup",
+              "OutputParameterName": "WEB-BREAD-CRUM",
+              "Lookup": {
+                "LookupName": "category-breadcrumb",
+                "LookupEndpoint": "http://localhost:5095/api/fake/categories/breadcrumb?category={CATEGORY}",
+                "Type": "Api",
+                "ValueFieldToReturn": "breadcrumb"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "StageType": "PreRouting",
+        "ExecutionOrder": 3,
+        "PipelineStageActions": [
+          {
+            "ExecutionOrder": 1,
+            "Action": {
+              "ActionName": "AddStockItemsToStorePage",
+              "Type": "Dispatch",
+              "Endpoint": { "ActionEndpointURL": "http://localhost:5095/api/fake/store-page/items" }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

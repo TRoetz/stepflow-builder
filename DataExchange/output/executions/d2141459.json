@@ -1,0 +1,79 @@
+{
+  "success": true,
+  "executionId": "d2141459",
+  "profileId": "supplier-invoice-import",
+  "source": "file:C:/temp/dx-e2e/in/supplier-invoices.csv",
+  "rowsIn": 3,
+  "rowsOut": 3,
+  "rejectedCount": 0,
+  "rejected": [],
+  "enrichedRows": [
+    {
+      "invoice_id": "INV-1001",
+      "supplier": "acme widgets",
+      "total": 1500.75,
+      "currency": "usd",
+      "InvoiceId": "INV-1001",
+      "SupplierName": "ACME WIDGETS",
+      "TotalAmount": 1500.75,
+      "CurrencyCode": "USD"
+    },
+    {
+      "invoice_id": "INV-1002",
+      "supplier": "globex corp",
+      "total": 890.0,
+      "currency": "eur",
+      "InvoiceId": "INV-1002",
+      "SupplierName": "GLOBEX CORP",
+      "TotalAmount": 890.0,
+      "CurrencyCode": "EUR"
+    },
+    {
+      "invoice_id": "INV-1003",
+      "supplier": "initech labs",
+      "total": 42.1,
+      "currency": "gbp",
+      "InvoiceId": "INV-1003",
+      "SupplierName": "INITECH LABS",
+      "TotalAmount": 42.1,
+      "CurrencyCode": "GBP"
+    }
+  ],
+  "stages": [
+    {
+      "pipeline": null,
+      "stageType": "DataTreatment",
+      "order": 1,
+      "actions": [
+        {
+          "name": "Map and Transform Invoice Data",
+          "type": "Transformation",
+          "messages": []
+        }
+      ]
+    },
+    {
+      "pipeline": null,
+      "stageType": "PostRouting",
+      "order": 2,
+      "actions": [
+        {
+          "name": "Dispatch Processed Invoices",
+          "type": "Dispatch",
+          "messages": [
+            "wrote 3 rows to file://C:/temp/dx-e2e/out/ai-invoices.csv"
+          ]
+        }
+      ]
+    }
+  ],
+  "dispatched": [
+    {
+      "endpoint": "file://C:/temp/dx-e2e/out/ai-invoices.csv",
+      "method": "FILE",
+      "rows": 3,
+      "ok": 3,
+      "failed": 0
+    }
+  ]
+}

@@ -16,6 +16,7 @@ namespace Stepflow_Builder_Tests.Controllers
     //   GET  /api/fake/weather?city=&units=          weather report JSON
     //   GET  /api/fake/gold-price?currency=&amount=  gold price per troy ounce
     //   GET  /api/fake/exchange-rate?from=&to=&amt=  currency conversion (NZD/USD/...)
+    //   GET  /api/fake/categories/breadcrumb?category=  product category to web breadcrumb
     //   GET  /api/fake/json/records?count=&seed=     large-volume nested JSON dataset
     //   GET  /api/fake/xml/invoices?count=&seed=     XML invoice document
     //   POST /api/fake/csv/import                    CSV file import (multipart, text/csv or JSON body)
@@ -177,6 +178,28 @@ namespace Stepflow_Builder_Tests.Controllers
                 ["convertedAmount"] = Math.Round(value * rate, 4),
                 ["timestamp"] = "2026-08-19T00:00:00Z" // fixed for determinism
             });
+        }
+
+        // ── Category breadcrumbs (store-page reference data) ───────────────────────
+
+        /// <summary>Deterministic web breadcrumb per product category.</summary>
+        private static readonly Dictionary<string, string> CategoryBreadcrumbs = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Electronics"] = "Home > Electronics",
+            ["Kitchen & Dining"] = "Home > Kitchen & Dining",
+            ["Garden & Outdoor"] = "Home > Garden & Outdoor",
+            ["Toys & Games"] = "Home > Toys & Games",
+            ["Sports & Fitness"] = "Home > Sports & Fitness"
+        };
+
+        [HttpGet("categories/breadcrumb")]
+        public IActionResult GetCategoryBreadcrumb([FromQuery] string? category)
+        {
+            var c = (category ?? "").Trim();
+            if (string.IsNullOrEmpty(c)) return BadRequest(new { error = "Missing 'category' query parameter." });
+            if (!CategoryBreadcrumbs.TryGetValue(c, out var breadcrumb))
+                return NotFound(new { error = $"Unknown category '{c}'.", known = CategoryBreadcrumbs.Keys.OrderBy(k => k).ToArray() });
+            return Ok(new { category = c, breadcrumb });
         }
 
         // ── Large-volume JSON dataset ─────────────────────────────────────────────

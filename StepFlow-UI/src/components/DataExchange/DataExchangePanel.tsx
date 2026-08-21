@@ -2,6 +2,8 @@ import { useState, useCallback, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import {
   ArrowLeftRight,
+  Maximize2,
+  Minimize2,
   X,
   Search,
   Plus,
@@ -12,14 +14,23 @@ import {
   FileJson,
   CheckCircle2,
   AlertCircle,
+  Sparkles,
 } from 'lucide-react';
-import { DataExchangeService, type DataExchangeProfile, type ExecutionRecord } from '@services/dataExchangeService';
+import { DataExchangeService, type DataExchangeProfile, type ExecutionRecord, type ProfileListItem } from '@services/dataExchangeService';
+import { PipelineVisualizer } from './PipelineVisualizer';
+import { SchemaEditor } from './SchemaEditor';
+import { AiBuildModal } from './AiBuildModal';
 import { showToast } from '@stores/useToastStore';
 
 type View = 'profiles' | 'monitor';
 
 const NEW_PROFILE_TEMPLATE = JSON.stringify(
-  { name: 'New Profile', description: '', dataSourceId: null, pipeline: [] },
+  {
+    dataExchangeProfileName: 'New Profile',
+    isActive: true,
+    dataSource: { mediumType: 3 },
+    pipeline: { pipelineStages: [] }
+  },
   null,
   2
 );
@@ -30,14 +41,14 @@ function errorMessage(err: unknown): string {
 function isProfile(value: unknown): value is DataExchangeProfile {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>; // JSON.parse boundary — shape checked below
-  return typeof record.name === 'string' && record.name.length > 0;
+  return typeof record.dataExchangeProfileName === 'string' && record.dataExchangeProfileName.length > 0;
 }
 
 export function DataExchangePanel({ onClose }: { onClose: () => void }) {
   const [view, setView] = useState<View>('profiles');
 
   // ── Profiles state ────────────────────────────────────────────────────────
-  const [profiles, setProfiles] = useState<DataExchangeProfile[]>([]);
+  const [profiles, setProfiles] = useState<ProfileListItem[]>([]);
   const [filter, setFilter] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [jsonText, setJsonText] = useState(NEW_PROFILE_TEMPLATE);
@@ -45,9 +56,25 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState<'save' | 'run' | null>(null);
   const [lastResult, setLastResult] = useState<string | null>(null);
 
+  // ── Visual editing (schema editor / AI build) ─────────────────────────────
+  const [editorMode, setEditorMode] = useState<'json' | 'schema'>('json');
+  const [aiBuildOpen, setAiBuildOpen] = useState(false);
+
   // ── Monitor state ─────────────────────────────────────────────────────────
   const [executions, setExecutions] = useState<ExecutionRecord[]>([]);
   const [expandedExecutionId, setExpandedExecutionId] = useState<string | null>(null);
+
+  // ── Panel layout ──────────────────────────────────────────────────────────
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setExpanded(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [expanded]);
 
   const loadProfiles = useCallback(async () => {
     try {
@@ -86,9 +113,9 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
 
   // ── Profile actions ───────────────────────────────────────────────────────
   const handleSelectProfile = useCallback(
-    (profile: DataExchangeProfile) => {
-      setSelectedId(profile.id ?? null);
-      setJsonText(JSON.stringify(profile, null, 2));
+    (item: ProfileListItem) => {
+      setSelectedId(item.id);
+      setJsonText(JSON.stringify(item.profile, null, 2));
       setIsDirty(false);
       setLastResult(null);
     },
@@ -102,8 +129,14 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
     setLastResult(null);
   }, []);
 
+  const applyGeneratedJson = useCallback((text: string) => {
+    setJsonText(text);
+    setIsDirty(true);
+    setEditorMode('schema'); // show the generated structure immediately
+  }, []);
+
   const handleDeleteProfile = useCallback(
-    async (profile: DataExchangeProfile) => {
+    async (profile: ProfileListItem) => {
       if (!profile.id) return;
       if (!window.confirm(`Delete profile "${profile.name}"?`)) return;
       try {
@@ -130,7 +163,7 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
       const isObject = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed);
       showToast({
         type: 'error',
-        message: isObject ? 'Profile requires a "name" string field' : 'Profile must be a JSON object with a name',
+        message: isObject ? 'Profile requires a "dataExchangeProfileName" string field' : 'Profile must be a JSON object with a dataExchangeProfileName',
       });
       return null;
     }
@@ -142,8 +175,8 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
     if (!profile) return;
     setBusy('save');
     try {
-      const saved = await DataExchangeService.saveProfile({ ...profile, id: selectedId ?? undefined });
-      showToast({ type: 'success', message: `Profile "${saved.name}" saved` });
+      const saved = await DataExchangeService.saveProfile(profile);
+      showToast({ type: 'success', message: `Profile "${profile.dataExchangeProfileName}" saved` });
       setSelectedId(saved.id ?? null);
       setIsDirty(false);
       void loadProfiles();
@@ -152,7 +185,7 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
     } finally {
       setBusy(null);
     }
-  }, [parseEditorJson, selectedId, loadProfiles]);
+  }, [parseEditorJson, loadProfiles]);
 
   const handleRun = useCallback(async () => {
     if (!selectedProfile?.id) {
@@ -176,19 +209,28 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
   );
 
   return (
-    <div className="w-[560px] shrink-0 flex flex-col h-full bg-gray-900 border-l border-gray-800">
+    <div className={expanded ? 'fixed inset-0 z-50 flex flex-col bg-gray-900' : 'w-[560px] shrink-0 flex flex-col h-full bg-gray-900 border-l border-gray-800'}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
         <div className="flex items-center gap-2">
           <ArrowLeftRight className="w-4 h-4 text-indigo-400" />
           <span className="text-sm font-semibold text-gray-200">Data Exchange</span>
         </div>
-        <button
-          onClick={onClose}
-          className="p-1 rounded-md hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-colors"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            title={expanded ? 'Restore panel (Esc)' : 'Expand to full canvas'}
+            className="p-1 rounded-md hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            {expanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+          </button>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-md hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* View switcher */}
@@ -235,6 +277,13 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
                 <Plus className="w-3.5 h-3.5" />
                 New Profile
               </button>
+              <button
+                onClick={() => setAiBuildOpen(true)}
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-indigo-500/40 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 text-xs font-semibold transition-colors"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                AI Build
+              </button>
             </div>
             <div className="flex-1 overflow-y-auto">
               {filteredProfiles.length === 0 ? (
@@ -242,21 +291,22 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
                   No profiles yet. Create one to map an external file schema into your internal model.
                 </div>
               ) : (
-                filteredProfiles.map((profile) => {
-                  const isSelected = selectedId === profile.id;
+                filteredProfiles.map((item) => {
+                  const isSelected = selectedId === item.id;
+                  const sourceName = item.profile.dataSource?.dataSourceName;
                   return (
                     <button
-                      key={profile.id}
-                      onClick={() => handleSelectProfile(profile)}
+                      key={item.id}
+                      onClick={() => handleSelectProfile(item)}
                       className={`w-full text-left px-3 py-2.5 flex items-center justify-between gap-2 border-b border-gray-800/40 transition-colors ${
                         isSelected ? 'bg-indigo-600/10' : 'hover:bg-gray-800/40'
                       }`}
                     >
                       <div className="min-w-0 flex-1">
-                        <div className="text-xs font-semibold text-gray-200 truncate">{profile.name}</div>
-                        {profile.dataSourceId ? (
+                        <div className="text-xs font-semibold text-gray-200 truncate">{item.name}</div>
+                        {typeof sourceName === 'string' ? (
                           <div className="text-[10px] text-gray-500 font-mono truncate">
-                            source: {String(profile.dataSourceId)}
+                            source: {sourceName}
                           </div>
                         ) : null}
                       </div>
@@ -266,12 +316,12 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
                         title="Delete profile"
                         onClick={(e) => {
                           e.stopPropagation();
-                          void handleDeleteProfile(profile);
+                          void handleDeleteProfile(item);
                         }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.stopPropagation();
-                            void handleDeleteProfile(profile);
+                            void handleDeleteProfile(item);
                           }
                         }}
                         className="p-1 rounded text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
@@ -290,32 +340,69 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
             {selectedProfile || isDirty ? (
               <>
                 <div className="px-3 py-2 border-b border-gray-800/60 flex items-center gap-2">
-                  <FileJson className="w-3.5 h-3.5 text-indigo-400" />
-                  <span className="text-xs font-semibold text-gray-300 truncate">
-                    {selectedProfile ? selectedProfile.name : 'New Profile (unsaved)'}
-                  </span>
-                  {isDirty && <span className="text-[10px] text-amber-400">• unsaved</span>}
+                  <FileJson className="w-4 h-4 text-indigo-400 shrink-0" />
+                  <span className="text-xs font-semibold text-gray-200 truncate">{selectedProfile?.name ?? 'New Profile'}</span>
+                  {isDirty && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold shrink-0">UNSAVED</span>
+                  )}
+                  <div className="ml-auto flex items-center gap-1.5">
+                    {selectedProfile && (
+                      <button
+                        onClick={() => setAiBuildOpen(true)}
+                        title="Refine this profile with AI"
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg border border-indigo-500/40 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 text-[10px] font-semibold transition-colors"
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        AI Build
+                      </button>
+                    )}
+                    <div className="flex rounded-lg border border-gray-700/60 overflow-hidden">
+                      {(['json', 'schema'] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => setEditorMode(mode)}
+                          title={mode === 'json' ? 'Edit raw JSON' : 'Visual schema editing'}
+                          className={`px-2 py-1 text-[10px] font-semibold transition-colors ${editorMode === mode ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+                        >
+                          {mode.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-                <div className="flex-1 min-h-0">
-                  <Editor
-                    key={selectedId ?? 'new'}
-                    height="100%"
-                    defaultLanguage="json"
-                    theme="vs-dark"
-                    value={jsonText}
-                    onChange={(value) => {
-                      setJsonText(value ?? '');
+                <div className="max-h-40 overflow-y-auto border-b border-gray-800/60 px-3 py-2">
+                  <PipelineVisualizer jsonText={jsonText} />
+                </div>
+                {editorMode === 'schema' ? (
+                  <SchemaEditor
+                    jsonText={jsonText}
+                    onChange={(text) => {
+                      setJsonText(text);
                       setIsDirty(true);
                     }}
-                    options={{
-                      minimap: { enabled: false },
-                      fontSize: 12,
-                      scrollBeyondLastLine: false,
-                      automaticLayout: true,
-                      tabSize: 2,
-                    }}
                   />
-                </div>
+                ) : (
+                  <div className="flex-1 min-h-0">
+                    <Editor
+                      key={selectedId ?? 'new'}
+                      height="100%"
+                      defaultLanguage="json"
+                      theme="vs-dark"
+                      value={jsonText}
+                      onChange={(value) => {
+                        setJsonText(value ?? '');
+                        setIsDirty(true);
+                      }}
+                      options={{
+                        minimap: { enabled: false },
+                        fontSize: 12,
+                        scrollBeyondLastLine: false,
+                        automaticLayout: true,
+                        tabSize: 2,
+                      }}
+                    />
+                  </div>
+                )}
                 <div className="px-3 py-2 border-t border-gray-800 flex items-center gap-2">
                   <button
                     onClick={() => void handleSave()}
@@ -341,10 +428,23 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center px-6">
-                <p className="text-xs text-gray-500 leading-relaxed">
-                  Select a profile on the left, or create a new one. Profiles define how an external file schema is
-                  mapped into your internal model and enriched via lookups before downstream distribution.
-                </p>
+                <div className="space-y-2 text-center">
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    Select a profile on the left, or create a new one. Profiles define how an external file schema is
+                    mapped into your internal model and enriched via lookups before downstream distribution.
+                  </p>
+                  <button
+                    onClick={() => setAiBuildOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-500/40 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 text-xs font-semibold transition-colors"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Build one with AI
+                  </button>
+                  <p className="text-[10px] text-gray-600">
+                    Invoke from a flow with Resource{' '}
+                    <code className="font-mono text-indigo-300/80">dataexchange://&lt;profileId&gt;</code>
+                  </p>
+                </div>
               </div>
             )}
 
@@ -370,12 +470,12 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
               will appear here within one poll interval.
             </div>
           ) : (
-            executions.map((exec) => {
+            executions.map((exec, i) => {
               const isExpanded = expandedExecutionId === exec.executionId;
               return (
-                <div key={exec.executionId} className="border-b border-gray-800/40">
+                <div key={exec.executionId ?? i} className="border-b border-gray-800/40">
                   <button
-                    onClick={() => setExpandedExecutionId(isExpanded ? null : exec.executionId)}
+                    onClick={() => setExpandedExecutionId(isExpanded ? null : exec.executionId ?? null)}
                     className="w-full text-left px-4 py-2.5 flex items-center gap-3 hover:bg-gray-800/40 transition-colors"
                   >
                     {exec.success ? (
@@ -384,10 +484,11 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
                       <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
                     )}
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs font-semibold text-gray-200 truncate">{exec.profileName}</div>
+                      <div className="text-xs font-semibold text-gray-200 truncate">{exec.profileId ?? 'unknown profile'}</div>
                       <div className="text-[10px] text-gray-500 font-mono mt-0.5 truncate">
-                        {new Date(exec.startedAt).toLocaleString()} · {exec.durationMs}ms
-                        {exec.sourceFile ? ` · ${exec.sourceFile}` : ''}
+                        {typeof exec.rowsIn === 'number' && typeof exec.rowsOut === 'number' ? `${exec.rowsIn} → ${exec.rowsOut} rows` : ''}
+                        {typeof exec.rejectedCount === 'number' && exec.rejectedCount > 0 ? ` · ${exec.rejectedCount} rejected` : ''}
+                        {(exec.source ?? exec.sourceFile) ? ` · ${exec.source ?? exec.sourceFile}` : ''}
                       </div>
                     </div>
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 bg-gray-800 text-gray-400">
@@ -402,7 +503,7 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
                         </div>
                       )}
                       <pre className="font-mono text-[10px] leading-normal text-gray-300 bg-black/30 border border-gray-800 rounded-lg p-2.5 max-h-64 overflow-y-auto whitespace-pre-wrap break-all">
-                        {JSON.stringify(exec.result ?? null, null, 2)}
+                        {JSON.stringify(exec, null, 2)}
                       </pre>
                     </div>
                   )}
@@ -418,6 +519,15 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
         <Activity className="w-3 h-3" />
         {view === 'monitor' ? 'Polling /api/data-exchange/executions every 5s' : `${profiles.length} profile(s) on file`}
       </div>
+      <AiBuildModal
+        open={aiBuildOpen}
+        baseProfile={selectedProfile?.profile ?? null}
+        onClose={() => setAiBuildOpen(false)}
+        onGenerated={(text) => {
+          applyGeneratedJson(text);
+          showToast({ type: 'success', message: 'AI draft generated — review, then Save' });
+        }}
+      />
     </div>
   );
 }

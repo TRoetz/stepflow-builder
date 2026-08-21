@@ -1,3 +1,4 @@
+using System.Data;
 using System.Globalization;
 using System.Net;
 using Microsoft.AspNetCore.Hosting;
@@ -249,6 +250,99 @@ public sealed class DataExchangePipelineTests : IClassFixture<DataExchangePipeli
         {
             Directory.Delete(workDir, recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task Transformation_ResolvesTargetByImportSchemaAttributeId()
+    {
+        // Proves schemaMap targets can be referenced by entity attribute ID instead of name: the executor
+        // builds an id->name universe from DataSource.ImportSchema, and ApplySchemaMap falls back to
+        // ResolveById when TargetAttribute is absent.
+        const string profileJson = """
+            {
+              "DataExchangeProfileName": "ID Mapping Proof",
+              "IsActive": true,
+              "DataSource": {
+                "DataSourceName": "inline-rows",
+                "MediumType": "File",
+                "ImportSchema": {
+                  "AttributeDomainName": "Internal Order Schema",
+                  "Version": "1",
+                  "Attributes": [
+                    { "EntityAttributeId": 10, "AttributeName": "OrderNumber", "DataType": "String" },
+                    { "EntityAttributeId": 20, "AttributeName": "CustomerRef", "DataType": "String" }
+                  ]
+                }
+              },
+              "Pipeline": {
+                "PipelineName": "IdMappingProof",
+                "PipelineStages": [
+                  {
+                    "StageType": "DataTreatment",
+                    "ExecutionOrder": 1,
+                    "PipelineStageActions": [
+                      {
+                        "ExecutionOrder": 1,
+                        "Action": {
+                          "ActionName": "MapByIdsOnly",
+                          "Type": "Transformation",
+                          "SchemaMap": {
+                            "AttributeMappings": [
+                              { "TargetAttributeId": 10, "SourceAttributes": [{ "AttributeName": "OrderID" }], "TransformType": "DirectCopy", "MergeStrategy": "OverwriteExisting" },
+                              { "TargetAttributeId": 20, "SourceAttributes": [{ "AttributeName": "CustomerCode" }], "TransformType": "ToUpper", "MergeStrategy": "OverwriteExisting" }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+            """;
+
+        var profile = JsonConvert.DeserializeObject<DataExchangeProfile>(profileJson)!;
+        var executor = _factory.Services.GetRequiredService<DataExchangeExecutor>();
+        var input = new JObject
+        {
+            ["rows"] = new JArray(
+                new JObject { ["OrderID"] = "ORD-9001", ["CustomerCode"] = "cust-x" },
+                new JObject { ["OrderID"] = "ORD-9002", ["CustomerCode"] = "cust-y" })
+        };
+
+        var result = await executor.ExecuteProfileAsync(profile, input);
+
+        Assert.True((bool)result["success"]!, "pipeline failed: " + result.ToString(Formatting.Indented));
+        Assert.Equal("input.rows", (string)result["source"]!);
+        Assert.Equal(2, (int)result["rowsOut"]!);
+
+        var rows = (JArray)result["enrichedRows"]!;
+        // Targets resolved by ID from ImportSchema: 10 -> OrderNumber, 20 -> CustomerRef.
+        Assert.Equal("ORD-9001", (string)rows[0]["OrderNumber"]!);
+        Assert.Equal("CUST-X", (string)rows[0]["CustomerRef"]!);
+        Assert.Equal("ORD-9002", (string)rows[1]["OrderNumber"]!);
+        Assert.Equal("CUST-Y", (string)rows[1]["CustomerRef"]!);
+    }
+
+    [Fact]
+    public void DataTableToRows_MapsColumnsAndDbNull()
+    {
+        var table = new DataTable();
+        table.Columns.Add("OrderNumber", typeof(string));
+        table.Columns.Add("AmountUSD", typeof(decimal));
+        table.Columns.Add("RegionName", typeof(string));
+
+        table.Rows.Add("ORD-1", 9.5m, DBNull.Value);
+        table.Rows.Add("ORD-2", DBNull.Value, "North");
+
+        var rows = DataExchangeExecutor.DataTableToRows(table);
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal("ORD-1", (string)rows[0]["OrderNumber"]!);
+        Assert.Equal(9.5m, (decimal)rows[0]["AmountUSD"]!);
+        Assert.Equal(JTokenType.Null, rows[0]["RegionName"]!.Type);
+        Assert.Equal(JTokenType.Null, rows[1]["AmountUSD"]!.Type);
+        Assert.Equal("North", (string)rows[1]["RegionName"]!);
     }
 
     private async Task<double> ConvertedAmountAsync(string from, double amount)

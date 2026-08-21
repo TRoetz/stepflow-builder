@@ -1,7 +1,9 @@
+using System.Data;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using Microsoft.Data.SqlClient;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using StepFlow.DataModel.Entities;
@@ -149,6 +151,25 @@ public class DataExchangeExecutor
             return (ToRowObjects(explicitRows), "input.rows");
 
         var mediumConfig = ParseMediumConfiguration(profile.DataSource);
+
+        // Database source - run the configured query and materialize the result set.
+        if (profile.DataSource?.MediumType == DataSourceMediumType.Database)
+        {
+            var connectionString = mediumConfig?["connectionString"]?.ToString();
+            var query = mediumConfig?["query"]?.ToString();
+            if (string.IsNullOrWhiteSpace(connectionString))
+                throw new ArgumentException("Database source requires MediumConfigurationJson.connectionString.");
+            if (string.IsNullOrWhiteSpace(query))
+                throw new ArgumentException("Database source requires MediumConfigurationJson.query.");
+
+            using var connection = new SqlConnection(connectionString!);
+            await connection.OpenAsync(ct);
+            using var command = new SqlCommand(query!, connection) { CommandTimeout = 120 };
+            using var adapter = new SqlDataAdapter(command);
+            var resultTable = new DataTable();
+            adapter.Fill(resultTable);
+            return (DataTableToRows(resultTable), "database");
+        }
         var filePath = input["filePath"]?.ToString() ?? mediumConfig?["filePath"]?.ToString();
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("No 'rows' in input and no file path configured (input.filePath or DataSource.MediumConfigurationJson.filePath).");
@@ -195,6 +216,20 @@ public class DataExchangeExecutor
             var row = new JObject();
             foreach (var kv in d)
                 row[kv.Key] = ToJToken(kv.Value);
+            rows.Add(row);
+        }
+        return rows;
+    }
+
+    /// <summary>Converts a materialized result set into row objects, mapping DBNull to null.</summary>
+    public static JArray DataTableToRows(DataTable table)
+    {
+        var rows = new JArray();
+        foreach (DataRow dr in table.Rows)
+        {
+            var row = new JObject();
+            foreach (DataColumn col in table.Columns)
+                row[col.ColumnName] = dr[col] is DBNull ? null : ToJToken(dr[col]);
             rows.Add(row);
         }
         return rows;
@@ -399,9 +434,11 @@ public class DataExchangeExecutor
 
         foreach (var row in rows)
         {
-            var renderedUrl = RenderTokens(lookup.LookupEndpoint!, (JObject)row);
-            var renderedTemplate = string.IsNullOrWhiteSpace(lookup.QueryOrBodyTemplate) ? null : RenderTokens(lookup.QueryOrBodyTemplate!, (JObject)row);
-            var method = (action.Parameters?.GetValueOrDefault("Method") ?? (renderedTemplate != null ? "POST" : "GET")).ToUpperInvariant();
+            var renderedUrl = RenderUrlTokens(lookup.LookupEndpoint!, (JObject)row);
+            var rawTemplate = string.IsNullOrWhiteSpace(lookup.QueryOrBodyTemplate) ? null : lookup.QueryOrBodyTemplate;
+            var method = (action.Parameters?.GetValueOrDefault("Method") ?? (rawTemplate != null ? "POST" : "GET")).ToUpperInvariant();
+            // Query strings need percent-encoded values; POST bodies keep raw values.
+            var renderedTemplate = rawTemplate == null ? null : (method == "GET" ? RenderUrlTokens(rawTemplate, (JObject)row) : RenderTokens(rawTemplate, (JObject)row));
 
             var cacheKey = $"{method} {renderedUrl} {(renderedTemplate ?? "")}";
             if (!cache.TryGetValue(cacheKey, out JToken? response))
@@ -491,6 +528,10 @@ public class DataExchangeExecutor
     /// <summary>Resolves {Field} tokens against row values; missing fields render as empty strings.</summary>
     private static string RenderTokens(string template, JObject row) =>
         FieldToken.Replace(template, m => ToPlainString(row[m.Groups[1].Value.Trim()]) ?? "");
+
+    /// <summary>Resolves {Field} tokens against row values for URLs; substituted values are percent-encoded.</summary>
+    private static string RenderUrlTokens(string template, JObject row) =>
+        FieldToken.Replace(template, m => Uri.EscapeDataString(ToPlainString(row[m.Groups[1].Value.Trim()]) ?? ""));
 
     private static string AppendQuery(string url, string query) => url + (url.Contains('?') ? "&" : "?") + query;
 

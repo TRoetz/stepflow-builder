@@ -9,6 +9,7 @@ using StepFunctionsApp.Controllers;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 using StepFunctionsApp.DataExchange;
 namespace StepFunctionsApp;
 
@@ -36,7 +37,8 @@ public class Startup
     public void ConfigureServices(IServiceCollection services)
     {
         services.AddControllersWithViews()
-            .AddNewtonsoftJson();
+            .AddNewtonsoftJson(options =>
+                options.SerializerSettings.ContractResolver = new KeyPreservingCamelCaseContractResolver());
         services.AddRazorPages();
 
         services.AddHttpClient();
@@ -164,5 +166,13 @@ public class Startup
         }
         
         return "<html><body>Builder HTML not found - please run 'npm run build' first</body></html>";
+    }
+
+    /// <summary>
+    /// camelCase property names, but leaves dictionary keys (state names) untouched.
+    /// </summary>
+    private sealed class KeyPreservingCamelCaseContractResolver : CamelCasePropertyNamesContractResolver
+    {
+        protected override string ResolveDictionaryKey(string key) => key;
     }
 }

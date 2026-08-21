@@ -1,0 +1,88 @@
+{
+  "success": true,
+  "executionId": "42869e1c",
+  "profileId": "stock-store-page",
+  "source": "file:C:/Source/stepflow-builder/StepFunctionsApp/dataexchange/live-stock.csv",
+  "rowsIn": 2,
+  "rowsOut": 2,
+  "rejectedCount": 0,
+  "rejected": [],
+  "enrichedRows": [
+    {
+      "SKU-ID": "SKU-701",
+      "PRODUCT-CODE": "PC-701",
+      "PRODUCT-CATAGORY": "Electronics",
+      "PRODUCT-NAME": "USB-C Hub 7-in-1",
+      "QTY": 25,
+      "RETAIL-PRICE": 49.99,
+      "PRODUCT_ID": "PC-701",
+      "CATEGORY": "Electronics",
+      "PRODUCTNAME": "USB-C Hub 7-in-1",
+      "PRICE": 49.99,
+      "WEB-BREAD-CRUM": "Home > Electronics"
+    },
+    {
+      "SKU-ID": "SKU-702",
+      "PRODUCT-CODE": "PC-702",
+      "PRODUCT-CATAGORY": "Kitchen & Dining",
+      "PRODUCT-NAME": "Cast Iron Skillet 26cm",
+      "QTY": 10,
+      "RETAIL-PRICE": 79.0,
+      "PRODUCT_ID": "PC-702",
+      "CATEGORY": "Kitchen & Dining",
+      "PRODUCTNAME": "Cast Iron Skillet 26cm",
+      "PRICE": 79.0,
+      "WEB-BREAD-CRUM": "Home > Kitchen & Dining"
+    }
+  ],
+  "stages": [
+    {
+      "pipeline": "StockToStorePage",
+      "stageType": "DataTreatment",
+      "order": 1,
+      "actions": [
+        {
+          "name": "MapToStorePageSchema",
+          "type": "Transformation",
+          "messages": []
+        }
+      ]
+    },
+    {
+      "pipeline": "StockToStorePage",
+      "stageType": "DataTreatment",
+      "order": 2,
+      "actions": [
+        {
+          "name": "EnrichWebBreadCrum",
+          "type": "EnrichmentLookup",
+          "messages": []
+        }
+      ]
+    },
+    {
+      "pipeline": "StockToStorePage",
+      "stageType": "PreRouting",
+      "order": 3,
+      "actions": [
+        {
+          "name": "AddStockItemsToStorePage",
+          "type": "Dispatch",
+          "messages": []
+        }
+      ]
+    }
+  ],
+  "dispatched": [
+    {
+      "endpoint": "http://localhost:5095/api/fake/store-page/items",
+      "method": "POST",
+      "rows": 2,
+      "ok": 2,
+      "failed": 0,
+      "statuses": [
+        200
+      ]
+    }
+  ]
+}

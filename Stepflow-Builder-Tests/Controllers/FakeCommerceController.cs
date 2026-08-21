@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json.Linq;
@@ -44,6 +45,19 @@ public sealed class FakeCommerceStore
 
     private readonly List<SentEmail> _outbox = new();
     private int _counter;
+
+    public sealed class StoreItem
+    {
+        public string SkuId { get; set; } = "";
+        public string? ProductId { get; set; }
+        public string? Category { get; set; }
+        public string? WebBreadCrum { get; set; }
+        public string? ProductName { get; set; }
+        public int Qty { get; set; }
+        public double Price { get; set; }
+    }
+
+    private readonly ConcurrentDictionary<string, StoreItem> _storePageItems = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Next deterministic id for a prefix (TXN-, RES-, RCPT-, MSG-, PICKUP-).</summary>
     public string NextId(string prefix) => $"{prefix}{Interlocked.Increment(ref _counter):D6}";
@@ -208,6 +222,30 @@ public sealed class FakeCommerceStore
                 ? _outbox.ToList()
                 : _outbox.Where(e => e.To.Equals(to, StringComparison.OrdinalIgnoreCase)).ToList();
     }
+
+    /// <summary>Adds or updates a stock item on the store page (upsert by SKU-ID). Returns the stored item.</summary>
+    public StoreItem UpsertStoreItem(JObject body)
+    {
+        var item = new StoreItem
+        {
+            SkuId = (string?)body["SKU-ID"] ?? "",
+            ProductId = (string?)body["PRODUCT_ID"],
+            Category = (string?)body["CATEGORY"],
+            WebBreadCrum = (string?)body["WEB-BREAD-CRUM"],
+            ProductName = (string?)body["PRODUCTNAME"],
+            Qty = body["QTY"] is JValue qty ? Convert.ToInt32(qty, CultureInfo.InvariantCulture) : 0,
+            Price = body["PRICE"] is JValue price ? Convert.ToDouble(price, CultureInfo.InvariantCulture) : 0.0
+        };
+        if (string.IsNullOrEmpty(item.SkuId)) throw new ArgumentException("Missing 'SKU-ID' in store-page item payload.");
+        _storePageItems[item.SkuId] = item;
+        return item;
+    }
+
+    /// <summary>Current store-page items, optionally filtered by SKU-ID. Pure read.</summary>
+    public List<StoreItem> GetStoreItems(string? skuId) =>
+        string.IsNullOrWhiteSpace(skuId)
+            ? _storePageItems.Values.OrderBy(i => i.SkuId, StringComparer.OrdinalIgnoreCase).ToList()
+            : _storePageItems.TryGetValue(skuId!, out var one) ? new List<StoreItem> { one } : new();
 }
 
 /// <summary>Minimal single-page PDF writer - enough for a valid, parseable receipt document.</summary>
@@ -267,9 +305,10 @@ internal static class PdfWriter
 }
 
 /// <summary>
-/// Fake commerce endpoints for flow testing: inventory check/reserve/release/deduct, card payments,
-/// PDF receipts, an observable email outbox and carrier pickup scheduling. All state is in-memory
-/// (see <see cref="FakeCommerceStore"/>); observation endpoints let tests assert on side effects.
+/// Fake commerce endpoints for flow testing: inventory check/reserve/release/deduct, store-page stock
+/// items (upsert + observation), card payments, PDF receipts, an observable email outbox and carrier
+/// pickup scheduling. All state is in-memory (see <see cref="FakeCommerceStore"/>); observation
+/// endpoints let tests assert on side effects.
 /// </summary>
 [ApiController]
 public class FakeCommerceController : ControllerBase
@@ -320,6 +359,20 @@ public class FakeCommerceController : ControllerBase
         var id = (string?)body["reservationId"] ?? "";
         if (!_store.Deduct(id)) return Conflict(new { error = "Reservation unknown or already consumed", reservationId = id });
         return Ok(new { deducted = true, orderId = (string?)body["orderId"], reservationId = id });
+    }
+
+    // ── Store page (internal stock DB) ───────────────────────────────────────────
+
+    /// <summary>Adds or updates a stock item on the store page (upsert by SKU-ID).</summary>
+    [HttpPost("api/fake/store-page/items")]
+    public IActionResult AddStoreItem([FromBody] JObject body) => Ok(_store.UpsertStoreItem(body));
+
+    /// <summary>Observation endpoint: current store-page items, optionally filtered by SKU-ID.</summary>
+    [HttpGet("api/fake/store-page/items")]
+    public IActionResult GetStoreItems([FromQuery] string? skuId)
+    {
+        var items = _store.GetStoreItems(skuId);
+        return Ok(new { count = items.Count, items });
     }
 
     // ── Payments ─────────────────────────────────────────────────────────────────

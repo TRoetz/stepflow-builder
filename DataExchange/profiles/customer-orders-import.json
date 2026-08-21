@@ -10,7 +10,70 @@
     "DataSourceName": "cust_orders.csv",
     "MediumType": 3,
     "MediumConfigurationJson": "{\"filePath\": \"C:/temp/dx-e2e/cust_orders.csv\"}",
-    "ImportSchemaId": 0
+    "ImportSchemaId": 0,
+    "ImportSchema": {
+      "AttributeDomainId": 0,
+      "Version": "1",
+      "AttributeDomainName": "Internal Order Schema",
+      "IsCurrentVersion": true,
+      "Attributes": [
+        {
+          "EntityAttributeId": 1,
+          "PrimaryKey": false,
+          "AttributeName": "OrderNumber",
+          "DataType": 0,
+          "Visible": true,
+          "ReadOnly": false,
+          "AttributeDomainId": 0,
+          "AttributeValueData": [],
+          "Rules": []
+        },
+        {
+          "EntityAttributeId": 2,
+          "PrimaryKey": false,
+          "AttributeName": "CustomerRef",
+          "DataType": 0,
+          "Visible": true,
+          "ReadOnly": false,
+          "AttributeDomainId": 0,
+          "AttributeValueData": [],
+          "Rules": []
+        },
+        {
+          "EntityAttributeId": 3,
+          "PrimaryKey": false,
+          "AttributeName": "RegionName",
+          "DataType": 0,
+          "Visible": true,
+          "ReadOnly": false,
+          "AttributeDomainId": 0,
+          "AttributeValueData": [],
+          "Rules": []
+        },
+        {
+          "EntityAttributeId": 4,
+          "PrimaryKey": false,
+          "AttributeName": "AmountUSD",
+          "DataType": 2,
+          "Visible": true,
+          "ReadOnly": false,
+          "AttributeDomainId": 0,
+          "AttributeValueData": [],
+          "Rules": []
+        },
+        {
+          "EntityAttributeId": 5,
+          "PrimaryKey": false,
+          "AttributeName": "Currency",
+          "DataType": 0,
+          "Visible": true,
+          "ReadOnly": false,
+          "AttributeDomainId": 0,
+          "AttributeValueData": [],
+          "Rules": []
+        }
+      ]
+    }
   },
   "PipelineId": 0,
   "Pipeline": {
@@ -41,18 +104,7 @@
                   {
                     "SchemaMapId": 0,
                     "ActionSchemaMapId": 0,
-                    "TargetAttributeId": 0,
-                    "TargetAttribute": {
-                      "EntityAttributeId": 0,
-                      "PrimaryKey": false,
-                      "AttributeName": "OrderNumber",
-                      "DataType": 0,
-                      "Visible": true,
-                      "ReadOnly": false,
-                      "AttributeDomainId": 0,
-                      "AttributeValueData": [],
-                      "Rules": []
-                    },
+                    "TargetAttributeId": 1,
                     "SourceAttributes": [
                       {
                         "EntityAttributeId": 0,
@@ -73,18 +125,7 @@
                   {
                     "SchemaMapId": 0,
                     "ActionSchemaMapId": 0,
-                    "TargetAttributeId": 0,
-                    "TargetAttribute": {
-                      "EntityAttributeId": 0,
-                      "PrimaryKey": false,
-                      "AttributeName": "CustomerRef",
-                      "DataType": 0,
-                      "Visible": true,
-                      "ReadOnly": false,
-                      "AttributeDomainId": 0,
-                      "AttributeValueData": [],
-                      "Rules": []
-                    },
+                    "TargetAttributeId": 2,
                     "SourceAttributes": [
                       {
                         "EntityAttributeId": 0,
@@ -105,18 +146,7 @@
                   {
                     "SchemaMapId": 0,
                     "ActionSchemaMapId": 0,
-                    "TargetAttributeId": 0,
-                    "TargetAttribute": {
-                      "EntityAttributeId": 0,
-                      "PrimaryKey": false,
-                      "AttributeName": "RegionName",
-                      "DataType": 0,
-                      "Visible": true,
-                      "ReadOnly": false,
-                      "AttributeDomainId": 0,
-                      "AttributeValueData": [],
-                      "Rules": []
-                    },
+                    "TargetAttributeId": 3,
                     "SourceAttributes": [
                       {
                         "EntityAttributeId": 0,
@@ -137,18 +167,7 @@
                   {
                     "SchemaMapId": 0,
                     "ActionSchemaMapId": 0,
-                    "TargetAttributeId": 0,
-                    "TargetAttribute": {
-                      "EntityAttributeId": 0,
-                      "PrimaryKey": false,
-                      "AttributeName": "AmountUSD",
-                      "DataType": 0,
-                      "Visible": true,
-                      "ReadOnly": false,
-                      "AttributeDomainId": 0,
-                      "AttributeValueData": [],
-                      "Rules": []
-                    },
+                    "TargetAttributeId": 4,
                     "SourceAttributes": [
                       {
                         "EntityAttributeId": 0,
@@ -169,18 +188,7 @@
                   {
                     "SchemaMapId": 0,
                     "ActionSchemaMapId": 0,
-                    "TargetAttributeId": 0,
-                    "TargetAttribute": {
-                      "EntityAttributeId": 0,
-                      "PrimaryKey": false,
-                      "AttributeName": "Currency",
-                      "DataType": 0,
-                      "Visible": true,
-                      "ReadOnly": false,
-                      "AttributeDomainId": 0,
-                      "AttributeValueData": [],
-                      "Rules": []
-                    },
+                    "TargetAttributeId": 5,
                     "SourceAttributes": [
                       {
                         "EntityAttributeId": 0,
