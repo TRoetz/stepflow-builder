@@ -32,6 +32,8 @@ namespace StepFunctionsApp.StepFunctions
         private readonly ScriptExecutionService _scriptExecution;
         private readonly Lazy<StepFunctionService> _stepService;
         private readonly DataExchangeExecutor _dataExchange;
+        private readonly SshCommandService _sshCommands;
+        private readonly FetchRemoteFilesService _fetchFiles;
         private readonly ILogger<CompositeResourceInvoker> _logger;
         private readonly string _callbackBaseUrl = "http://localhost:5000"; // Should come from config
 
@@ -44,6 +46,8 @@ namespace StepFunctionsApp.StepFunctions
             ScriptExecutionService scriptExecution,
             Lazy<StepFunctionService> stepService,
             DataExchangeExecutor dataExchange,
+            SshCommandService sshCommands,
+            FetchRemoteFilesService fetchFiles,
             ILogger<CompositeResourceInvoker> logger)
         {
             _httpClientFactory = httpClientFactory;
@@ -54,6 +58,8 @@ namespace StepFunctionsApp.StepFunctions
             _scriptExecution = scriptExecution;
             _stepService = stepService;
             _dataExchange = dataExchange;
+            _sshCommands = sshCommands;
+            _fetchFiles = fetchFiles;
             _logger = logger;
         }
 
@@ -92,6 +98,14 @@ namespace StepFunctionsApp.StepFunctions
                 _logger.LogInformation("Executing DataExchange profile: {Profile}", profileId);
                 return await _dataExchange.ExecuteAsync(profileId, input as JObject ?? new JObject(), ct);
             }
+
+            // Remote SSH command execution: ssh://<hostName> (curated inventory, AI safety check)
+            if (resource.StartsWith("ssh://"))
+                return await HandleSshAsync(resource, input, ct);
+
+            // Remote file fetch: fetch://<hostName>?proto=scp|sftp|ftp|xcopy (curated inventory)
+            if (resource.StartsWith("fetch://"))
+                return await HandleFetchAsync(resource, input, ct);
 
             throw new StepEngineException("States.TaskFailed", $"Unknown resource scheme: {resource}");
         }
@@ -259,6 +273,68 @@ namespace StepFunctionsApp.StepFunctions
                 "transform/status" => JToken.FromObject(_duckDbTransform.GetStatus()),
                 _ => throw new StepEngineException("States.TaskFailed", $"Unknown internal resource: {resource}")
             });
+        }
+
+        private async Task<JToken> HandleSshAsync(string resource, JToken input, CancellationToken ct)
+        {
+            var hostName = resource["ssh://".Length..].Trim('/');
+            if (string.IsNullOrWhiteSpace(hostName))
+                throw new StepEngineException("Ssh.NoHost", "Resource must be ssh://<hostName>");
+
+            var command = SshCommandService.ResolveCommand(input);
+            if (command == null)
+                throw new StepEngineException("Ssh.NoCommand", "No command found in input — connect an upstream text/AI node or set a static 'command' parameter");
+
+            var overrideCheck = input is JObject o && (o["override"]?.Value<bool>() ?? false);
+            var timeoutSeconds = input is JObject t ? (t["timeoutSeconds"]?.Value<int>() ?? 30) : 30;
+            if (timeoutSeconds < 1) timeoutSeconds = 30;
+
+            _logger.LogInformation("SSH executing on {Host}: {Command} (override={Override})", hostName, command, overrideCheck);
+            var result = await _sshCommands.ExecuteAsync(hostName, command, overrideCheck, timeoutSeconds, ct);
+            return new JObject
+            {
+                ["host"] = result.HostName,
+                ["command"] = result.Command,
+                ["exitCode"] = result.ExitCode,
+                ["stdout"] = result.Stdout,
+                ["stderr"] = result.Stderr,
+                ["durationMs"] = (long)result.DurationMs
+            };
+        }
+
+        private async Task<JToken> HandleFetchAsync(string resource, JToken input, CancellationToken ct)
+        {
+            var uri = new Uri(resource);
+            var hostName = uri.Host; // e.g., fetch://web-01?proto=sftp -> web-01
+            if (string.IsNullOrWhiteSpace(hostName))
+                throw new StepEngineException("Fetch.NoHost", "Resource must be fetch://<hostName>?proto=scp|sftp|ftp|xcopy");
+
+            // proto query parameter, default scp — same pattern as rule:// in HandleRuleAsync.
+            var query = HttpUtility.ParseQueryString(uri.Query);
+            var protocol = string.IsNullOrWhiteSpace(query["proto"]) ? "scp" : query["proto"]!;
+
+            var sourcePath = input is JObject o && o["sourcePath"]?.Type == JTokenType.String ? (string?)o["sourcePath"] ?? "" : "";
+            var destDir = input is JObject d && d["destDir"]?.Type == JTokenType.String ? (string?)d["destDir"] ?? "" : "";
+            var timeoutSeconds = input is JObject t ? (t["timeoutSeconds"]?.Value<int>() ?? 120) : 120;
+            if (timeoutSeconds < 1) timeoutSeconds = 120;
+
+            _logger.LogInformation("Fetching files from {Host} via {Proto}: {Source} -> {Dest}", hostName, protocol, sourcePath, destDir);
+            var result = await _fetchFiles.FetchAsync(hostName, protocol, sourcePath, destDir, timeoutSeconds, ct);
+            return new JObject
+            {
+                ["host"] = result.HostName,
+                ["protocol"] = result.Protocol,
+                ["sourcePath"] = result.SourcePath,
+                ["destDir"] = result.DestDir,
+                ["files"] = JArray.FromObject(result.Files.Select(f => new JObject
+                {
+                    ["remotePath"] = f.RemotePath,
+                    ["localPath"] = f.LocalPath,
+                    ["sizeBytes"] = f.SizeBytes
+                })),
+                ["fileCount"] = result.Files.Count,
+                ["durationMs"] = (long)result.DurationMs
+            };
         }
     }
 }

@@ -12,11 +12,17 @@ namespace StepFunctionsApp.Controllers
     public class FlowsController : ControllerBase
     {
         private readonly StepFunctionService _stepService;
+        private readonly SshHostStore _sshHosts;
 
-        public FlowsController(StepFunctionService stepService)
+        public FlowsController(StepFunctionService stepService, SshHostStore sshHosts)
         {
             _stepService = stepService;
+            _sshHosts = sshHosts;
         }
+
+        // List curated SSH hosts (name/host/port only — never credentials)
+        [HttpGet("api/ssh/hosts")]
+        public IActionResult ListSshHosts() => Ok(_sshHosts.Hosts.Select(h => new { name = h.Name, host = h.Host, port = h.Port }));
         // Register/Save a state machine
         [HttpPost("api/flows")]
         [HttpPost("api/state-machines")]

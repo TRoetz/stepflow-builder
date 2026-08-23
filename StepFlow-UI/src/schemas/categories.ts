@@ -1,6 +1,6 @@
 import { CategoryDefinition, StepCategory } from '@schema-types/schema';
 
-// ── 10 Category Definitions ──
+// -- 12 Category Definitions --
 export const categoryDefinitions: CategoryDefinition[] = [
   {
     id: 'terminal',
@@ -82,6 +82,22 @@ export const categoryDefinitions: CategoryDefinition[] = [
     color: '#FB923C',
     nodeComponent: 'HumanTaskNode',
   },
+  {
+    id: 'remote',
+    name: 'Remote',
+    description: 'Execute actions on remote hosts over SSH',
+    icon: '',
+    color: '#F59E0B',
+    nodeComponent: 'SshNode',
+  },
+  {
+    id: 'transfer',
+    name: 'File Transfer',
+    description: 'Fetch files from remote hosts via SCP, SFTP, FTP or XCOPY (SMB)',
+    icon: '',
+    color: '#0EA5E9',
+    nodeComponent: 'FetchFilesNode',
+  },
 ];
 
 // ── Lookup Maps ──
@@ -104,4 +120,6 @@ export const categoryNodeComponentMap: Record<StepCategory, string> = {
   utility: 'UtilityNode',
   subflow: 'SubFlowNode',
   human: 'HumanTaskNode',
+  remote: 'SshNode',
+  transfer: 'FetchFilesNode',
 };

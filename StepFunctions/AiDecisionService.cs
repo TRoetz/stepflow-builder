@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Microsoft.Extensions.Logging;
-using System.Collections.Generic;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -21,7 +21,8 @@ namespace StepFunctionsApp.StepFunctions
     {
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ILogger<AiDecisionService> _logger;
-        private readonly string _llmBaseUrl = "http://localhost:5000"; // Should be in config
+        private readonly string _llmBaseUrl;
+        private readonly string? _defaultModel;
 
         private const string DefaultSystemPrompt = """
             You are a decision engine inside an automated compliance workflow.
@@ -44,10 +45,16 @@ namespace StepFunctionsApp.StepFunctions
 
         public AiDecisionService(
             IHttpClientFactory httpClientFactory,
-            ILogger<AiDecisionService> logger)
+            ILogger<AiDecisionService> logger,
+            IConfiguration? config = null)
         {
             _httpClientFactory = httpClientFactory;
             _logger = logger;
+            // Empty/missing config values keep the historical defaults (byte-identical behavior).
+            var baseUrl = config?["AiDecision:BaseUrl"];
+            _llmBaseUrl = string.IsNullOrWhiteSpace(baseUrl) ? "http://localhost:5000" : baseUrl!;
+            var model = config?["AiDecision:Model"];
+            _defaultModel = string.IsNullOrWhiteSpace(model) ? null : model!;
         }
 
         public async Task<AiDecisionResult> AskAsync(AiDecisionInput request, CancellationToken ct)
@@ -62,7 +69,7 @@ namespace StepFunctionsApp.StepFunctions
                 // Call the Remote LLM via OpenAI-compatible endpoint or internal chat API
                 var payload = new
                 {
-                    model = request.Provider, // Mapped to provider name
+                    model = request.Provider ?? _defaultModel, // Mapped to provider name; null → LLM proxy picks its default
                     messages = new[]
                     {
                         new { role = "system", content = systemPrompt },

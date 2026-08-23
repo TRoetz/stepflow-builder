@@ -47,6 +47,10 @@ public class Startup
         var eavRegistry = new EavRegistryService();
         eavRegistry.Initialize("eav_registry.json");
         services.AddSingleton(eavRegistry);
+        // Register SSH host inventory (curated remote hosts for ssh:// resources)
+        var sshHostStore = new SshHostStore();
+        sshHostStore.Initialize("ssh_hosts.json");
+        services.AddSingleton(sshHostStore);
 
         // Data Exchange subsystem - customer file -> internal schema pipeline (profiles + executor)
         services.Configure<DataExchangeOptions>(_config.GetSection(DataExchangeOptions.SectionName));
@@ -62,7 +66,8 @@ public class Startup
         services.AddSingleton<DuckDbTransformService>();
         services.AddSingleton<ScriptExecutionService>();
         services.AddSingleton<AiDecisionService>();
-        
+        services.AddSingleton<SshCommandService>();
+        services.AddSingleton<FetchRemoteFilesService>();
         services.AddSingleton<IResourceInvoker, CompositeResourceInvoker>();
         services.AddSingleton<StepFunctionInterpreter>();
         services.AddSingleton<BpmnConverter>();

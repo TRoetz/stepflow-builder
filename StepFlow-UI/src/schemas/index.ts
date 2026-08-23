@@ -16,6 +16,8 @@ import { subFlowSchema } from './steps/subflow';
 import { humanTaskSchema } from './steps/human';
 import { startStateSchema, endStateSchema } from './steps/terminal';
 import { choiceStateSchema, mapStateSchema, parallelStateSchema, succeedStateSchema, failStateSchema } from './steps/flow';
+import { sshCommandSchema } from './steps/ssh';
+import { fetchFilesSchema } from './steps/fetch';
 
 // ── Master Schema Array ──
 export const stepSchemas: StepSchema[] = [
@@ -52,6 +54,10 @@ export const stepSchemas: StepSchema[] = [
   subFlowSchema,
   // Human (1)
   humanTaskSchema,
+  // Remote (1)
+  sshCommandSchema,
+  // File Transfer (1)
+  fetchFilesSchema,
 ];
 
 // ═══════════════════════════════════════════════════════════
@@ -89,6 +95,8 @@ import { SubFlowNode } from '@components/Nodes/SubFlowNode';
 import { TerminalNode } from '@components/Nodes/TerminalNode';
 import { FlowNode } from '@components/Nodes/FlowNode';
 import { HumanTaskNode } from '@components/Nodes/HumanTaskNode';
+import { SshNode } from '@components/Nodes/SshNode';
+import { FetchFilesNode } from '@components/Nodes/FetchFilesNode';
 
 export const categoryNodeComponents: Record<StepCategory, React.ComponentType<{ id: string; data: NodeData; selected?: boolean }>> = {
   terminal: TerminalNode,
@@ -101,6 +109,8 @@ export const categoryNodeComponents: Record<StepCategory, React.ComponentType<{ 
   utility: UtilityNode,
   subflow: SubFlowNode,
   human: HumanTaskNode,
+  remote: SshNode,
+  transfer: FetchFilesNode,
 };
 
 // Build xyflow nodeTypes map: { "stepflow:ai:decision": AiNode, ... }

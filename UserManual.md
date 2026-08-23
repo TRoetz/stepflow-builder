@@ -454,6 +454,83 @@ Built-in diagnostic and utility endpoints.
 | `internal://rules/status` | MS RulesEngine status |
 | `internal://transform/status` | DuckDB transform status |
 
+
+### Remote SSH Command (`ssh://`)
+
+Connect to a curated remote host and execute a command over SSH. Hosts must be defined in `ssh_hosts.json` at the repository root (see `ssh_hosts.example.json`). List available hosts with `GET /api/ssh/hosts`.
+
+| Resource | Description |
+|---|---|
+| `ssh://<hostName>` | Execute a command on the named host from the inventory |
+
+**Input format:**
+```json
+{
+  "command": "df -h",
+  "override": false,
+  "timeoutSeconds": 30
+}
+```
+
+- `command` — The shell command to run. If omitted, the incoming input is used as-is (connect an upstream text/AI node).
+- `override` — When `true`, skips the AI safety check and executes any command. Default is `false`.
+- `timeoutSeconds` — Per-command timeout in seconds. Default is 30.
+
+**Safety:** Every command is reviewed by the default AI provider before execution, and fails closed: if the AI provider is unavailable or the review judges the command harmful, it is blocked unless `override` is enabled.
+
+**Output format:**
+```json
+{
+  "host": "web-01",
+  "command": "df -h",
+  "exitCode": 0,
+  "stdout": "/dev/vda1  20G  5G  15G  25% /",
+  "stderr": "",
+  "durationMs": 412
+}
+```
+
+**Error codes:** `Ssh.NoHost` (malformed resource), `Ssh.HostNotFound` (host not in inventory), `Ssh.NoCommand` (no command supplied), `Ssh.SanityCheckFailed` (AI provider unavailable — fail closed), `Ssh.CommandBlocked` (safety review rejected the command), `Ssh.CommandFailed` (connection/execution failure or non-zero exit).
+
+### Fetch Remote Files (`fetch://`)
+
+Fetch files from a curated remote host via SCP, SFTP, FTP/FTPS or XCOPY (SMB share). Hosts must be defined in `ssh_hosts.json` at the repository root (see `ssh_hosts.example.json`). List available hosts with `GET /api/ssh/hosts`.
+
+| Resource | Description |
+|---|---|
+| `fetch://<hostName>?proto=scp\|sftp\|ftp\|xcopy` | Fetch files from the named host; `proto` defaults to `scp` |
+
+**Input format:**
+```json
+{
+  "sourcePath": "/var/log/app/*.log",
+  "destDir": "C:\\data\\logs",
+  "timeoutSeconds": 120
+}
+```
+
+- `sourcePath` — Remote path or wildcard pattern (`*`, `?`). Wildcards are supported by SFTP and FTP; SCP does not support them.
+- `destDir` — Local directory where files are written (created if missing).
+- `timeoutSeconds` — Transfer timeout in seconds. Default is 120.
+
+**Protocol notes:** XCOPY requires a Windows host with an SMB `Share` configured on the inventory entry and existing SMB access from the app's account; FTPS (`UseFtps: true`) uses standard certificate validation, so self-signed certificates fail.
+
+**Output format:**
+```json
+{
+  "host": "web-01",
+  "protocol": "sftp",
+  "sourcePath": "/var/log/app/*.log",
+  "destDir": "C:\\data\\logs",
+  "files": [
+    { "remotePath": "/var/log/app/app.log", "localPath": "C:\\data\\logs\\app.log", "sizeBytes": 1048576 }
+  ],
+  "fileCount": 1,
+  "durationMs": 2310
+}
+```
+
+**Error codes:** `Fetch.HostNotFound` (host not in inventory), `Fetch.UnsupportedProtocol` (unknown `proto` value), `Fetch.NoSource` (no sourcePath supplied or remote path inaccessible), `Fetch.NoDest` (no destDir supplied), `Fetch.GlobUnsupported` (wildcard with SCP), `Fetch.MissingShare` (xcopy without a Share on the host entry), `Fetch.UnsupportedOs` (xcopy on non-Windows), `Fetch.Timeout`, `Fetch.DownloadFailed`.
 ---
 
 ## 5. Choice Rules
@@ -736,7 +813,7 @@ Route to a recovery state when retries are exhausted:
 
 ## 8. Node Categories and Schemas
 
-The palette organizes 15 node types across 7 categories:
+The palette organizes 25 node types across 12 categories:
 
 ### 🤖 AI (Purple — `#8B5CF6`)
 
@@ -787,6 +864,18 @@ The palette organizes 15 node types across 7 categories:
 | Node | Description |
 |---|---|
 | **Sub-Flow Invoke** | Call another saved flow |
+
+### 🖥️ Remote (Amber — `#F59E0B`)
+
+| Node | Description |
+|---|---|
+| **SSH Command** | Execute a command on a curated remote host over SSH, with AI safety review |
+
+### 📥 File Transfer (Sky — `#0EA5E9`)
+
+| Node | Description |
+|---|---|
+| **Fetch Remote Files** | Fetch files from a curated remote host via SCP, SFTP, FTP/FTPS or XCOPY (SMB) |
 
 ---
 

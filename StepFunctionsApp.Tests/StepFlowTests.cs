@@ -60,6 +60,8 @@ namespace StepFunctionsApp.Tests
                 _scriptExecution,
                 lazyStepService,
                 dataExchange,
+                new SshCommandService(new SshHostStore(), _aiDecision), // blank inventory; AI mocked via factory
+                new FetchRemoteFilesService(new SshHostStore()), // blank inventory — fetch:// validation only
                 invokerLogger
             );
 

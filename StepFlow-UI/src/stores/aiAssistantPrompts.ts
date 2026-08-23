@@ -89,4 +89,18 @@ export const categoryPromptTemplates: Record<
     `Help with task titles and assignees, completion methods (api via POST /api/human-tasks/{id}/complete, or file drop into a watched directory), ` +
     `timeout settings, and result path placement for the completion payload. ` +
     `Explain human-in-the-loop patterns such as approvals, reviews, and manual data entry.`,
+
+  remote: (configSummary) =>
+    `You are a remote execution configuration assistant. The user is configuring an SSH Command node that runs a command on a curated remote host over SSH. ` +
+    `Available configuration fields: ${configSummary}. ` +
+    `Help with selecting the host name from ssh_hosts.json, writing safe shell commands, ` +
+    `the AI safety check (harmful commands are blocked unless Override is enabled), ` +
+    `and timeout settings. Explain that an upstream text/AI node can supply the command via the input handle.`,
+
+  transfer: (configSummary) =>
+    `You are a file transfer configuration assistant. The user is configuring a Fetch Remote Files node that pulls files from a curated host in ssh_hosts.json via SCP, SFTP, FTP/FTPS or XCOPY (SMB). ` +
+    `Available configuration fields: ${configSummary}. ` +
+    `Help with selecting the host name from ssh_hosts.json, choosing the protocol for the target OS and share type, ` +
+    `wildcard source patterns (* ? — note SCP does not support wildcards), destination directory layout, and timeout settings. ` +
+    `Explain that XCOPY requires a Windows host with an SMB Share configured in ssh_hosts.json and that FTPS uses standard certificate validation (self-signed certificates fail).`,
 };

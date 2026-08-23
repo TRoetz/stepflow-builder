@@ -1,0 +1,25 @@
+[
+  {
+    "Name": "web-01",
+    "Host": "192.168.1.50",
+    "Port": 22,
+    "User": "deploy",
+    "Password": "change-me",
+    "SshKeyPath": "",
+    "UseSshKey": false,
+    "UseSshPassword": true
+  },
+  {
+    "Name": "db-01",
+    "Host": "192.168.1.60",
+    "Port": 2222,
+    "User": "monitor",
+    "Password": "",
+    "SshKeyPath": "C:\\keys\\db-01_ed25519",
+    "UseSshKey": true,
+    "UseSshPassword": false,
+    "FtpPort": 2121,
+    "UseFtps": true,
+    "Share": "backups"
+  }
+]

@@ -96,11 +96,22 @@ export const FlowService = {
           comment: node.data?.description || undefined,
         };
       } else {
+        const config = (node.data?.configuration || {}) as Record<string, unknown>;
+        let parameters: Record<string, unknown> = { ...config };
+        if ((node.data?.schemaId as string)?.startsWith('stepflow:ssh:')) {
+          // Static command wins; otherwise pass through the upstream input text.
+          const hasStaticCommand = typeof config.command === 'string' && config.command.trim().length > 0;
+          const incomingCount = edges.filter((e) => e.target === node.id).length;
+          if (!hasStaticCommand && incomingCount > 0) {
+            delete parameters.command; // avoid an empty literal shadowing the passthrough
+            parameters['command.$'] = '$';
+          }
+        }
         states[node.id] = {
           type: aslType,
           resource: buildResourceUri(node),
           next: nextNodes[0] || undefined,
-          parameters: node.data?.configuration || {},
+          parameters,
           comment: node.data?.description || undefined,
           inputs: schema?.inputs.map((i) => i.id),
           outputs: schema?.outputs.map((o) => o.id),
@@ -470,6 +481,8 @@ function buildResourceUri(node: StepNode): string {
   if (schemaId?.startsWith('stepflow:utility:')) return `utility://${schemaId.split(':').pop()}`;
   if (schemaId?.startsWith('stepflow:human:')) return `human://task`;
   if (schemaId?.startsWith('stepflow:subflow:')) return `flow://${config?.targetFlowId || 'default'}`;
+  if (schemaId?.startsWith('stepflow:ssh:')) return `ssh://${config?.host || 'default'}`;
+  if (schemaId?.startsWith('stepflow:fetch:')) return `fetch://${config?.host || 'default'}?proto=${(config?.protocol as string) || 'scp'}`;
   return `utility://default`;
 }
 
@@ -500,6 +513,8 @@ function resolveSchemaId(state: StateDefinition): string {
   if (resource.startsWith('eav://')) return 'stepflow:data:eav';
   if (resource.startsWith('http://')) return 'stepflow:api:http';
   if (resource.startsWith('api://')) return 'stepflow:api:registered';
+  if (resource.startsWith('ssh://')) return 'stepflow:ssh:command';
+  if (resource.startsWith('fetch://')) return 'stepflow:fetch:files';
   if (resource.startsWith('transform://jsonata')) return 'stepflow:transform:jsonata';
   if (resource.startsWith('transform://')) return 'stepflow:transform:script';
   if (resource.startsWith('flow://')) return 'stepflow:subflow:invoke';

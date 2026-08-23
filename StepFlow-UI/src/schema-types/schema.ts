@@ -84,7 +84,9 @@ export type StepCategory =
   | 'transform'
   | 'utility'
   | 'subflow'
-  | 'human';   // Human-in-the-loop approval / manual action states
+  | 'human'      // Human-in-the-loop approval / manual action states
+  | 'remote'    // Remote host execution (SSH)
+  | 'transfer'; // File transfer from remote hosts (SCP/SFTP/FTP/XCOPY)
 
 // ── Category Definition ──
 export interface CategoryDefinition {

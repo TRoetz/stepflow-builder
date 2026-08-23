@@ -27,3 +27,6 @@ Thumbs.db
 
 # Session data
 .pi/
+
+# SSH host inventory (may contain credentials — see ssh_hosts.example.json)
+ssh_hosts.json
