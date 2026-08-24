@@ -19,7 +19,7 @@ Engine internals (canvas interface, state-type semantics, choice-rule operators,
 
 - All ASL JSON uses **PascalCase keys** (`"Type"`, `"Resource"`, `"Next"`). The engine's Json.NET binding is case-insensitive, so lowercase variants (as found in converted flows under `Flows/`) also run — but new flows should standardize on PascalCase.
 - Every ```json block in this document parses as valid JSON.
-- REST examples target the default dev port **`http://localhost:5095`** (override via your launch profile / appsettings).
+- REST examples target the main app's fixed dev port **`http://localhost:5001`** (`Program.cs` `UseUrls`; override with `ASPNETCORE_URLS`). Scenario flows that call `/api/Fake/*` endpoints additionally need the standalone fake test host on **`http://localhost:5095`** (`Stepflow-Builder-Tests/Program.cs`).
 - **Payload templates** apply to `Parameters` and `ResultSelector` only (UserManual §6). In the default JSONPath mode a template property is written with a `.$` suffix on its name and a path as its value: `"orderId.$": "$.order.id"` resolves that JSONPath against the state's input; values starting with `$$` resolve against the execution context (`$$.Execution.StartTime`, `$$.State.Name`, …); any other string stays literal (the `States.Format('…', '$.a')` intrinsic is also supported). With `"QueryLanguage": "JSONata"` on the definition, the whole template object is evaluated as one JSONata expression instead — no suffix needed.
 
 ---
@@ -119,21 +119,57 @@ All routes below are verbatim from `Controllers/FlowsController.cs`, `Controller
 
 ```bash
 # 1. Register a flow definition (ASL JSON file)
-curl -X POST http://localhost:5095/api/flows \
+curl -X POST http://localhost:5001/api/flows \
   -H "Content-Type: application/json" \
   -d @my-flow.json
 
 # 2. Execute synchronously with an input payload
-curl -X POST http://localhost:5095/api/flows/execute-sync/{flowId} \
+curl -X POST http://localhost:5001/api/flows/execute-sync/{flowId} \
   -H "Content-Type: application/json" \
   -d '{ "order": { "amount": 250 } }'
 
 # 3. Or execute asynchronously, then poll the execution record
-curl -X POST http://localhost:5095/api/flows/execute/{flowId} \
+curl -X POST http://localhost:5001/api/flows/execute/{flowId} \
   -H "Content-Type: application/json" \
   -d '{ "order": { "amount": 250 } }'
 
-curl http://localhost:5095/api/flows/executions/{executionId}
+curl http://localhost:5001/api/flows/executions/{executionId}
+```
+
+### 1.5 MCP Server (AI agent interface)
+
+The main app also exposes a **Model Context Protocol** server at **`/mcp`** (`Mcp/FlowTools.cs`, wired in `Program.cs`: `AddMcpServer().WithHttpTransport()` + `MapMcp("/mcp")`). Transport is streamable HTTP and stateless — no session handshake; every request is a plain JSON-RPC 2.0 POST (responses are framed as SSE). It exposes the same engine services as the REST routes above, so flows created via MCP load into the React canvas unchanged (camelCase ASL; dictionary keys keep their original casing).
+
+**Client configuration** (Claude Desktop / VS Code Copilot / any MCP client):
+
+```json
+{
+  "mcpServers": {
+    "stepflow": {
+      "url": "http://localhost:5001/mcp"
+    }
+  }
+}
+```
+
+**Tools** (`FlowTools.cs`):
+
+| Tool | Parameters | Returns |
+|---|---|---|
+| `list_flows` | — | Array of `{ id, name, description, updatedAt }` for every registered flow |
+| `get_flow` | `idOrName` (string) | `{ id, name, description, createdAt, updatedAt, definition }`, where `definition` is the full camelCase ASL (`startAt`, `states`) |
+| `save_flow` | `name` (string), `statesJson` (JSON string of the states object), `startAt?`, `description?` | `{ id, name, updatedAt }`. Upsert by name: saving again with the same name replaces the definition. Validates that `statesJson` parses, is non-empty, and that `startAt` (default: first key) names an existing state; dangling `next`/choice targets surface as errors at run time |
+| `run_flow` | `idOrName` (string), `inputJson?` (JSON object string, default `{}`) | Synchronous execution result: `{ executionId, status, output, errorCode, errorMessage, history: [{ type, state, data }] }` |
+
+All four tools return errors as JSON (`{ "error": "…" }`) rather than throwing, so agents can read and react to them. All nine `StateType`s (§1.2) — including `HumanTask` — are usable in definitions saved via MCP; a `run_flow` on a flow with a pending `HumanTask` returns status `Suspended`, and the execution resumes when the task is completed through §3.3's routes or file drop.
+
+Manual call without an MCP client:
+
+```bash
+curl -s http://localhost:5001/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
 ---
@@ -405,7 +441,7 @@ Engine contract (verified against `ExecuteHumanTaskState` / `CompleteHumanTaskAs
 Complete the task from a client:
 
 ```bash
-curl -X POST http://localhost:5095/api/human-tasks/{taskId}/complete \
+curl -X POST http://localhost:5001/api/human-tasks/{taskId}/complete \
   -H "Content-Type: application/json" \
   -d '{ "approved": true, "comment": "Within policy" }'
 ```
@@ -1574,7 +1610,7 @@ flowchart LR
 Completing the task from a terminal:
 
 ```bash
-curl -X POST http://localhost:5095/api/human-tasks/{taskId}/complete \
+curl -X POST http://localhost:5001/api/human-tasks/{taskId}/complete \
   -H "Content-Type: application/json" \
   -d '{"approved": true, "notes": "OK to refund"}'
 ```
