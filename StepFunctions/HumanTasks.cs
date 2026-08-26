@@ -72,6 +72,8 @@ namespace StepFunctionsApp.StepFunctions
         public bool IsEnd { get; set; }
         /// <summary>The JSON path within the state input where the completion result is placed (null = the result replaces the entire input).</summary>
         public string? ResultPath { get; set; }
+        /// <summary>The form version resolved when the task was created (null on records predating form versioning = current at load time).</summary>
+        public string? FormVersion { get; set; }
 
         // ── What to show the human ────────────────────────────────
         public string? Title { get; set; }

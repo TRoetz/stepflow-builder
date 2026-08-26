@@ -15,6 +15,7 @@ import { useKeyboardShortcuts } from '@hooks/useKeyboardShortcuts';
 import { CanvasAssistant } from '@components/Canvas/CanvasAssistant';
 import { ToastStack } from '@components/ToastStack';
 import { AgentPanel } from '@components/Agents/AgentPanel';
+import { FormBuilderWindow } from '@components/Forms/FormBuilderWindow';
 import { DataExchangePanel } from '@components/DataExchange/DataExchangePanel';
 import { useAiAssistantStore } from '@stores/useAiAssistantStore';
 import { useAiModelConfigStore } from '@stores/useAiModelConfigStore';
@@ -33,6 +34,7 @@ export default function App() {
   const [flowName, setFlowName] = useState('New Flow');
   const [showAgentPanel, setShowAgentPanel] = useState(false);
   const [showDataExchangePanel, setShowDataExchangePanel] = useState(false);
+  const [formBuilderOpen, setFormBuilderOpen] = useState(false);
   const [showLogPanel, setShowLogPanel] = useState(false);
   const [expandedLogNodeId, setExpandedLogNodeId] = useState<string | null>(null);
   const [showSaveProjectDialog, setShowSaveProjectDialog] = useState(false);
@@ -400,6 +402,7 @@ export default function App() {
         onToggleAiAssistant={toggleAiAssistant}
         onToggleAgentPanel={() => setShowAgentPanel((p) => !p)}
         onToggleDataExchange={() => setShowDataExchangePanel((p) => !p)}
+        onToggleFormBuilder={() => setFormBuilderOpen((p) => !p)}
         onToggleAiConfig={toggleAiConfig}
         onAutoLayout={handleAutoLayout}
         onResetFlow={handleResetFlow}
@@ -410,7 +413,10 @@ export default function App() {
         onFlowNameChange={setFlowName}
       />
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="relative flex-1 flex overflow-hidden">
+        {formBuilderOpen && (
+          <FormBuilderWindow onClose={() => setFormBuilderOpen(false)} />
+        )}
         {/* Left: Node Palette */}
         {!isCollapsedPalette && (
           <div className="app-palette">

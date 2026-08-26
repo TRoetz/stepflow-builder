@@ -15,6 +15,7 @@ export const CATEGORY_COLORS: Record<StepCategory, string> = {
   utility: '#6B7280',
   subflow: '#06B6D4',
   human: '#FB923C',
+  formcapture: '#22C55E',
   remote: '#F59E0B',
   transfer: '#0EA5E9',
 };

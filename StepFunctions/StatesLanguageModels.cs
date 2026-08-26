@@ -133,6 +133,8 @@ namespace StepFunctionsApp.StepFunctions
         Choice,
         Wait,
         HumanTask,
+        /// <summary>Suspends until a JSON-configured form is filled and submitted via the API.</summary>
+        FormCapture,
         Succeed,
         Fail,
         Parallel,

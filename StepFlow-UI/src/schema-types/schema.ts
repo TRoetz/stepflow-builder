@@ -85,6 +85,7 @@ export type StepCategory =
   | 'utility'
   | 'subflow'
   | 'human'      // Human-in-the-loop approval / manual action states
+  | 'formcapture' // JSON form capture (UIData page + AttributeDomain binding)
   | 'remote'    // Remote host execution (SSH)
   | 'transfer'; // File transfer from remote hosts (SCP/SFTP/FTP/XCOPY)
 

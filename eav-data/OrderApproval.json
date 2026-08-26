@@ -1,0 +1,61 @@
+[
+  {
+    "RowKeyId": "2d0fd78632a342f88ab24f2faa2f0a53",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "e92ca50b",
+    "CapturedAtUtc": "2026-08-26T01:42:39.4872734Z",
+    "Values": {
+      "orderId": "ORD-482913",
+      "customerName": "Acme Ltd",
+      "amount": 2500.5,
+      "orderDate": "2026-08-26T00:00:00",
+      "priority": "High",
+      "notes": "smoke test"
+    }
+  },
+  {
+    "RowKeyId": "19e8ce0b95bc4d67b03daccf3c692069",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "550545ec",
+    "CapturedAtUtc": "2026-08-26T01:59:47.6080225Z",
+    "Values": {
+      "orderId": "ORD-771234",
+      "customerName": "Smoke SQLite Co",
+      "amount": 9876.5,
+      "orderDate": "2026-08-26T00:00:00.0000000",
+      "priority": "High"
+    }
+  },
+  {
+    "RowKeyId": "6c22f23b7ffa4e2bbb9ecd80f1e0bd74",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "215ae821",
+    "CapturedAtUtc": "2026-08-26T02:48:03.033939Z",
+    "Values": {
+      "orderId": "ORD-42424",
+      "customerName": "smoke-customerName",
+      "amount": 42.0,
+      "orderDate": "2026-08-26T12:00:00.0000000",
+      "priority": "smoke-priority",
+      "notes": "smoke-notes"
+    }
+  },
+  {
+    "RowKeyId": "2efaa7ebb7484521a4a614fc67154c84",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "2c58dde7",
+    "CapturedAtUtc": "2026-08-26T02:51:17.9219626Z",
+    "Values": {
+      "orderId": "ORD-42424",
+      "customerName": "smoke-customerName",
+      "amount": 42.0,
+      "orderDate": "2026-08-26T12:00:00.0000000",
+      "priority": "smoke-priority",
+      "notes": "smoke-notes"
+    }
+  }
+]

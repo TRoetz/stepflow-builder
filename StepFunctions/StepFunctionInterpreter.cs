@@ -22,15 +22,18 @@ namespace StepFunctionsApp.StepFunctions
         private readonly IResourceInvoker _resourceInvoker;
         private readonly ILogger<StepFunctionInterpreter> _logger;
         private readonly IHumanTaskStore? _humanTaskStore;
+        private readonly IFormDefinitionStore? _formStore;
 
         public StepFunctionInterpreter(
             IResourceInvoker resourceInvoker,
             ILogger<StepFunctionInterpreter> logger,
-            IHumanTaskStore? humanTaskStore = null)
+            IHumanTaskStore? humanTaskStore = null,
+            IFormDefinitionStore? formStore = null)
         {
             _resourceInvoker = resourceInvoker;
             _logger = logger;
             _humanTaskStore = humanTaskStore;
+            _formStore = formStore;
         }
 
         /// <summary>
@@ -122,6 +125,7 @@ namespace StepFunctionsApp.StepFunctions
                             StateType.Choice => ExecuteChoiceState(state, stateInput, execution, definition.QueryLanguage),
                             StateType.Wait => await ExecuteWaitState(state, stateInput, definition.QueryLanguage, timeoutCts.Token),
                             StateType.HumanTask => await ExecuteHumanTaskState(state, stateInput, execution, definition.QueryLanguage),
+                            StateType.FormCapture => await ExecuteFormCaptureState(state, stateInput, execution, definition.QueryLanguage),
                             StateType.Succeed => ExecuteSucceedState(state, stateInput, definition.QueryLanguage, execution),
                             StateType.Fail => ExecuteFailState(state, execution),
                             StateType.Parallel => await ExecuteParallelState(state, stateInput, execution, definition.QueryLanguage, timeoutCts.Token),
@@ -291,6 +295,66 @@ namespace StepFunctionsApp.StepFunctions
 
             await _humanTaskStore.SaveAsync(record);
             AddEvent(execution, "HumanTaskCreated", execution.CurrentState!, new JObject { ["taskId"] = taskId, ["completionType"] = record.CompletionType });
+            throw new ExecutionSuspendedException(execution.CurrentState!, taskId, state.Next);
+        }
+
+        private async Task<JToken> ExecuteFormCaptureState(StateDefinition state, JToken input, Execution execution, string queryLanguage)
+        {
+            if (_humanTaskStore == null)
+                throw new StepEngineException("States.Runtime", "FormCapture states require a human task store (not configured)");
+            if (_formStore == null)
+                throw new StepEngineException("States.Runtime", "FormCapture states require a form definition store (not configured)");
+
+            if (state.End != true && string.IsNullOrEmpty(state.Next))
+                throw new StepEngineException("States.Runtime", $"FormCapture state '{execution.CurrentState}' has no Next and is not an End state");
+
+            var formId = state.Task?["formId"]?.ToString();
+            if (string.IsNullOrWhiteSpace(formId))
+                throw new StepEngineException("FormCapture.Config", $"FormCapture state '{execution.CurrentState}' requires Task.formId");
+
+            // Version pinning: an explicit Task.formVersion resolves that exact saved version;
+            // otherwise the form's current version is used. The resolved version is recorded on
+            // the human task so a suspended fill-in page keeps working if the form is republished.
+            var pinnedVersion = state.Task?["formVersion"]?.ToString();
+            FormDefinition form;
+            if (!string.IsNullOrWhiteSpace(pinnedVersion))
+            {
+                form = _formStore.Get(formId, pinnedVersion);
+                if (form == null)
+                    throw new StepEngineException("FormCapture.FormNotFound", $"Form '{formId}' version '{pinnedVersion}' not found in definition store");
+            }
+            else
+            {
+                form = _formStore.Get(formId);
+                if (form == null)
+                    throw new StepEngineException("FormCapture.FormNotFound", $"Form '{formId}' not found in definition store");
+            }
+
+            var effectiveInput = ApplyInputPath(state, input, queryLanguage);
+            effectiveInput = ApplyParameters(state, effectiveInput, input, execution, queryLanguage);
+
+            var taskId = Guid.NewGuid().ToString("N")[..8];
+            var record = new HumanTaskRecord
+            {
+                TaskId = taskId,
+                ExecutionId = execution.ExecutionId,
+                StateMachineName = execution.StateMachineName ?? "",
+                StateName = execution.CurrentState!,
+                NextState = state.Next,
+                IsEnd = state.End == true,
+                ResultPath = state.ResultPath,
+                FormVersion = form.Version,
+                Title = state.Task?["title"]?.ToString() ?? form.Title,
+                Assignee = state.Task?["assignee"]?.ToString(),
+                Payload = new JObject { ["task"] = state.Task ?? new JObject(), ["input"] = effectiveInput },
+                CompletionType = "form",
+                CompletionConfig = state.Completion ?? new JObject { ["Type"] = "form" },
+                Status = HumanTaskStatus.Pending,
+                CreatedAtUtc = DateTime.UtcNow
+            };
+
+            await _humanTaskStore.SaveAsync(record);
+            AddEvent(execution, "FormCaptureCreated", execution.CurrentState!, new JObject { ["taskId"] = taskId, ["formId"] = formId, ["formVersion"] = form.Version });
             throw new ExecutionSuspendedException(execution.CurrentState!, taskId, state.Next);
         }
 

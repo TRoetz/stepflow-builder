@@ -4,12 +4,12 @@ import { categoryById } from '@schemas/categories';
 
 describe('Schema System', () => {
   describe('Registry', () => {
-    it('should have all 25 step schemas registered', () => {
-      expect(stepSchemas.length).toBe(25);
+    it('should have all 26 step schemas registered', () => {
+      expect(stepSchemas.length).toBe(26);
     });
 
-    it('should have all 12 categories defined', () => {
-      expect(categoryById.size).toBe(12);
+    it('should have all 13 categories defined', () => {
+      expect(categoryById.size).toBe(13);
     });
 
     it('should map all schemas by ID', () => {
@@ -20,12 +20,12 @@ describe('Schema System', () => {
     });
 
     it('should have palette data for all categories', () => {
-      expect(paletteData.length).toBe(12);
+      expect(paletteData.length).toBe(13);
     });
 
     it('should have schema service working', () => {
-      expect(schemaService.getAllSchemas().length).toBe(25);
-      expect(schemaService.getCategories().length).toBe(12);
+      expect(schemaService.getAllSchemas().length).toBe(26);
+      expect(schemaService.getCategories().length).toBe(13);
     });
   });
 
@@ -45,7 +45,7 @@ describe('Schema System', () => {
         });
 
         it('should have valid category', () => {
-          const validCategories = ['ai', 'rule', 'data', 'api', 'transform', 'utility', 'subflow', 'terminal', 'flow', 'human', 'remote', 'transfer'];
+          const validCategories = ['ai', 'rule', 'data', 'api', 'transform', 'utility', 'subflow', 'terminal', 'flow', 'human', 'formcapture', 'remote', 'transfer'];
           expect(validCategories).toContain(schema.category);
         });
 
@@ -117,6 +117,10 @@ describe('Schema System', () => {
 
     it('should have Human schemas (1)', () => {
       expect(stepSchemas.filter((s) => s.category === 'human').length).toBe(1);
+    });
+
+    it('should have FormCapture schemas (1)', () => {
+      expect(stepSchemas.filter((s) => s.category === 'formcapture').length).toBe(1);
     });
 
     it('should have Remote schemas (1)', () => {

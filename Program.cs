@@ -47,6 +47,8 @@ public class Startup
         var eavRegistry = new EavRegistryService();
         eavRegistry.Initialize("eav_registry.json");
         services.AddSingleton(eavRegistry);
+        // Rule-addressable EAV entities = registry ∪ attribute domains (domain store wins on name collision).
+        services.AddSingleton<IEavEntityProvider, CompositeEavEntityProvider>();
         // Register SSH host inventory (curated remote hosts for ssh:// resources)
         var sshHostStore = new SshHostStore();
         sshHostStore.Initialize("ssh_hosts.json");
@@ -103,6 +105,34 @@ public class Startup
         services.AddSingleton<IHumanTaskCompletionProvider>(provider => provider.GetRequiredService<FileMonitorCompletionProvider>());
         services.AddHostedService<HumanTaskCompletionMonitorService>();
 
+        // Form capture subsystem — provider-backed form definitions + attribute domains (FormData section in appsettings.json)
+        services.Configure<FormDataOptions>(_config.GetSection(FormDataOptions.SectionName));
+        services.AddSingleton<IFormDefinitionStore>(provider =>
+        {
+            var options = provider.GetRequiredService<IOptions<FormDataOptions>>().Value;
+            return options.Provider.Equals("sqlite", StringComparison.OrdinalIgnoreCase)
+                ? new SqliteFormDefinitionStore(options.DatabasePath, provider.GetService<ILogger<SqliteFormDefinitionStore>>())
+                : new JsonFileFormDefinitionStore("forms", provider.GetService<ILogger<JsonFileFormDefinitionStore>>());
+        });
+        services.AddSingleton<IAttributeDomainStore>(provider =>
+        {
+            var options = provider.GetRequiredService<IOptions<FormDataOptions>>().Value;
+            return options.Provider.Equals("sqlite", StringComparison.OrdinalIgnoreCase)
+                ? new SqliteAttributeDomainStore(options.DatabasePath, provider.GetService<ILogger<SqliteAttributeDomainStore>>())
+                : new JsonFileAttributeDomainStore("attribute_domains.json", provider.GetService<ILogger<JsonFileAttributeDomainStore>>());
+        });
+        services.AddSingleton<ISchemaDefinitionStore>(provider =>
+        {
+            var options = provider.GetRequiredService<IOptions<FormDataOptions>>().Value;
+            return options.Provider.Equals("sqlite", StringComparison.OrdinalIgnoreCase)
+                ? new SqliteSchemaDefinitionStore(options.DatabasePath, provider.GetService<ILogger<SqliteSchemaDefinitionStore>>())
+                : new JsonFileSchemaDefinitionStore(options.SchemasFile, provider.GetService<ILogger<JsonFileSchemaDefinitionStore>>());
+        });
+        // Captured form rows stay file-based (eav-data/) per the ask — mirrors the EAV registry registration above.
+        var eavRowStore = new EavRowStore();
+        eavRowStore.Initialize("eav-data");
+        services.AddSingleton(eavRowStore);
+
         // MCP (Model Context Protocol) endpoint for AI harnesses — see Mcp/FlowTools.cs.
         services.AddMcpServer()
             .WithHttpTransport()
@@ -126,6 +156,9 @@ public class Startup
             });
         }
         
+        // Serve wwwroot (standalone form-capture page) even when dist/ doesn't exist.
+        app.UseStaticFiles();
+        
         app.UseRouting();
         app.UseEndpoints(endpoints =>
         {
@@ -137,13 +170,16 @@ public class Startup
             {
                 var stepService = context.RequestServices.GetRequiredService<StepFunctionService>();
                 var store = context.RequestServices.GetRequiredService<IFlowStateStore>();
+                var formStore = context.RequestServices.GetRequiredService<IFormDefinitionStore>();
+                var domainStore = context.RequestServices.GetRequiredService<IAttributeDomainStore>();
                 context.Response.ContentType = "application/json";
                 await context.Response.WriteAsync(JsonConvert.SerializeObject(new
                 {
                     status = "healthy",
                     runningExecutions = stepService.RunningExecutionCount,
                     registeredFlows = stepService.ListStateMachines().Count,
-                    flowStateProvider = store.ProviderName
+                    flowStateProvider = store.ProviderName,
+                    formDataProvider = formStore.ProviderName + "/" + domainStore.ProviderName
                 }));
             });
             

@@ -28,7 +28,7 @@ namespace StepFunctionsApp.StepFunctions
         private readonly RuleEngineService _ruleEngine;
         private readonly MicrosoftRulesEngineService _msRulesEngine;
         private readonly DuckDbTransformService _duckDbTransform;
-        private readonly EavRegistryService _eavRegistry;
+        private readonly IEavEntityProvider _eavProvider;
         private readonly ScriptExecutionService _scriptExecution;
         private readonly Lazy<StepFunctionService> _stepService;
         private readonly DataExchangeExecutor _dataExchange;
@@ -42,7 +42,7 @@ namespace StepFunctionsApp.StepFunctions
             RuleEngineService ruleEngine,
             MicrosoftRulesEngineService msRulesEngine,
             DuckDbTransformService duckDbTransform,
-            EavRegistryService eavRegistry,
+            IEavEntityProvider eavProvider,
             ScriptExecutionService scriptExecution,
             Lazy<StepFunctionService> stepService,
             DataExchangeExecutor dataExchange,
@@ -54,7 +54,7 @@ namespace StepFunctionsApp.StepFunctions
             _ruleEngine = ruleEngine;
             _msRulesEngine = msRulesEngine;
             _duckDbTransform = duckDbTransform;
-            _eavRegistry = eavRegistry;
+            _eavProvider = eavProvider;
             _scriptExecution = scriptExecution;
             _stepService = stepService;
             _dataExchange = dataExchange;
@@ -228,8 +228,9 @@ namespace StepFunctionsApp.StepFunctions
 
             if (!string.IsNullOrEmpty(eavEntityName))
             {
-                // 1. Map dynamic JSON to strict EAV dictionary
-                parameters = _eavRegistry.MapPayloadToEav(eavEntityName, input);
+                // 1. Map dynamic JSON to a strict EAV dictionary (registry ∪ attribute domains)
+                var entity = _eavProvider.GetEntity(eavEntityName) ?? throw new ArgumentException($"EAV Entity '{eavEntityName}' not found.");
+                parameters = EavMapper.Map(entity, input);
             }
             else
             {

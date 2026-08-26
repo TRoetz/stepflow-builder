@@ -95,6 +95,20 @@ export const FlowService = {
           resultPath: (config.resultPath as string) || undefined,
           comment: node.data?.description || undefined,
         };
+      } else if (aslType === 'FormCapture') {
+        const config = (node.data?.configuration || {}) as Record<string, unknown>;
+        states[node.id] = {
+          type: 'FormCapture',
+          next: nextNodes[0] || undefined,
+          task: {
+            formId: config.formId ?? '',
+            title: config.title ?? '',
+            assignee: config.assignee ?? '',
+          },
+          completion: { Type: 'form' },
+          resultPath: (config.resultPath as string) || undefined,
+          comment: node.data?.description || undefined,
+        };
       } else {
         const config = (node.data?.configuration || {}) as Record<string, unknown>;
         let parameters: Record<string, unknown> = { ...config };
@@ -496,6 +510,7 @@ function mapSchemaIdToAslStateType(schemaId: string, category: string): string {
   if (schemaId === 'stepflow:terminal:succeed' || schemaId === 'stepflow:flow:succeed') return 'Succeed';
   if (schemaId === 'stepflow:terminal:fail' || schemaId === 'stepflow:flow:fail') return 'Fail';
   if (schemaId === 'stepflow:human:task') return 'HumanTask';
+  if (schemaId === 'stepflow:formcapture:capture') return 'FormCapture';
 
   // Default standard categories: api, transform, rule, data, ai are all "Task" in ASL
   if (['api', 'transform', 'rule', 'data', 'ai'].includes(category)) return 'Task';
@@ -506,6 +521,7 @@ function resolveSchemaId(state: StateDefinition): string {
   // Map resource URI back to schemaId
   const resource = state.resource || '';
   if (state.type === 'HumanTask' || resource.startsWith('human://')) return 'stepflow:human:task';
+  if (state.type === 'FormCapture' || resource.startsWith('form://')) return 'stepflow:formcapture:capture';
   if (resource.startsWith('ai://')) return 'stepflow:ai:decision';
   if (resource.startsWith('rule://')) return 'stepflow:rule:rule_engine';
   if (resource.startsWith('sql://')) return 'stepflow:data:sql';
@@ -535,6 +551,15 @@ function reconstructConfiguration(state: StateDefinition): Record<string, unknow
       assignee: task.assignee ?? '',
       completionMethod: String(completion.Type ?? 'api').toLowerCase(),
       watchDirectory: completion.Directory ?? '',
+      resultPath: state.resultPath ?? '',
+    };
+  }
+  if (state.type === 'FormCapture') {
+    const task = (state.task || {}) as Record<string, unknown>;
+    return {
+      formId: task.formId ?? '',
+      title: task.title ?? '',
+      assignee: task.assignee ?? '',
       resultPath: state.resultPath ?? '',
     };
   }

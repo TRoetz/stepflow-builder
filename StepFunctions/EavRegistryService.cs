@@ -43,33 +43,11 @@ namespace StepFunctionsApp.StepFunctions
         public EavEntityDefinition? GetEntity(string entityName) => 
             _registry.TryGetValue(entityName, out var e) ? e : null;
 
-        // Transforms raw StepFlow JToken into a strict EAV Dictionary
+        // Transforms raw StepFlow JToken into a strict EAV Dictionary (delegates to the shared EavMapper).
         public Dictionary<string, object> MapPayloadToEav(string entityName, JToken payload)
         {
             var entity = GetEntity(entityName) ?? throw new ArgumentException($"EAV Entity '{entityName}' not found.");
-            var result = new Dictionary<string, object>();
-
-            foreach (var attr in entity.Attributes)
-            {
-                var path = attr.JsonPathMapping;
-                if (!path.StartsWith("$")) path = "$." + path;
-
-                var token = payload.SelectToken(path);
-
-                if (token == null && attr.IsRequired)
-                    throw new StepEngineException("EAV.MissingRequiredAttribute", $"Required attribute '{attr.AttributeName}' not found at path '{attr.JsonPathMapping}'.");
-
-                if (token != null)
-                {
-                    result[attr.AttributeName] = CastToEavType(token, attr.DataType);
-                }
-                else if (attr.DefaultValue != null)
-                {
-                    result[attr.AttributeName] = attr.DefaultValue;
-                }
-            }
-
-            return result;
+            return EavMapper.Map(entity, payload);
         }
 
         private void SaveToDisk()
@@ -91,22 +69,5 @@ namespace StepFunctionsApp.StepFunctions
             catch { /* Fallback to empty if corrupted */ }
         }
 
-        private object CastToEavType(JToken token, string dataType)
-        {
-            try
-            {
-                return dataType.ToLower() switch
-                {
-                    "number" => token.Value<double>(),
-                    "boolean" => token.Value<bool>(),
-                    "date" => token.Value<DateTime>(),
-                    _ => token.ToString()
-                };
-            }
-            catch (Exception ex)
-            {
-                throw new StepEngineException("EAV.TypeMismatch", $"Failed to cast attribute to {dataType}: {ex.Message}");
-            }
-        }
     }
 }

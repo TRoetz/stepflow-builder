@@ -1,0 +1,33 @@
+{
+  "TaskId": "550545ec",
+  "ExecutionId": "090e49421a94",
+  "StateMachineName": "",
+  "StateName": "ApproveOrder",
+  "NextState": "Done",
+  "IsEnd": false,
+  "ResultPath": "$.capturedOrder",
+  "Title": "Approve customer order",
+  "Assignee": "ops-team",
+  "Payload": {
+    "task": {
+      "formId": "order-approval",
+      "title": "Approve customer order",
+      "assignee": "ops-team"
+    },
+    "input": {}
+  },
+  "CompletionType": "form",
+  "CompletionConfig": {
+    "Type": "form"
+  },
+  "Status": "Completed",
+  "CreatedAtUtc": "2026-08-26T01:54:14.3829676Z",
+  "CompletedAtUtc": "2026-08-26T01:59:47.6131811Z",
+  "Result": {
+    "orderId": "ORD-771234",
+    "customerName": "Smoke SQLite Co",
+    "amount": 9876.5,
+    "orderDate": "2026-08-26T00:00:00.0000000",
+    "priority": "High"
+  }
+}

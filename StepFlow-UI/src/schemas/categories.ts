@@ -1,6 +1,6 @@
 import { CategoryDefinition, StepCategory } from '@schema-types/schema';
 
-// -- 12 Category Definitions --
+// -- 13 Category Definitions --
 export const categoryDefinitions: CategoryDefinition[] = [
   {
     id: 'terminal',
@@ -83,6 +83,14 @@ export const categoryDefinitions: CategoryDefinition[] = [
     nodeComponent: 'HumanTaskNode',
   },
   {
+    id: 'formcapture',
+    name: 'Form Capture',
+    description: 'Suspend the flow until a person submits a JSON-configured form (UIData page bound to an AttributeDomain)',
+    icon: '📝',
+    color: '#22C55E',
+    nodeComponent: 'FormCaptureNode',
+  },
+  {
     id: 'remote',
     name: 'Remote',
     description: 'Execute actions on remote hosts over SSH',
@@ -120,6 +128,7 @@ export const categoryNodeComponentMap: Record<StepCategory, string> = {
   utility: 'UtilityNode',
   subflow: 'SubFlowNode',
   human: 'HumanTaskNode',
+  formcapture: 'FormCaptureNode',
   remote: 'SshNode',
   transfer: 'FetchFilesNode',
 };

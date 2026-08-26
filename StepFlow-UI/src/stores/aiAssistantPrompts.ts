@@ -90,6 +90,13 @@ export const categoryPromptTemplates: Record<
     `timeout settings, and result path placement for the completion payload. ` +
     `Explain human-in-the-loop patterns such as approvals, reviews, and manual data entry.`,
 
+  formcapture: (configSummary) =>
+    `You are a form capture configuration assistant. The user is configuring a Form Capture node that suspends the flow until a person submits a JSON-configured form. ` +
+    `Available configuration fields: ${configSummary}. ` +
+    `Help with selecting the bound form (formId from /api/forms), its AttributeDomain binding, task title and assignee, ` +
+    `and result path placement for the coerced attribute values merged into the flow input on resume. ` +
+    `Explain that submissions are validated against the domain's attribute contract (required, patterns, min/max) and persisted as EAV rows.`,
+
   remote: (configSummary) =>
     `You are a remote execution configuration assistant. The user is configuring an SSH Command node that runs a command on a curated remote host over SSH. ` +
     `Available configuration fields: ${configSummary}. ` +

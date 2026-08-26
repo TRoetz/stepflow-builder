@@ -1,0 +1,21 @@
+{
+  "Comment": "Demonstrates the FormCapture state: suspends until a person fills in and submits the order-approval form (forms/order-approval.json, bound to the OrderApproval attribute domain). The coerced values are persisted as an EAV row under eav-data/OrderApproval and merged into the flow input at $.capturedOrder before resuming.",
+  "StartAt": "ApproveOrder",
+  "States": {
+    "ApproveOrder": {
+      "Type": "FormCapture",
+      "Comment": "Suspend until the form is submitted via /form-capture.html?taskId=... (link appears in the human-tasks panel).",
+      "Task": {
+        "formId": "order-approval",
+        "title": "Approve customer order",
+        "assignee": "ops-team"
+      },
+      "ResultPath": "$.capturedOrder",
+      "Next": "Done"
+    },
+    "Done": {
+      "Type": "Succeed",
+      "End": true
+    }
+  }
+}

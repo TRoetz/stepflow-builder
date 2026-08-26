@@ -56,7 +56,7 @@ namespace StepFunctionsApp.Tests
                 _ruleEngine,
                 _msRulesEngine,
                 _duckDb,
-                new EavRegistryService(), // blank
+                new CompositeEavEntityProvider(new EavRegistryService(), new JsonFileAttributeDomainStore(Path.Combine(Path.GetTempPath(), "eav-provider-tests", Guid.NewGuid().ToString("N")))), // blank registry + empty domain store
                 _scriptExecution,
                 lazyStepService,
                 dataExchange,

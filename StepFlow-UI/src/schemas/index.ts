@@ -14,6 +14,7 @@ import { jsonataSchema, scriptSchema } from './steps/transform';
 import { passThroughSchema, waitSchema, branchSchema } from './steps/utility';
 import { subFlowSchema } from './steps/subflow';
 import { humanTaskSchema } from './steps/human';
+import { formCaptureSchema } from './steps/formCapture';
 import { startStateSchema, endStateSchema } from './steps/terminal';
 import { choiceStateSchema, mapStateSchema, parallelStateSchema, succeedStateSchema, failStateSchema } from './steps/flow';
 import { sshCommandSchema } from './steps/ssh';
@@ -54,6 +55,8 @@ export const stepSchemas: StepSchema[] = [
   subFlowSchema,
   // Human (1)
   humanTaskSchema,
+  // Form Capture (1)
+  formCaptureSchema,
   // Remote (1)
   sshCommandSchema,
   // File Transfer (1)
@@ -95,6 +98,7 @@ import { SubFlowNode } from '@components/Nodes/SubFlowNode';
 import { TerminalNode } from '@components/Nodes/TerminalNode';
 import { FlowNode } from '@components/Nodes/FlowNode';
 import { HumanTaskNode } from '@components/Nodes/HumanTaskNode';
+import { FormCaptureNode } from '@components/Nodes/FormCaptureNode';
 import { SshNode } from '@components/Nodes/SshNode';
 import { FetchFilesNode } from '@components/Nodes/FetchFilesNode';
 
@@ -109,6 +113,7 @@ export const categoryNodeComponents: Record<StepCategory, React.ComponentType<{ 
   utility: UtilityNode,
   subflow: SubFlowNode,
   human: HumanTaskNode,
+  formcapture: FormCaptureNode,
   remote: SshNode,
   transfer: FetchFilesNode,
 };

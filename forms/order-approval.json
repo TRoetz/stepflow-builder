@@ -1,0 +1,95 @@
+{
+  "FormId": "order-approval",
+  "Title": "Order Approval",
+  "Description": "Capture and approve a customer order. Bound to the OrderApproval attribute domain — submissions are validated against its attribute contract and persisted as EAV rows.",
+  "AttributeDomainName": "OrderApproval",
+  "SchemaDefinitionName": null,
+  "Page": {
+    "Id": 1,
+    "Title": "Order Approval",
+    "Description": "Fill in the order details and pick a priority to approve the order.",
+    "Author": "stepflow-builder",
+    "PageName": 0,
+    "PageVersion": "1.0",
+    "RootElements": [
+      {
+        "Id": 10,
+        "Type": "Section",
+        "Label": "Order Details",
+        "Heading": "Order Details",
+        "Children": [
+          {
+            "Id": 11,
+            "Type": "TextBox",
+            "Attribute": "orderId",
+            "Label": "Order ID",
+            "Placeholder": "ORD-123456"
+          },
+          {
+            "Id": 12,
+            "Type": "TextBox",
+            "Attribute": "customerName",
+            "Label": "Customer Name",
+            "Placeholder": "Acme Ltd"
+          },
+          {
+            "Id": 13,
+            "Type": "DatePicker",
+            "Attribute": "orderDate",
+            "Label": "Order Date"
+          },
+          {
+            "Id": 14,
+            "Type": "TextBox",
+            "Attribute": "amount",
+            "Label": "Amount (USD)",
+            "Placeholder": "2500.00"
+          }
+        ]
+      },
+      {
+        "Id": 20,
+        "Type": "Section",
+        "Label": "Review",
+        "Heading": "Review",
+        "Children": [
+          {
+            "Id": 21,
+            "Type": "Dropdown",
+            "Attribute": "priority",
+            "Label": "Priority",
+            "Children": [
+              {
+                "Id": 211,
+                "Type": "DropdownOption",
+                "Value": "Low",
+                "DisplayText": "Low"
+              },
+              {
+                "Id": 212,
+                "Type": "DropdownOption",
+                "Value": "Normal",
+                "DisplayText": "Normal"
+              },
+              {
+                "Id": 213,
+                "Type": "DropdownOption",
+                "Value": "High",
+                "DisplayText": "High"
+              }
+            ]
+          },
+          {
+            "Id": 22,
+            "Type": "TextArea",
+            "Attribute": "notes",
+            "Label": "Notes",
+            "Placeholder": "Anything the approver should know…",
+            "Rows": 3,
+            "Cols": 40
+          }
+        ]
+      }
+    ]
+  }
+}

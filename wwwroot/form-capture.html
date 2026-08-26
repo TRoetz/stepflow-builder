@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Form Capture</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #111827; color: #e5e7eb; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.25rem; margin: 0 0 4px; }
+  .meta { color: #9ca3af; font-size: 0.75rem; margin-bottom: 24px; }
+  .card { background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 20px; }
+  fieldset { border: 1px solid #374151; border-radius: 6px; margin: 0 0 12px; padding: 12px; min-width: 0; }
+  legend { font-size: 0.7rem; font-weight: 600; color: #d1d5db; padding: 0 4px; }
+  .field { margin-bottom: 14px; }
+  label.flabel { display: block; font-size: 0.75rem; font-weight: 500; color: #9ca3af; margin-bottom: 4px; }
+  .req { color: #f87171; margin-left: 2px; }
+  input[type="text"], input[type="email"], input[type="number"], input[type="url"], input[type="date"], select, textarea {
+    width: 100%; background: #111827; border: 1px solid #374151; border-radius: 6px; padding: 8px 10px; color: #e5e7eb; font-size: 0.875rem;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: #10b981; }
+  .help { font-size: 0.65rem; color: #6b7280; margin-top: 3px; }
+  .err { font-size: 0.7rem; color: #f87171; margin-top: 3px; }
+  .checkline, .radioline { display: flex; align-items: center; gap: 8px; font-size: 0.875rem; margin-bottom: 6px; }
+  input[type="checkbox"], input[type="radio"] { accent-color: #10b981; width: 15px; height: 15px; }
+  .sliderline { display: flex; align-items: center; gap: 12px; }
+  .sliderline input[type="range"] { flex: 1; accent-color: #10b981; }
+  .sliderval { font-family: ui-monospace, monospace; font-size: 0.75rem; color: #9ca3af; min-width: 40px; text-align: right; }
+  .statictext { font-size: 0.75rem; color: #9ca3af; margin-bottom: 12px; }
+  button.submit { background: #10b981; border: none; color: #06281e; font-weight: 600; font-size: 0.875rem; padding: 10px 24px; border-radius: 6px; cursor: pointer; }
+  button.submit:hover { background: #34d399; }
+  .banner { padding: 14px 16px; border-radius: 8px; font-size: 0.875rem; margin-bottom: 20px; display: none; }
+  .banner.error { display: block; background: #3f1d1d; border: 1px solid #7f1d1d; color: #fecaca; }
+  .banner.ok { display: block; background: #06281e; border: 1px solid #065f46; color: #a7f3d0; }
+  pre.result { background: #111827; border: 1px solid #374151; border-radius: 6px; padding: 12px; font-size: 0.7rem; overflow-x: auto; color: #a7f3d0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 id="title">Form Capture</h1>
+  <div class="meta" id="meta"></div>
+  <div class="banner" id="banner"></div>
+  <div class="card" id="form-card"><p style="color:#9ca3af;font-size:.8rem;">Loading form…</p></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// Standalone fill-in page for suspended FormCapture states.
+// Value key contract (mirrors the backend submit endpoint):
+//   bound forms  -> keys are AttributeName; an element opts in via its
+//                   optional "Attribute" field or lowercase "attribute";
+//                   absent -> String(element.Id).
+//   unbound forms-> any key passes through as-is.
+// ═══════════════════════════════════════════════════════════
+
+const params = new URLSearchParams(location.search);
+const taskId = params.get('taskId');
+const values = {};
+let taskInfo = null;
+let attrByKey = {};
+
+function valueKey(el) {
+  if (typeof el.Attribute === 'string' && el.Attribute.length > 0) return el.Attribute;
+  if (typeof el.attribute === 'string' && el.attribute.length > 0) return el.attribute;
+  return String(el.Id ?? '');
+}
+
+function parseValidation(json) {
+  if (!json) return null;
+  try { const v = JSON.parse(json); return typeof v === 'object' && v !== null ? v : null; } catch { return null; }
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s ?? '');
+  return d.innerHTML;
+}
+
+function fieldShell(key, label, required, helpText, controlHtml) {
+  const attr = attrByKey[key];
+  const validation = parseValidation(attr && attr.validationSchemaJson);
+  const req = (validation && validation.required === true) ? '<span class="req">*</span>' : '';
+  return `<div class="field" data-field="${esc(key)}">
+    <label class="flabel">${esc(label)}${req}</label>
+    ${controlHtml}
+    ${helpText ? `<div class="help">${esc(helpText)}</div>` : ''}
+    <div class="err"></div>
+  </div>`;
+}
+
+function renderElement(el) {
+  const key = valueKey(el);
+  const attr = attrByKey[key];
+  const readOnly = !!(attr && attr.readOnly);
+  const label = el.Label || (attr && attr.displayName) || key;
+  const placeholder = el.Placeholder || (attr && attr.placeholder) || '';
+  const helpText = el.Description || (attr && attr.helpText) || '';
+  const val = values[key];
+
+  switch (el.Type) {
+    case 'Section':
+      return `<fieldset><legend>${esc(el.Heading || label)}</legend>${(el.Children ?? []).map(renderElement).join('')}</fieldset>`;
+    case 'Grid':
+    case 'Wizard':
+    case 'Step':
+      return `<div>${(el.Children ?? []).map(renderElement).join('')}</div>`;
+    case 'GridItem':
+      return `<div>${(el.Children ?? []).map(renderElement).join('')}</div>`;
+    case 'StaticText':
+      return `<p class="statictext">${esc(label)}${helpText ? '<br>' + esc(helpText) : ''}</p>`;
+    case 'Button':
+      return `<button type="button" disabled style="opacity:.5;">${esc(label)}</button>`;
+    case 'Dropdown': {
+      const options = (el.Children ?? []).filter((c) => c.Type === 'DropdownOption');
+      const opts = options.map((o) => `<option value="${esc(o.Value ?? '')}" ${String(val) === String(o.Value ?? '') ? 'selected' : ''}>${esc(o.DisplayText || o.Value ?? '')}</option>`).join('');
+      return fieldShell(key, label, false, helpText,
+        `<select data-key="${esc(key)}" data-type="text" ${readOnly ? 'disabled' : ''}><option value="">— select —</option>${opts}</select>`);
+    }
+    case 'Checkbox': {
+      const validation = parseValidation(attr && attr.validationSchemaJson);
+      const req = (validation && validation.required === true) ? '<span class="req">*</span>' : '';
+      return `<div class="field" data-field="${esc(key)}">
+        <label class="checkline"><input type="checkbox" data-key="${esc(key)}" data-type="bool" ${val ? 'checked' : ''} ${readOnly ? 'disabled' : ''}> ${esc(label)}${req}</label>
+        ${helpText ? `<div class="help">${esc(helpText)}</div>` : ''}<div class="err"></div></div>`;
+    }
+    case 'RadioButton': {
+      const siblings = (el.Children ?? []).filter((c) => c.Type === 'RadioButton' && c.GroupName);
+      if (siblings.length > 0) {
+        const groupKey = el.Attribute || el.attribute || el.GroupName || key;
+        const lines = siblings.map((sib) => `<label class="radioline">
+          <input type="radio" name="grp-${esc(groupKey)}" data-key="${esc(groupKey)}" data-type="text" ${String(values[groupKey]) === String(sib.Label) ? 'checked' : ''} ${readOnly ? 'disabled' : ''}> ${esc(sib.Label)}</label>`).join('');
+        return fieldShell(key, label, false, helpText, `<div>${lines}</div>`);
+      }
+      const lines = `<label class="radioline"><input type="radio" name="grp-${esc(key)}" data-key="${esc(key)}" data-type="bool" ${val ? 'checked' : ''} ${readOnly ? 'disabled' : ''}> ${esc(label)}</label>`;
+      return fieldShell(key, label, false, helpText, `<div>${lines}</div>`);
+    }
+    case 'DatePicker':
+      return fieldShell(key, label, false, helpText,
+        `<input type="date" data-key="${esc(key)}" data-type="text" value="${esc(val ?? '')}" min="${esc((el.MinDate || '').slice(0, 10))}" max="${esc((el.MaxDate || '').slice(0, 10))}" ${readOnly ? 'disabled' : ''}>`);
+    case 'Slider': {
+      const min = el.MinValue ?? 0;
+      const max = el.MaxValue ?? 100;
+      const cur = (val !== undefined && val !== null) ? Number(val) : (el.Value ?? min);
+      return fieldShell(key, label, false, helpText,
+        `<div class="sliderline"><input type="range" data-key="${esc(key)}" data-type="number" min="${min}" max="${max}" step="${el.Step ?? 1}" value="${cur}" ${readOnly ? 'disabled' : ''}><span class="sliderval">${esc(cur)}</span></div>`);
+    }
+    case 'FileUpload':
+      return fieldShell(key, label, false, helpText,
+        `<input type="file" data-key="${esc(key)}" data-type="text" ${readOnly ? 'disabled' : ''}>`);
+    default: { // TextBox / InputGroup / unknown -> single-line input
+      const t = el.Type === 'InputGroup' ? (el.InputElementType || 'Text').toLowerCase() : 'text';
+      return fieldShell(key, label, false, helpText,
+        `<input type="${esc(t)}" data-key="${esc(key)}" data-type="text" placeholder="${esc(placeholder)}" maxlength="${el.MaxLength ?? ''}" value="${esc(val ?? '')}" ${readOnly ? 'disabled' : ''}>`);
+    }
+  }
+}
+
+function showBanner(kind, html) {
+  const b = document.getElementById('banner');
+  b.className = `banner ${kind}`;
+  b.innerHTML = html;
+}
+
+async function load() {
+  if (!taskId) {
+    document.getElementById('form-card').innerHTML = '<p style="color:#f87171;font-size:.8rem;">Missing <code>?taskId=</code> query parameter.</p>';
+    return;
+  }
+  let res;
+  try {
+    res = await fetch(`/api/form-captures/${encodeURIComponent(taskId)}`);
+  } catch (e) {
+    document.getElementById('form-card').innerHTML = '<p style="color:#f87171;font-size:.8rem;">Failed to reach the server.</p>';
+    return;
+  }
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try { const j = await res.json(); msg = j.error || JSON.stringify(j); } catch {}
+    document.getElementById('form-card').innerHTML = `<p style="color:#f87171;font-size:.8rem;">${esc(msg)}</p>`;
+    return;
+  }
+
+  taskInfo = await res.json();
+  const form = taskInfo.form || {};
+  attrByKey = {};
+  for (const a of (taskInfo.attributes ?? [])) attrByKey[a.attributeName] = a;
+
+  document.getElementById('title').textContent = taskInfo.title || 'Form Capture';
+  const metaBits = [];
+  if (taskInfo.assignee) metaBits.push(`Assignee: ${esc(taskInfo.assignee)}`);
+  if (taskInfo.stateMachineName) metaBits.push(`Flow: ${esc(taskInfo.stateMachineName)}`);
+  if (taskInfo.createdAtUtc) metaBits.push(`Created: ${esc(String(taskInfo.createdAtUtc).replace('T', ' ').slice(0, 19))} UTC`);
+  document.getElementById('meta').innerHTML = metaBits.join(' &middot; ');
+
+  const card = document.getElementById('form-card');
+  if (taskInfo.status !== 'Pending') {
+    // Already completed — show the captured result read-only.
+    card.innerHTML = `<p style="font-size:.8rem;color:#a7f3d0;margin-bottom:12px;">This form was already submitted${taskInfo.completedAtUtc ? ` on ${esc(String(taskInfo.completedAtUtc).replace('T', ' ').slice(0, 19))} UTC` : ''}.</p>
+      <pre class="result">${esc(JSON.stringify(taskInfo.result ?? {}, null, 2))}</pre>`;
+    return;
+  }
+
+  const page = form.page || {};
+  const rootElements = Array.isArray(page.RootElements) ? page.RootElements : [];
+  card.innerHTML = `<form id="capture-form">
+      ${rootElements.map(renderElement).join('')}
+      <div style="margin-top:20px;"><button type="submit" class="submit">Submit</button></div>
+    </form>`;
+
+  const formEl = document.getElementById('capture-form');
+  formEl.addEventListener('change', (e) => {
+    const t = e.target;
+    if (!t.dataset || !t.dataset.key) return;
+    const key = t.dataset.key;
+    let v;
+    if (t.type === 'checkbox') v = t.checked;
+    else if (t.type === 'radio') v = t.value !== '' ? t.value : true;
+    else if (t.dataset.type === 'number') v = Number(t.value);
+    else if (t.files && t.files.length > 0) v = t.files[0].name;
+    else v = t.value;
+    values[key] = v;
+    // Update the slider readout.
+    const row = t.closest('.sliderline');
+    if (row) { const span = row.querySelector('.sliderval'); if (span) span.textContent = String(v); }
+  });
+
+  formEl.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    // Clear previous field errors.
+    for (const el of card.querySelectorAll('.err')) el.textContent = '';
+    const btn = formEl.querySelector('button.submit');
+    btn.disabled = true;
+    btn.textContent = 'Submitting…';
+    try {
+      const res2 = await fetch(`/api/form-captures/${encodeURIComponent(taskId)}/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values }),
+      });
+      if (res2.ok) {
+        const j = await res2.json();
+        card.innerHTML = `<p style="font-size:.9rem;color:#a7f3d0;font-weight:600;">Submitted.</p>
+          <pre class="result">${esc(JSON.stringify(j, null, 2))}</pre>`;
+        showBanner('ok', 'Form submitted — the flow has been resumed.');
+      } else {
+        let j = {};
+        try { j = await res2.json(); } catch {}
+        if (j.errors && typeof j.errors === 'object') {
+          for (const [k, msg] of Object.entries(j.errors)) {
+            const fieldEl = card.querySelector(`[data-field="${CSS.escape(k)}"] .err`);
+            if (fieldEl) fieldEl.textContent = String(msg);
+          }
+          showBanner('error', 'Please fix the highlighted fields and resubmit.');
+        } else {
+          showBanner('error', esc(j.error || `Submission failed: HTTP ${res2.status}`));
+        }
+      }
+    } catch (err) {
+      showBanner('error', 'Network error — please try again.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Submit';
+    }
+  });
+}
+
+load();
+</script>
+</body>
+</html>

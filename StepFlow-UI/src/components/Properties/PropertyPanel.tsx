@@ -7,6 +7,7 @@ import { Trash2, Copy, AlertCircle, ArrowRight, CheckCircle, Settings, Info, Git
 import { useExecutionStore } from '@stores/useExecutionStore';
 import { ExecutionService } from '@services/executionService';
 import { FlowService } from '@services/flowService';
+import { FormService } from '@services/formService';
 import { useAutoLayout } from '@hooks/useAutoLayout';
 import { LibraryService } from '@library/LibraryService';
 import { showToast } from '@stores/useToastStore';
@@ -31,6 +32,9 @@ export function PropertyPanel({ selectedNode }: PropertyPanelProps) {
 
   // Saved flows (for re-pointing a Map's iterator link)
   const [savedFlows, setSavedFlows] = useState<Array<{ id: string; name: string }>>([]);
+
+  // Available forms (for binding a Form Capture node)
+  const [formOptions, setFormOptions] = useState<Array<{ formId: string; title?: string; version?: string; isCurrentVersion?: boolean }>>([]);
 
   const updateNodeData = useNodeStore((s) => s.updateNodeData);
   const removeNode = useNodeStore((s) => s.removeNode);
@@ -65,6 +69,16 @@ export function PropertyPanel({ selectedNode }: PropertyPanelProps) {
     let cancelled = false;
     FlowService.listFlows()
       .then((flows) => { if (!cancelled) setSavedFlows(flows); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [selectedNode?.id, selectedNode?.data.schemaId]);
+
+  // Load available forms while a Form Capture node is selected so its formId dropdown can be populated.
+  useEffect(() => {
+    if (!selectedNode || selectedNode.data.schemaId !== 'stepflow:formcapture:capture') return;
+    let cancelled = false;
+    FormService.listForms()
+      .then((forms) => { if (!cancelled) setFormOptions(forms); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [selectedNode?.id, selectedNode?.data.schemaId]);
@@ -270,6 +284,8 @@ export function PropertyPanel({ selectedNode }: PropertyPanelProps) {
                           configuration: {
                             ...(selectedNode.data.configuration || {}),
                             [field.id]: value,
+                            // Switching forms invalidates any pinned version.
+                            ...(field.id === 'formId' ? { formVersion: undefined } : null),
                           },
                         });
                       },
@@ -288,7 +304,7 @@ export function PropertyPanel({ selectedNode }: PropertyPanelProps) {
                       );
                     }
 
-                    return <ConfigFieldRenderer key={field.id} field={field} value={fieldProps.value} onChange={fieldProps.onChange} />;
+                    return <ConfigFieldRenderer key={field.id} field={field} value={fieldProps.value} onChange={fieldProps.onChange} formOptions={formOptions} formVersionOptions={field.id === 'formVersion' ? formVersionOptionsFor(selectedNode.data?.configuration?.formId, formOptions) : undefined} />;
                   })}
                 </div>
               </div>
@@ -976,14 +992,29 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** Dropdown options for pinning a specific version of the selected form. */
+function formVersionOptionsFor(
+  formId: unknown,
+  allForms: Array<{ formId: string; title?: string; version?: string; isCurrentVersion?: boolean }>
+): Array<{ label: string; value: string }> {
+  if (typeof formId !== 'string' || !formId) return [{ label: '-- Select a Form first --', value: '' }];
+  const versions = allForms
+    .filter((f) => f.formId === formId)
+    .map((f) => f.version ?? '')
+    .sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0));
+  return [{ label: '-- follow current --', value: '' }, ...versions.map((v) => ({ label: `v${v}`, value: v }))];
+}
+
 // ── Config Field Renderer ──
 interface ConfigFieldRendererProps {
   field: ConfigField;
   value: unknown;
   onChange: (value: unknown) => void;
+  formOptions?: Array<{ formId: string; title?: string; version?: string; isCurrentVersion?: boolean }>;
+  formVersionOptions?: Array<{ label: string; value: string }>;
 }
 
-function ConfigFieldRenderer({ field, value, onChange }: ConfigFieldRendererProps) {
+function ConfigFieldRenderer({ field, value, onChange, formOptions = [], formVersionOptions }: ConfigFieldRendererProps) {
   const handleChange = useCallback(
     (newValue: unknown) => {
       onChange(newValue);
@@ -1057,6 +1088,15 @@ function ConfigFieldRenderer({ field, value, onChange }: ConfigFieldRendererProp
         } catch {
           options = [];
         }
+      }
+      if (field.id === 'formId') {
+        options = [
+          { label: '-- Select a Form --', value: '' },
+          ...formOptions.filter((f) => f.isCurrentVersion).map((f) => ({ label: f.title ? `${f.formId} — ${f.title}` : f.formId, value: f.formId }))
+        ];
+      }
+      if (field.id === 'formVersion') {
+        options = formVersionOptions ?? [];
       }
       return (
         <div>

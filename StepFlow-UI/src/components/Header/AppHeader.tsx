@@ -1,4 +1,4 @@
-import { Play, Square, Save, Undo2, Redo2, LayoutGrid, Settings, Download, Upload, PanelLeft, PanelRight, MessageCircle, Puzzle, RotateCcw, FolderOpen, ArrowLeftRight } from 'lucide-react';
+import { Play, Square, Save, Undo2, Redo2, LayoutGrid, Settings, Download, Upload, PanelLeft, PanelRight, MessageCircle, Puzzle, RotateCcw, FolderOpen, ArrowLeftRight, ClipboardList } from 'lucide-react';
 import { useExecutionStore } from '@stores/useExecutionStore';
 interface AppHeaderProps {
   isRunning: boolean;
@@ -11,6 +11,7 @@ interface AppHeaderProps {
   onToggleAiAssistant: () => void;
   onToggleAgentPanel: () => void;
   onToggleDataExchange?: () => void;
+  onToggleFormBuilder?: () => void;
   onToggleAiConfig: () => void;
   onAutoLayout?: () => void;
   onResetFlow?: () => void;
@@ -21,7 +22,7 @@ interface AppHeaderProps {
   onFlowNameChange?: (name: string) => void;
 }
 
-export function AppHeader({ isRunning, onRun, onSave, onSaveProject, onLoadProject, onTogglePalette, onToggleProperties, onToggleAiAssistant, onToggleAgentPanel, onToggleDataExchange, onToggleAiConfig, onAutoLayout, onResetFlow, onImport, onExport, onLoad, flowName, onFlowNameChange }: AppHeaderProps) {
+export function AppHeader({ isRunning, onRun, onSave, onSaveProject, onLoadProject, onTogglePalette, onToggleProperties, onToggleAiAssistant, onToggleAgentPanel, onToggleDataExchange, onToggleFormBuilder, onToggleAiConfig, onAutoLayout, onResetFlow, onImport, onExport, onLoad, flowName, onFlowNameChange }: AppHeaderProps) {
   return (
     <header className="app-header">
       {/* Left: Logo + Flow Name */}
@@ -136,6 +137,9 @@ export function AppHeader({ isRunning, onRun, onSave, onSaveProject, onLoadProje
         </button>
         <button className="btn-icon" title="Toggle Data Exchange Panel" onClick={onToggleDataExchange}>
           <ArrowLeftRight className="w-4 h-4" />
+        </button>
+        <button className="btn-icon" title="Open Form Builder" onClick={onToggleFormBuilder}>
+          <ClipboardList className="w-4 h-4" />
         </button>
         <div className="h-5 w-px bg-gray-700" />
         <button className="btn-icon" title="Toggle Palette" onClick={onTogglePalette}>

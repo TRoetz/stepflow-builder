@@ -1,0 +1,89 @@
+[
+  {
+    "schemaDefinition": {
+      "schemaDefinitionName": "OrderApprovalSchema",
+      "version": "1",
+      "description": "Schema definition linked to the OrderApproval attribute domain."
+    },
+    "attributeDomain": {
+      "version": "1",
+      "attributeDomainName": "OrderApproval",
+      "description": "Attributes captured when a customer order is approved through the FormCapture demo flow.",
+      "isCurrentVersion": true,
+      "attributes": [
+        {
+          "attributeName": "orderId",
+          "dataType": 0,
+          "description": null,
+          "displayName": "Order ID",
+          "placeholder": "ORD-123456",
+          "helpText": "Format: ORD- followed by 3 to 6 digits.",
+          "visible": true,
+          "readOnly": false,
+          "primaryKey": true,
+          "validationSchemaJson": "{\"required\":true,\"pattern\":\"^ORD-[0-9]{3,6}$\"}"
+        },
+        {
+          "attributeName": "customerName",
+          "dataType": 0,
+          "description": null,
+          "displayName": "Customer Name",
+          "placeholder": "Acme Ltd",
+          "helpText": "",
+          "visible": true,
+          "readOnly": false,
+          "primaryKey": false,
+          "validationSchemaJson": "{\"required\":true,\"minLength\":2}"
+        },
+        {
+          "attributeName": "amount",
+          "dataType": 2,
+          "description": null,
+          "displayName": "Amount (USD)",
+          "placeholder": "2500.00",
+          "helpText": "Total order value in USD.",
+          "visible": true,
+          "readOnly": false,
+          "primaryKey": false,
+          "validationSchemaJson": "{\"required\":true,\"minimum\":1,\"maximum\":100000}"
+        },
+        {
+          "attributeName": "orderDate",
+          "dataType": 3,
+          "description": null,
+          "displayName": "Order Date",
+          "placeholder": "",
+          "helpText": "ISO date (YYYY-MM-DD). Optional.",
+          "visible": true,
+          "readOnly": false,
+          "primaryKey": false,
+          "validationSchemaJson": null
+        },
+        {
+          "attributeName": "priority",
+          "dataType": 0,
+          "description": null,
+          "displayName": "Priority",
+          "placeholder": "",
+          "helpText": "Pick one of the listed priorities.",
+          "visible": true,
+          "readOnly": false,
+          "primaryKey": false,
+          "validationSchemaJson": "{\"required\":true,\"minLength\":1}"
+        },
+        {
+          "attributeName": "notes",
+          "dataType": 0,
+          "description": null,
+          "displayName": "Notes",
+          "placeholder": "Anything the approver should know…",
+          "helpText": "",
+          "visible": true,
+          "readOnly": false,
+          "primaryKey": false,
+          "validationSchemaJson": "{\"maxLength\":500}"
+        }
+      ]
+    }
+  }
+]
