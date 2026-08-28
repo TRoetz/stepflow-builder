@@ -156,15 +156,19 @@ The completion result is placed at the state's `resultPath` in the flow input (o
 
 ## 6. DataExchange profiles
 
-A **profile** is a reusable, file-based data pipeline: it declares where rows come from (`DataSource`), what happens to them (staged `PipelineStages` of typed `Action`s — validation, calculation, lookup, transformation, dispatch), and optionally how it's triggered. Profiles are JSON documents stored in the profiles directory (default `dataexchange/profiles`) and executed three ways:
+A **profile** is a reusable, file-based data pipeline: it declares where rows come from (`DataSource`), what happens to them (staged `PipelineStages` of typed `Action`s — validation, calculation, lookup, transformation, dispatch), and optionally how it's triggered. Profiles are JSON documents stored under their workspace sub-project (`<sub>/data-exchange/<profileId>/`, §7) and executed three ways:
 
 1. **In a flow**: Task state with `"Resource": "dataexchange://<profileId>"` — runs synchronously; result reports at least `success`, `rowsIn`, `rowsOut`.
 2. **REST** (`api/data-exchange/…`): `GET|POST /profiles`, `GET|DELETE /profiles/{id}`, `POST /execute` (body `{ "profileId": "...", "input": { ... } }`), `GET /executions?limit=50`, `GET /executions/{id}`.
 3. **File drop**: the file monitor polls `<inbox>/<profileId>/` every 5s; a stable new file executes the profile with `{ "filePath": … }` as input, then moves the source to `processed/` or `failed/`.
 
-Full anatomy (every field of `DataSource`, stages and action types) plus a complete working profile: **StepFlow_Usage_Guide.md §4**. Live examples in `DataExchange/profiles/*.json`.
+Full anatomy (every field of `DataSource`, stages and action types) plus a complete working profile: **StepFlow_Usage_Guide.md §4**. Live examples in `workspace-data/Default/Default/Default/data-exchange/<profileId>/profile.json`.
 
-## 7. REST API surface (main app, port 5001)
+## 7. Workspace hierarchy (org → project → sub-project)
+
+Flows and DataExchange profiles are organized on disk in a three-level tree — **organization → project → sub-project** — under the workspace root (`Workspace:RootDirectory` in appsettings; default `workspace-data`). Each node may carry its own local ACL file (`access.json`, entries `{ principal, role }`; roles viewer/editor/admin/owner); effective access for a node is the union of grants from itself and all ancestors (nearest ancestor wins per principal). Sub-projects are leaves: flows live in `<sub>/flows/{flowId}/` (`flow.json` = camelCase ASL + `meta.json`) and profiles in `<sub>/data-exchange/<profileId>/profile.json`. The UI's Workspace panel manages the tree, ACLs, and selecting a sub-project as save target (REST routes in §8). A one-time migration moved legacy flat profiles into `Default/Default/Default/data-exchange/` (idempotent); stray profile folders not under a sub-project surface under `unassignedProfiles` in the tree response.
+
+## 8. REST API surface (main app, port 5001)
 
 | Method | Route | Purpose |
 |---|---|---|
@@ -179,10 +183,14 @@ Full anatomy (every field of `DataSource`, stages and action types) plus a compl
 | POST | `/api/state-machines/{id}/stop` | Stop an execution |
 | GET | `/api/human-tasks`, `GET /api/human-tasks/{id}`, `POST /api/human-tasks/{id}/complete` | Human task discovery & completion (§5) |
 | GET/POST/DELETE | `/api/data-exchange/profiles…`, `POST /api/data-exchange/execute`, `GET /api/data-exchange/executions…` | DataExchange profiles & executions (§6) |
+| GET | `/api/workspace` | Workspace tree (org → project → sub-project) with per-node ACLs, flow refs & profile ids (§7) |
+| POST/DELETE | `/api/workspace/nodes`, `POST /api/workspace/nodes/rename` | Create / rename / delete org, project or sub-project nodes (§7) |
+| GET/PUT | `/api/workspace/access?path=…` | Read local + effective grants / save a node's ACL (§7) |
+| GET/POST/DELETE | `/api/workspace/subprojects/{org}/{project}/{sub}/flows[/{flowId}]` | List / save / get / delete flows under a sub-project (§7) |
 | GET | `/api/ssh/hosts` | Curated SSH hosts (name/host/port only — never credentials) |
 | GET | `/api/health` | Liveness + flow-state store status |
 
-## 8. Debugging & error handling
+## 9. Debugging & error handling
 
 - **`run_flow` history** is your first stop: `history[]` lists every state transition with its data; `status` ∈ Running/Succeeded/Failed/Suspended; on failure read `errorCode` + `errorMessage`.
 - **Async executions**: poll `GET /api/flows/executions/{id}`; suspended ones resume via the human-task routes or app restart (`FlowState.AutoResume: true`).
@@ -190,12 +198,12 @@ Full anatomy (every field of `DataSource`, stages and action types) plus a compl
 - Task-level resilience: `retry` (exponential backoff) and `catch` (§3.3); built-in error codes in UserManual §7.
 - Engine status endpoints for diagnostics: `internal://engine/status`, `internal://rules/status`, `internal://transform/status`.
 
-## 9. Migration into StepFlow
+## 10. Migration into StepFlow
 
 - **SSIS packages**: the repo ships a converter pipeline (`Converters/`) — BPMN/SSIS → pattern match against `WorkflowPatterns.json` → conversion manifest with per-step decisions and rollback info. Procedure + concept-mapping table + walkthrough of a real converted flow: **StepFlow_Usage_Guide.md §6**.
 - **Azure Logic Apps**: manual porting — map each action to the nearest StepFlow construct (HTTP → `http(s)://` Task, conditions → `Choice`, loops → `Map`, delays → `Wait`, approvals → `HumanTask`). Procedure + worked example: **StepFlow_Usage_Guide.md §7**.
 
-## 10. Working patterns for agents
+## 11. Working patterns for agents
 
 1. **Smoke-test a new flow** with an `internal://echo` Task before wiring real resources — no external dependencies needed.
 2. **Prefer MCP over raw REST** when both are available: smaller payloads, structured errors, same engine.

@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using StepFunctionsApp.DataExchange;
+using StepFunctionsApp.Workspace;
 namespace StepFunctionsApp;
 
 public class Program
@@ -56,8 +57,20 @@ public class Startup
 
         // Data Exchange subsystem - customer file -> internal schema pipeline (profiles + executor)
         services.Configure<DataExchangeOptions>(_config.GetSection(DataExchangeOptions.SectionName));
-        services.AddSingleton(provider => new DataExchangeProfileStore(
-            provider.GetRequiredService<IOptions<DataExchangeOptions>>().Value.ProfilesDirectory));
+
+        // Workspace hierarchy (org → project → sub-project) with per-node ACLs — see Workspace/.
+        services.Configure<WorkspaceOptions>(_config.GetSection(WorkspaceOptions.SectionName));
+        services.AddSingleton(provider => new WorkspaceStore(
+            provider.GetRequiredService<IOptions<WorkspaceOptions>>().Value.RootDirectory));
+        services.AddSingleton<IWorkspaceAccessService, WorkspaceAccessService>();
+
+        // Profile store is tree-aware: workspace root + legacy flat dir (DataExchange section) for backward compatibility.
+        services.AddSingleton(provider =>
+        {
+            var workspace = provider.GetRequiredService<IOptions<WorkspaceOptions>>().Value;
+            var dataExchange = provider.GetRequiredService<IOptions<DataExchangeOptions>>().Value;
+            return new DataExchangeProfileStore(workspace.RootDirectory, dataExchange.ProfilesDirectory);
+        });
         services.AddSingleton<DataExchangeExecutor>();
         services.AddSingleton<DataExchangeExecutionLog>();
         services.AddHostedService<DataExchangeFileMonitorService>();
@@ -145,6 +158,14 @@ public class Startup
             app.UseDeveloperExceptionPage();
         }
         
+        // One-time migration: legacy flat profiles → workspace/{Default}/{Default}/{Default}/data-exchange/.
+        // Runs during Build(), guaranteed before any hosted service (incl. DataExchangeFileMonitorService) starts.
+        WorkspaceMigration.Migrate(
+            app.ApplicationServices.GetRequiredService<WorkspaceStore>(),
+            (_config.GetSection(DataExchangeOptions.SectionName).Get<DataExchangeOptions>() ?? new DataExchangeOptions()).ProfilesDirectory,
+            app.ApplicationServices.GetService<ILoggerFactory>()?.CreateLogger("StepFunctionsApp.Workspace"),
+            _config.GetSection(WorkspaceOptions.SectionName).Get<WorkspaceOptions>()?.DefaultNodeName ?? "Default");
+
         // Serve static files (JS, CSS) from dist/ directory
         var distPath = Path.Combine(Directory.GetCurrentDirectory(), "dist");
         if (Directory.Exists(distPath))

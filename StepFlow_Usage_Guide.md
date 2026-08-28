@@ -75,7 +75,7 @@ flowchart LR
 
 ### 1.4 REST API routes
 
-All routes below are verbatim from `Controllers/FlowsController.cs`, `Controllers/DataExchangeController.cs`, and `Controllers/HumanTasksController.cs`.
+All routes below are verbatim from `Controllers/FlowsController.cs`, `Controllers/DataExchangeController.cs`, `Controllers/HumanTasksController.cs`, and `Controllers/WorkspaceController.cs`.
 
 **Flows & executions (`FlowsController`)**
 
@@ -114,6 +114,18 @@ All routes below are verbatim from `Controllers/FlowsController.cs`, `Controller
 | GET | `/api/human-tasks?status=&executionId=` | List human tasks (filterable by status or executionId) |
 | GET | `/api/human-tasks/{id}` | Get one task with its full payload and (if completed) result |
 | POST | `/api/human-tasks/{id}/complete` | Complete a pending task; resumes or terminates the execution |
+
+**Workspace (`WorkspaceController`) — org → project → sub-project hierarchy with per-node ACLs (§1.6)**:
+
+| Method | Route | Purpose |
+|---|---|---|
+| GET | `/api/workspace` | Full tree (orgs → projects → sub-projects) with flow refs, profile ids and `unassignedProfiles` |
+| POST | `/api/workspace/nodes` | Create a node. Body: `{ "name": "...", "parentPath"? }` → `{ path }`; parent must exist when given |
+| POST | `/api/workspace/nodes/rename` | Rename in place. Body: `{ "path": "...", "newName": "..." }`; children + ACLs move with it |
+| DELETE | `/api/workspace/nodes?path=…` | Recursively delete a node (404 when missing) |
+| GET | `/api/workspace/access?path=…` | Local + effective grants for a node (effective = local ∪ ancestors, nearest wins per principal) |
+| PUT | `/api/workspace/access?path=…` | Save the node's local ACL. Body: `{ "entries": [{ "principal", "role" }] }`; roles viewer/editor/admin/owner |
+| GET/POST/DELETE | `/api/workspace/subprojects/{org}/{project}/{sub}/flows[/{flowId}]` | List / save / get / delete flows under a sub-project (save body: `{ name?, description?, id?, startAt?, states }`) |
 
 **Typical curl session:**
 
@@ -171,6 +183,25 @@ curl -s http://localhost:5001/mcp \
   -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
+
+### 1.6 Workspace hierarchy — organizing flows & profiles
+
+The app organizes saved artifacts in a three-level tree — **organization → project → sub-project** — under the workspace root (`Workspace:RootDirectory` in `appsettings.json`, default `workspace-data`). Sub-projects are leaves and hold the files:
+
+```
+workspace-data/
+└── Acme UI/                  ← organization (may carry access.json)
+    └── Website/              ← project (may carry access.json)
+        └── Web/              ← sub-project — the save target
+            ├── flows/new-flow/{flow.json, meta.json}
+            └── data-exchange/<profileId>/profile.json
+```
+
+**Access control.** Every node may have a local ACL (`access.json`) with entries `{ principal, role }` (roles: `viewer`, `editor`, `admin`, `owner`). A node's *effective* grants are the union of its own entries and those of all ancestors; when the same principal appears at several levels, the nearest ancestor wins. The Workspace panel shows both lists — local entries, and effective grants with an "inherited from …" label per grant.
+
+**Using it in the UI.** Open the **Workspace** panel from the header: create/rename/delete orgs, projects and sub-projects; click a node's name to edit its ACL (add principal+role entries, then *Save Access*); select a sub-project as save target — "Save current canvas flow here" writes the canvas into that sub-project's `flows/`, and saved flows appear in the tree with an *Open* action.
+
+**Migration.** On first start after upgrade, legacy flat profiles (`dataexchange/profiles/*.json`) are moved into `Default/Default/Default/data-exchange/<id>/profile.json` (idempotent; nothing is deleted). Registered flows keep their existing registry storage and can additionally be saved under any sub-project via the panel or the §1.4 workspace routes.
 
 ---
 
@@ -967,7 +998,7 @@ flowchart TD
 
 ## 4. DataExchange Profiles
 
-A **DataExchange profile** is a reusable, file-based data pipeline: it declares where rows come from (`DataSource`), what happens to them (`Pipeline` of staged `Action`s), and optionally how it gets triggered. Profiles are stored as JSON documents in the profiles directory (default `dataexchange/profiles`, configurable under the appsettings section `DataExchange`) and executed either synchronously by a flow, via REST, or automatically when a file lands in the profile's inbox folder.
+A **DataExchange profile** is a reusable, file-based data pipeline: it declares where rows come from (`DataSource`), what happens to them (`Pipeline` of staged `Action`s), and optionally how it gets triggered. Profiles are stored as JSON documents under their workspace sub-project (`<sub>/data-exchange/<profileId>/profile.json`; §1.6) and executed either synchronously by a flow, via REST, or automatically when a file lands in the profile's inbox folder.
 
 ### 4.1 Anatomy
 

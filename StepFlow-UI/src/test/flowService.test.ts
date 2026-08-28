@@ -87,4 +87,42 @@ describe('FlowService', () => {
       expect(loaded?.states).toBeDefined();
     });
   });
+  describe('importFlow', () => {
+    it('imports an ASL capture/save flow with the right node types and edges', () => {
+      FlowService.importFlow({
+        startAt: 'CaptureOrder',
+        states: {
+          CaptureOrder: { type: 'FormCapture', task: { formId: 'order-intake', title: 'Order Intake' }, next: 'SaveOrder' },
+          SaveOrder: { type: 'Task', resource: 'eav://OrderIntake', parameters: { operation: 'write', entityType: 'OrderIntake' }, next: 'Done' },
+          Done: { type: 'Succeed' },
+        },
+      });
+
+      const nodes = useNodeStore.getState().nodes;
+      expect(nodes).toHaveLength(3);
+      expect(nodes.map((n) => n.data?.schemaId)).toEqual([
+        'stepflow:formcapture:capture',
+        'stepflow:data:eav',
+        'stepflow:utility:pass',
+      ]);
+      expect(nodes[0].data?.configuration).toMatchObject({ formId: 'order-intake' });
+      expect(nodes[1].data?.configuration).toMatchObject({ operation: 'write', entityType: 'OrderIntake' });
+
+      const edges = useEdgeStore.getState().edges;
+      expect(edges).toHaveLength(2);
+    });
+
+    it('maps https:// resources back to the HTTP node (round-trip)', () => {
+      FlowService.importFlow({
+        startAt: 'Save',
+        states: {
+          Save: { type: 'Task', resource: 'https://api.example.com/orders', parameters: { method: 'POST', url: 'https://api.example.com/orders' } },
+        },
+      });
+
+      const node = useNodeStore.getState().nodes[0];
+      expect(node.data?.schemaId).toBe('stepflow:api:http');
+      expect(node.data?.configuration).toMatchObject({ method: 'POST', url: 'https://api.example.com/orders' });
+    });
+  });
 });

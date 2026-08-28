@@ -17,6 +17,9 @@ import { ToastStack } from '@components/ToastStack';
 import { AgentPanel } from '@components/Agents/AgentPanel';
 import { FormBuilderWindow } from '@components/Forms/FormBuilderWindow';
 import { DataExchangePanel } from '@components/DataExchange/DataExchangePanel';
+import { WorkspacePanel } from '@components/Workspace/WorkspacePanel';
+import { useWorkspaceStore } from '@stores/useWorkspaceStore';
+import { WorkspaceService, type WorkspaceFlow } from '@services/workspaceService';
 import { useAiAssistantStore } from '@stores/useAiAssistantStore';
 import { useAiModelConfigStore } from '@stores/useAiModelConfigStore';
 import { showToast } from '@stores/useToastStore';
@@ -34,6 +37,7 @@ export default function App() {
   const [flowName, setFlowName] = useState('New Flow');
   const [showAgentPanel, setShowAgentPanel] = useState(false);
   const [showDataExchangePanel, setShowDataExchangePanel] = useState(false);
+  const [showWorkspacePanel, setShowWorkspacePanel] = useState(false);
   const [formBuilderOpen, setFormBuilderOpen] = useState(false);
   const [showLogPanel, setShowLogPanel] = useState(false);
   const [expandedLogNodeId, setExpandedLogNodeId] = useState<string | null>(null);
@@ -114,6 +118,32 @@ export default function App() {
     const res = await FlowService.saveFlow(flowName);
     showToast({ type: res.success ? 'success' : 'error', message: res.message });
   }, [flowName]);
+
+  // ── Handle Save to Workspace ──
+  const handleSaveToWorkspace = useCallback(async () => {
+    const target = useWorkspaceStore.getState().selectedSubProjectPath;
+    if (!target) {
+      showToast({ type: 'error', message: 'Select a sub-project in the Workspace panel first' });
+      return;
+    }
+    try {
+      const definition = FlowService.exportFlow();
+      const res = await WorkspaceService.saveFlow(target, { name: flowName, startAt: definition.startAt, states: definition.states });
+      showToast({ type: 'success', message: `Saved "${flowName}" to ${target}${res.created ? '' : ' (updated)'}` });
+      useWorkspaceStore.getState().loadTree();
+    } catch (err) {
+      console.error('Failed to save flow to workspace:', err);
+      showToast({ type: 'error', message: `Save failed: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  }, [flowName]);
+
+  // ── Handle Open Workspace Flow (loads a stored flow into the canvas) ──
+  const handleOpenWorkspaceFlow = useCallback((flow: WorkspaceFlow) => {
+    FlowService.importFlow(flow.definition);
+    setTimeout(() => autoLayout(), 50);
+    setFlowName(flow.name);
+    showToast({ type: 'success', message: `Loaded "${flow.name}" from workspace` });
+  }, [autoLayout]);
 
   // ── Handle Instantiate Template (from the palette) ──
   // Auto-saves any existing canvas first so work is not lost.
@@ -397,11 +427,13 @@ export default function App() {
         onSave={handleSave}
         onSaveProject={() => setShowSaveProjectDialog(true)}
         onLoadProject={() => setShowLoadProjectDialog(true)}
+        onSaveToWorkspace={handleSaveToWorkspace}
         onTogglePalette={() => setIsCollapsedPalette((p) => !p)}
         onToggleProperties={() => setIsCollapsedProperties((p) => !p)}
         onToggleAiAssistant={toggleAiAssistant}
         onToggleAgentPanel={() => setShowAgentPanel((p) => !p)}
         onToggleDataExchange={() => setShowDataExchangePanel((p) => !p)}
+        onToggleWorkspace={() => setShowWorkspacePanel((p) => !p)}
         onToggleFormBuilder={() => setFormBuilderOpen((p) => !p)}
         onToggleAiConfig={toggleAiConfig}
         onAutoLayout={handleAutoLayout}
@@ -570,6 +602,13 @@ export default function App() {
         )}
         {showDataExchangePanel && (
           <DataExchangePanel onClose={() => setShowDataExchangePanel(false)} />
+        )}
+        {showWorkspacePanel && (
+          <WorkspacePanel
+            onClose={() => setShowWorkspacePanel(false)}
+            onOpenFlow={handleOpenWorkspaceFlow}
+            onSaveCurrentFlow={handleSaveToWorkspace}
+          />
         )}
       </div>
 

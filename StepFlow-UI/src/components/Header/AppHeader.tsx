@@ -1,4 +1,4 @@
-import { Play, Square, Save, Undo2, Redo2, LayoutGrid, Settings, Download, Upload, PanelLeft, PanelRight, MessageCircle, Puzzle, RotateCcw, FolderOpen, ArrowLeftRight, ClipboardList } from 'lucide-react';
+import { Play, Square, Save, Undo2, Redo2, LayoutGrid, Settings, Download, Upload, PanelLeft, PanelRight, MessageCircle, Puzzle, RotateCcw, FolderOpen, ArrowLeftRight, ClipboardList, FolderTree, FolderCheck } from 'lucide-react';
 import { useExecutionStore } from '@stores/useExecutionStore';
 interface AppHeaderProps {
   isRunning: boolean;
@@ -6,11 +6,13 @@ interface AppHeaderProps {
   onSave: () => void;
   onSaveProject?: () => void;
   onLoadProject?: () => void;
+  onSaveToWorkspace?: () => void;
   onTogglePalette: () => void;
   onToggleProperties: () => void;
   onToggleAiAssistant: () => void;
   onToggleAgentPanel: () => void;
   onToggleDataExchange?: () => void;
+  onToggleWorkspace?: () => void;
   onToggleFormBuilder?: () => void;
   onToggleAiConfig: () => void;
   onAutoLayout?: () => void;
@@ -22,7 +24,7 @@ interface AppHeaderProps {
   onFlowNameChange?: (name: string) => void;
 }
 
-export function AppHeader({ isRunning, onRun, onSave, onSaveProject, onLoadProject, onTogglePalette, onToggleProperties, onToggleAiAssistant, onToggleAgentPanel, onToggleDataExchange, onToggleFormBuilder, onToggleAiConfig, onAutoLayout, onResetFlow, onImport, onExport, onLoad, flowName, onFlowNameChange }: AppHeaderProps) {
+export function AppHeader({ isRunning, onRun, onSave, onSaveProject, onLoadProject, onSaveToWorkspace, onTogglePalette, onToggleProperties, onToggleAiAssistant, onToggleAgentPanel, onToggleDataExchange, onToggleWorkspace, onToggleFormBuilder, onToggleAiConfig, onAutoLayout, onResetFlow, onImport, onExport, onLoad, flowName, onFlowNameChange }: AppHeaderProps) {
   return (
     <header className="app-header">
       {/* Left: Logo + Flow Name */}
@@ -113,6 +115,16 @@ export function AppHeader({ isRunning, onRun, onSave, onSaveProject, onLoadProje
             <span>Load Project</span>
           </button>
         )}
+        {onSaveToWorkspace && (
+          <button
+            className="btn btn-primary gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 border-indigo-500/20"
+            title="Save current flow to the selected workspace sub-project"
+            onClick={onSaveToWorkspace}
+          >
+            <FolderCheck className="w-3.5 h-3.5" />
+            <span>Save to Workspace</span>
+          </button>
+        )}
         <button className="btn-icon" title="Undo (Ctrl+Z)">
           <Undo2 className="w-4 h-4" />
         </button>
@@ -138,6 +150,11 @@ export function AppHeader({ isRunning, onRun, onSave, onSaveProject, onLoadProje
         <button className="btn-icon" title="Toggle Data Exchange Panel" onClick={onToggleDataExchange}>
           <ArrowLeftRight className="w-4 h-4" />
         </button>
+        {onToggleWorkspace && (
+          <button className="btn-icon" title="Toggle Workspace Panel" onClick={onToggleWorkspace}>
+            <FolderTree className="w-4 h-4" />
+          </button>
+        )}
         <button className="btn-icon" title="Open Form Builder" onClick={onToggleFormBuilder}>
           <ClipboardList className="w-4 h-4" />
         </button>

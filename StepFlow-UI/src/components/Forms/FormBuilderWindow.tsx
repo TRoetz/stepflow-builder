@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
-import { Plus, Trash2, Save, FileJson, AlertCircle, ArrowLeft, Braces, Rocket } from 'lucide-react';
+import { Plus, Trash2, Save, FileJson, AlertCircle, ArrowLeft, Braces, Rocket, Sparkles, X } from 'lucide-react';
 import {
   FormService,
   ATTRIBUTE_DATA_TYPES,
@@ -9,6 +9,10 @@ import {
   type EntityAttributeData,
   type SchemaDefinitionData,
 } from '@services/formService';
+import { FlowService } from '@services/flowService';
+import type { AiFormPlan } from '@services/aiFormBuilder';
+import { useAutoLayout } from '@hooks/useAutoLayout';
+import { AiFormBuildModal } from './AiFormBuildModal';
 import { FormRenderer } from './FormRenderer';
 import { showToast } from '@stores/useToastStore';
 
@@ -142,6 +146,11 @@ export function FormBuilderWindow({ onClose }: { onClose: () => void }) {
   // ── Shared ────────────────────────────────────────────────────────────────
   const [busy, setBusy] = useState(false);
 
+  // ── AI build ──────────────────────────────────────────────────────────────
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [aiPlan, setAiPlan] = useState<AiFormPlan | null>(null);
+  const { autoLayout } = useAutoLayout();
+
   const loadAll = useCallback(async () => {
     try {
       const [f, d, s] = await Promise.all([FormService.listForms(), FormService.listDomains(), FormService.listSchemas()]);
@@ -187,6 +196,50 @@ export function FormBuilderWindow({ onClose }: { onClose: () => void }) {
     setPageJson(NEW_PAGE_TEMPLATE);
     setIsDirty(true);
   }, []);
+
+  /** Apply an AI-generated plan: form draft into the editor, domain persisted (or queued for review), flow offered on canvas. */
+  const handleAiGenerated = useCallback(async (plan: AiFormPlan) => {
+    setSelectedFormKey(null);
+    setFormMeta({
+      formId: plan.form.formId,
+      title: plan.form.title,
+      description: plan.form.description ?? '',
+      attributeDomainName: plan.form.attributeDomainName ?? '',
+    });
+    setPageJson(JSON.stringify(plan.form.page, null, 2));
+    setIsDirty(true);
+
+    const domainName = plan.domain?.attributeDomain?.attributeDomainName;
+    if (plan.domain && domainName) {
+      try {
+        if (!domains.some((d) => d.attributeDomain?.attributeDomainName === domainName)) {
+          await FormService.saveDomain(plan.domain);
+          showToast({ type: 'success', message: `Attribute domain "${domainName}" saved` });
+        } else {
+          setTab('domains');
+          setSelectedDomainName(domainName);
+          setDomainDraft(JSON.parse(JSON.stringify(plan.domain)) as AttributeDomainEntry);
+          showToast({ type: 'success', message: `Domain "${domainName}" already exists — AI version loaded in the Domains tab for review; save it there if correct.` });
+        }
+      } catch (err) {
+        showToast({ type: 'error', message: `Form draft loaded, but saving attribute domain failed: ${errorMessage(err)}` });
+      }
+    }
+
+    setAiPlan(plan.flow ? plan : null);
+    await loadAll();
+    showToast({ type: 'success', message: `AI form "${plan.form.title}" loaded as a draft — review and save it.` });
+  }, [domains, loadAll]);
+
+  /** Import the AI-generated flow onto the canvas (replaces current nodes) and return to the flow view. */
+  const handleOpenFlowInCanvas = useCallback(() => {
+    if (!aiPlan?.flow) return;
+    if (!window.confirm('Importing the generated flow will replace the current canvas. Continue?')) return;
+    FlowService.importFlow(aiPlan.flow);
+    setTimeout(() => { void autoLayout(); }, 50);
+    setAiPlan(null);
+    onClose();
+  }, [aiPlan, autoLayout, onClose]);
 
   const parsePage = (): Record<string, unknown> | null => {
     try {
@@ -494,9 +547,12 @@ export function FormBuilderWindow({ onClose }: { onClose: () => void }) {
         <div className="flex flex-1 overflow-hidden">
           {/* Form groups */}
           <div className="w-72 shrink-0 border-r border-gray-800 bg-gray-900/40 flex flex-col">
-            <div className="p-2 border-b border-gray-800">
+            <div className="p-2 border-b border-gray-800 space-y-1.5">
               <button onClick={startNewForm} className="flex items-center gap-1.5 w-full px-2 py-1.5 rounded bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 text-xs transition-colors">
                 <Plus className="w-3 h-3" /> New Form
+              </button>
+              <button onClick={() => setAiModalOpen(true)} title="Describe what to capture — AI generates the form, domain contract and save flow" className="flex items-center gap-1.5 w-full px-2 py-1.5 rounded bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/30 text-xs transition-colors">
+                <Sparkles className="w-3 h-3" /> AI Build
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
@@ -538,6 +594,20 @@ export function FormBuilderWindow({ onClose }: { onClose: () => void }) {
             ) : (
               <>
                 {/* Meta fields */}
+                {aiPlan?.flow && (
+                  <div className="mx-3 mt-2 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 py-2 flex items-center gap-2">
+                    <Rocket className="w-4 h-4 text-indigo-300 shrink-0" />
+                    <div className="text-[11px] text-indigo-200 flex-1 min-w-0 truncate">
+                      AI generated a flow: {Object.keys(aiPlan.flow.states).join(' → ')} — open it on the canvas to review.
+                    </div>
+                    <button onClick={handleOpenFlowInCanvas} className="shrink-0 px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-medium transition-colors">
+                      Open Flow in Canvas
+                    </button>
+                    <button onClick={() => setAiPlan(null)} title="Dismiss" className="shrink-0 p-1 rounded text-indigo-300/70 hover:text-white transition-colors">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2 p-3 border-b border-gray-800">
                   <input
                     className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs font-mono text-gray-200 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
@@ -895,6 +965,7 @@ export function FormBuilderWindow({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       )}
+      <AiFormBuildModal open={aiModalOpen} onClose={() => setAiModalOpen(false)} onGenerated={(plan) => void handleAiGenerated(plan)} />
     </div>
   );
 }

@@ -527,7 +527,7 @@ function resolveSchemaId(state: StateDefinition): string {
   if (resource.startsWith('sql://')) return 'stepflow:data:sql';
   if (resource.startsWith('duckdb://')) return 'stepflow:data:duckdb';
   if (resource.startsWith('eav://')) return 'stepflow:data:eav';
-  if (resource.startsWith('http://')) return 'stepflow:api:http';
+  if (resource.startsWith('http://') || resource.startsWith('https://')) return 'stepflow:api:http';
   if (resource.startsWith('api://')) return 'stepflow:api:registered';
   if (resource.startsWith('ssh://')) return 'stepflow:ssh:command';
   if (resource.startsWith('fetch://')) return 'stepflow:fetch:files';
