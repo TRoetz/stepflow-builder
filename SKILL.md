@@ -22,7 +22,7 @@ Two separate hosts exist; flows in the sample scenarios reference **both**:
 
 | Host | Port | What it serves | Start with |
 |---|---|---|---|
-| Main app (`StepFunctionsApp`) | `http://localhost:5001` (fixed by `Program.cs` `UseUrls`; override via `ASPNETCORE_URLS`) | Flow engine REST API, `/mcp`, human tasks, DataExchange | `dotnet run --project StepFunctionsApp` |
+| Main app (`StepFunctionsApp`) | `http://localhost:5001` (fixed by `Program.cs` `UseUrls`; override via `ASPNETCORE_URLS`) | Flow engine REST API, `/mcp`, human tasks, DataExchange | `dotnet run` from the repo root (the csproj is at the top level) |
 | Fake test host (`Stepflow-Builder-Tests`) | `http://localhost:5095` (fixed by its `Program.cs`) | Only the fake commerce/data APIs under `/api/fake/*` used by sample flows and DataExchange fixtures | `dotnet run --project Stepflow-Builder-Tests` |
 
 Health check: `GET http://localhost:5001/api/health` (liveness + flow-state store status).
@@ -55,7 +55,7 @@ Client configuration (Claude Desktop / VS Code Copilot / any MCP client):
 Conventions that matter when calling these tools:
 
 - **Errors are JSON, not exceptions**: every tool returns `{ "error": "…" }` on failure (unknown flow, bad JSON, unknown `startAt`). Read the message and fix the input.
-- All nine state types (§3) — including `HumanTask` — work in MCP-saved definitions. A `run_flow` that hits a pending `HumanTask` returns **status `Suspended`**; complete the task via §5 to resume it (the engine auto-resumes suspended executions on app restart).
+- All ten state types (§3) — including `HumanTask` and `FormCapture` — work in MCP-saved definitions. A `run_flow` that hits a pending one returns **status `Suspended`**; complete it via §5 (or the form-capture routes, §8) to resume it (the engine auto-resumes suspended executions on app restart).
 - Definitions round-trip with the React UI: camelCase keys, dictionary keys (state names) keep their original casing.
 
 Manual call without an MCP client:
@@ -87,7 +87,7 @@ A flow is a JSON document:
 
 ### 3.1 State types and their fields
 
-Nine types (`StateType` enum, `StepFunctions/StatesLanguageModels.cs`). Common optional fields on every state: `comment`, `inputPath`, `outputPath`, `resultPath`, `parameters`, `resultSelector`, `retry[]`, `catch[]`.
+Ten types (`StateType` enum, `StepFunctions/StatesLanguageModels.cs`). Common optional fields on every state: `comment`, `inputPath`, `outputPath`, `resultPath`, `parameters`, `resultSelector`, `retry[]`, `catch[]`.
 
 | Type | Key fields | Behavior |
 |---|---|---|
@@ -96,6 +96,7 @@ Nine types (`StateType` enum, `StepFunctions/StatesLanguageModels.cs`). Common o
 | `Choice` | `choices[]`, `default?` | Evaluates rules top-to-bottom; first match wins. Rule: `{ "variable": "$.x", "<operator>": value, "next": "State" }`. Operators: `stringEquals(Path)`, `stringGreaterThan/LessThan`, `numericEquals/GreaterThan(Equals)/LessThan(Equals)`, `booleanEquals`, `timestampEquals/GreaterThan/LessThan`, `isPresent`, `isNull`, `isString`, `isNumeric`, `isBoolean`, `stringMatches` (regex), plus combinators `and[]`, `or[]`, `not`. No match + no `default` → error `States.NoChoiceMatched` |
 | `Wait` | `seconds?`, `timestamp?`, `secondsPath?`, `timestampPath?` | Pauses execution for a duration (durable across restarts) |
 | `HumanTask` | `task` (object; `title`, `assignee` read out), `completion` (`{ "type": "api" \| "file", ... }`, default `api`; file mode: `directory?`, `fileName?` default `{taskId}.json`), `resultPath?` | Suspends the flow until a person completes it (§5). Requires `next` or `end: true` |
+| `FormCapture` | `task` (object; `title`, `assignee` read out), `completion` (`{ "type": "form" }`; API only — no file drop) | Suspends the flow until a JSON-configured form is filled and submitted via `POST /api/form-captures/{taskId}/submit` (§8); submission validates against the bound attribute contract. Requires `next` or `end: true` |
 | `Succeed` | `result?` | Terminates successfully with output data |
 | `Fail` | `error`, `cause` | Terminates with an error code/message |
 | `Parallel` | `branches[]` (each a sub-definition `{ startAt, states }`) | Runs branches concurrently; all must complete before `next` |
@@ -127,12 +128,12 @@ Built-in error codes and semantics: UserManual §7.
 | 3 | `rule://` | `rule://<ruleId>?eav=<entity>` | NRules rule execution; optional EAV mapping of dynamic JSON to a strict entity dictionary |
 | 4 | `rules://` | `rules://<workflowName>` | Microsoft RulesEngine workflow |
 | 5 | `transform://` | `transform://<operation>` | DuckDB transform (or script) over the input — batch SQL, joins, aggregations |
-| 6 | `ai://` | any path (ignored) | POSTs the input to `{callbackBaseUrl}/api/ai/ask`; fails with `States.TaskFailed` if the response has `"isError": true` |
+| 6 | `ai://` | any path (ignored) | POSTs the input to `{callbackBaseUrl}/api/ai/ask`; fails with `States.TaskFailed` if the response has `"isError": true`. **`callbackBaseUrl` is hardcoded to `http://localhost:5000`** — the UI backend's port, not this app's 5001 |
 | 7 | `flow://` | `flow://<flowId>` | Synchronous sub-flow execution; a failed child throws its error code (or `SubFlow.Failed`) |
-| 8 | `tool://` | `tool://…` | Tool invocation handler |
+| 8 | `tool://` | `tool://<toolName>` | POSTs the input to `{callbackBaseUrl}/api/tools/{toolName}/execute`; same hardcoded `http://localhost:5000` base as `ai://` |
 | 9 | `internal://` | `internal://echo`, `internal://engine/status`, `internal://rules/status`, `internal://transform/status` | Built-in diagnostics; any other path throws `States.TaskFailed: Unknown internal resource`. **Use `internal://echo` for smoke tests** — it returns a deep clone of the input with no external dependencies |
 | 10 | `dataexchange://` | `dataexchange://<profileId>` | Runs a DataExchange profile pipeline end-to-end (§6) |
-| 11 | `ssh://` | `ssh://<hostName>` | Curated host inventory (`ssh_hosts.json`) + AI safety check on the command (`"override": true` in input bypasses it); output `{ host, command, exitCode, stdout, stderr, durationMs }`; `timeoutSeconds` default 30 (min 1) |
+| 11 | `ssh://` | `ssh://<hostName>` | Curated host inventory (`ssh_hosts.json`) + AI safety check on the command (`"override": true` in input bypasses it); output `{ host, command, exitCode, stdout, stderr, durationMs }`; `timeoutSeconds` default 30 (values below 1 are reset to 30) |
 | 12 | `fetch://` | `fetch://<hostName>?proto=scp\|sftp\|ftp\|xcopy` | Remote file fetch with wildcards (SCP: none); input `sourcePath`, `destDir`, `timeoutSeconds` (default 120) |
 
 ## 5. Human tasks
@@ -141,6 +142,7 @@ A `HumanTask` state suspends the execution and creates a task record (8-char id)
 
 - **API**: `POST http://localhost:5001/api/human-tasks/{taskId}/complete` with the human's result JSON — resumes or terminates the execution.
 - **File drop**: write `{taskId}.json` into the watched directory (`Completion.directory`, default `human-task-completions/`).
+- **FormCapture states**: complete via `POST /api/form-captures/{taskId}/submit` with the filled form JSON — validates/coerces values against the bound attribute contract, persists an EAV row, then resumes (§8).
 
 The completion result is placed at the state's `resultPath` in the flow input (or replaces the entire input when unset). Discovery routes: `GET /api/human-tasks?status=&executionId=`, `GET /api/human-tasks/{id}`.
 
@@ -182,6 +184,8 @@ Flows and DataExchange profiles are organized on disk in a three-level tree — 
 | DELETE | `/api/flows/executions/{id}` | Delete an execution checkpoint |
 | POST | `/api/state-machines/{id}/stop` | Stop an execution |
 | GET | `/api/human-tasks`, `GET /api/human-tasks/{id}`, `POST /api/human-tasks/{id}/complete` | Human task discovery & completion (§5) |
+| GET | `/api/form-captures/{taskId}` | FormCapture definition + bound attribute contract for a suspended form task (§5) |
+| POST | `/api/form-captures/{taskId}/submit` | Submit the filled form — validates/coerces values, persists an EAV row, resumes the execution (§5) |
 | GET/POST/DELETE | `/api/data-exchange/profiles…`, `POST /api/data-exchange/execute`, `GET /api/data-exchange/executions…` | DataExchange profiles & executions (§6) |
 | GET | `/api/workspace` | Workspace tree (org → project → sub-project) with per-node ACLs, flow refs & profile ids (§7) |
 | POST/DELETE | `/api/workspace/nodes`, `POST /api/workspace/nodes/rename` | Create / rename / delete org, project or sub-project nodes (§7) |
