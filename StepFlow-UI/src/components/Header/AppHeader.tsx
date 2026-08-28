@@ -1,4 +1,4 @@
-import { Play, Square, Save, Undo2, Redo2, LayoutGrid, Settings, Download, Upload, PanelLeft, PanelRight, MessageCircle, Puzzle, RotateCcw, FolderOpen, ArrowLeftRight, ClipboardList, FolderTree, FolderCheck } from 'lucide-react';
+import { Play, Square, Save, Undo2, Redo2, LayoutGrid, Settings, Download, Upload, PanelLeft, PanelRight, MessageCircle, Puzzle, RotateCcw, FolderOpen, ArrowLeftRight, ClipboardList, FolderTree, FolderCheck, Globe } from 'lucide-react';
 import { useExecutionStore } from '@stores/useExecutionStore';
 interface AppHeaderProps {
   isRunning: boolean;
@@ -13,6 +13,7 @@ interface AppHeaderProps {
   onToggleAgentPanel: () => void;
   onToggleDataExchange?: () => void;
   onToggleWorkspace?: () => void;
+  onToggleDynamicApi?: () => void;
   onToggleFormBuilder?: () => void;
   onToggleAiConfig: () => void;
   onAutoLayout?: () => void;
@@ -24,7 +25,7 @@ interface AppHeaderProps {
   onFlowNameChange?: (name: string) => void;
 }
 
-export function AppHeader({ isRunning, onRun, onSave, onSaveProject, onLoadProject, onSaveToWorkspace, onTogglePalette, onToggleProperties, onToggleAiAssistant, onToggleAgentPanel, onToggleDataExchange, onToggleWorkspace, onToggleFormBuilder, onToggleAiConfig, onAutoLayout, onResetFlow, onImport, onExport, onLoad, flowName, onFlowNameChange }: AppHeaderProps) {
+export function AppHeader({ isRunning, onRun, onSave, onSaveProject, onLoadProject, onSaveToWorkspace, onTogglePalette, onToggleProperties, onToggleAiAssistant, onToggleAgentPanel, onToggleDataExchange, onToggleWorkspace, onToggleDynamicApi, onToggleFormBuilder, onToggleAiConfig, onAutoLayout, onResetFlow, onImport, onExport, onLoad, flowName, onFlowNameChange }: AppHeaderProps) {
   return (
     <header className="app-header">
       {/* Left: Logo + Flow Name */}
@@ -153,6 +154,11 @@ export function AppHeader({ isRunning, onRun, onSave, onSaveProject, onLoadProje
         {onToggleWorkspace && (
           <button className="btn-icon" title="Toggle Workspace Panel" onClick={onToggleWorkspace}>
             <FolderTree className="w-4 h-4" />
+          </button>
+        )}
+        {onToggleDynamicApi && (
+          <button className="btn-icon" title="Toggle Dynamic API Panel" onClick={onToggleDynamicApi}>
+            <Globe className="w-4 h-4" />
           </button>
         )}
         <button className="btn-icon" title="Open Form Builder" onClick={onToggleFormBuilder}>

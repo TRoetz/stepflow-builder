@@ -331,6 +331,17 @@ public class WorkspaceStore
     public IReadOnlyList<string> ListProfiles(string subProjectPath) =>
         DirNames(FullPath(Join(subProjectPath, "data-exchange")));
 
+    /// <summary>All depth-3 sub-project paths ("org/project/sub") under the root, ordinal-ignore-case sorted.</summary>
+    public IReadOnlyList<string> ListAllSubProjects()
+    {
+        var result = new List<string>();
+        foreach (var org in ListOrgs())
+            foreach (var project in ListProjects(org))
+                foreach (var sub in ListSubProjects(org, project))
+                    result.Add(Join(org, project, sub));
+        return result.OrderBy(p => p, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
     // ── Node chain helpers ────────────────────────────────────────────────────────────────────
 
     /// <summary>Creates the full org/project/sub-project chain plus empty flows/ and data-exchange/ dirs (used by migration).</summary>

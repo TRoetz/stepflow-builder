@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using StepFunctionsApp.StepFunctions;
 using StepFunctionsApp.Controllers;
+using StepFunctionsApp.DynamicApi;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
@@ -134,6 +135,11 @@ public class Startup
                 ? new SqliteAttributeDomainStore(options.DatabasePath, provider.GetService<ILogger<SqliteAttributeDomainStore>>())
                 : new JsonFileAttributeDomainStore("attribute_domains.json", provider.GetService<ILogger<JsonFileAttributeDomainStore>>());
         });
+        // Dynamic API subsystem — user-defined REST endpoints backed by flows / attribute domains / EAV rows / data-exchange profiles.
+        services.AddSingleton<IDynamicApiStore>(provider => new SqliteDynamicApiStore(
+            provider.GetRequiredService<IOptions<FormDataOptions>>().Value.DatabasePath,
+            provider.GetService<ILogger<SqliteDynamicApiStore>>()));
+        services.AddSingleton<DynamicApiDispatcher>();
         services.AddSingleton<ISchemaDefinitionStore>(provider =>
         {
             var options = provider.GetRequiredService<IOptions<FormDataOptions>>().Value;
@@ -207,6 +213,17 @@ public class Startup
             endpoints.MapControllerRoute(
                 name: "default",
                 pattern: "{controller}/{action=Index}/{id?}");
+
+            // Dynamic API surface — OpenAPI spec + catch-all dispatcher. Literal routes above win over the catch-all.
+            var dynamicApis = app.ApplicationServices.GetRequiredService<IDynamicApiStore>();
+            endpoints.Map("/api/dynamic/openapi.json", context =>
+            {
+                var domains = context.RequestServices.GetRequiredService<IAttributeDomainStore>();
+                context.Response.ContentType = "application/json";
+                return context.Response.WriteAsync(DynamicApiOpenApiGenerator.Build(dynamicApis.GetAll(), domains).ToString(Formatting.None));
+            });
+            var dynamicDispatcher = app.ApplicationServices.GetRequiredService<DynamicApiDispatcher>();
+            endpoints.Map("/api/dynamic/{**rest}", async context => await dynamicDispatcher.HandleAsync(context));
             
             // Serve Step Functions Builder on root path
             var builderHtml = GetBuilderHtml(distPath);
@@ -230,11 +247,10 @@ public class Startup
         return "<html><body>Builder HTML not found - please run 'npm run build' first</body></html>";
     }
 
-    /// <summary>
-    /// camelCase property names, but leaves dictionary keys (state names) untouched.
-    /// </summary>
-    private sealed class KeyPreservingCamelCaseContractResolver : CamelCasePropertyNamesContractResolver
-    {
-        protected override string ResolveDictionaryKey(string key) => key;
-    }
+}
+
+/// <summary>camelCase property names, but leaves dictionary keys (state names) untouched. Internal so non-MVC writers (e.g. DynamicApiDispatcher) emit the same wire shape.</summary>
+internal sealed class KeyPreservingCamelCaseContractResolver : CamelCasePropertyNamesContractResolver
+{
+    protected override string ResolveDictionaryKey(string key) => key;
 }

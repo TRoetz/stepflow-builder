@@ -8,8 +8,8 @@ namespace StepFunctionsApp.StepFunctions
     // ═══════════════════════════════════════════════════════════════════════════════
     // EAV ROW STORE — captured form submissions stay file-based (per the ask): one JSON
     // array per attribute domain under eav-data/{domainName}.json. Lock + atomic rewrite;
-    // missing dir ⇒ empty store + warning log. Rows are append-only here; consumers read
-    // via ListRows and the EAV mapper turns them into rule payloads.
+    // missing dir ⇒ empty store + warning log. Flows append via AppendRow and read via
+    // ListRows; dynamic APIs additionally update/patch/remove rows by RowKeyId (CRUD).
     // ═══════════════════════════════════════════════════════════════════════════════
 
     public sealed class EavRow
@@ -71,6 +71,60 @@ namespace StepFunctionsApp.StepFunctions
                 WriteRows(path, rows);
             }
         }
+
+        /// <summary>Replaces the Values of an existing row by RowKeyId. False when the domain file or row is missing.</summary>
+        public bool UpdateRow(string domainName, string rowKeyId, JObject values)
+        {
+            if (values == null) throw new ArgumentNullException(nameof(values));
+            var path = RequirePath(domainName);
+
+            lock (_lock)
+            {
+                var rows = LoadRows(path);
+                var row = FindRow(rows, rowKeyId);
+                if (row == null) return false;
+                row.Values = values;
+                WriteRows(path, rows);
+                return true;
+            }
+        }
+
+        /// <summary>Merges the patch properties into an existing row's Values (existing keys overwritten). False when missing.</summary>
+        public bool PatchRow(string domainName, string rowKeyId, JObject patch)
+        {
+            if (patch == null) throw new ArgumentNullException(nameof(patch));
+            var path = RequirePath(domainName);
+
+            lock (_lock)
+            {
+                var rows = LoadRows(path);
+                var row = FindRow(rows, rowKeyId);
+                if (row == null) return false;
+                foreach (var prop in patch.Properties())
+                    row.Values[prop.Name] = prop.Value;
+                WriteRows(path, rows);
+                return true;
+            }
+        }
+
+        /// <summary>Removes a row by RowKeyId. False when the domain file or row is missing.</summary>
+        public bool RemoveRow(string domainName, string rowKeyId)
+        {
+            var path = RequirePath(domainName);
+
+            lock (_lock)
+            {
+                var rows = LoadRows(path);
+                var index = rows.FindIndex(r => string.Equals(r.RowKeyId, rowKeyId, StringComparison.OrdinalIgnoreCase));
+                if (index < 0) return false;
+                rows.RemoveAt(index);
+                WriteRows(path, rows);
+                return true;
+            }
+        }
+
+        private static EavRow? FindRow(List<EavRow> rows, string rowKeyId) =>
+            rows.FirstOrDefault(r => string.Equals(r.RowKeyId, rowKeyId, StringComparison.OrdinalIgnoreCase));
 
         /// <summary>All captured rows for a domain, in append order.</summary>
         public IReadOnlyList<EavRow> ListRows(string domainName)

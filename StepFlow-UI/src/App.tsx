@@ -18,6 +18,7 @@ import { AgentPanel } from '@components/Agents/AgentPanel';
 import { FormBuilderWindow } from '@components/Forms/FormBuilderWindow';
 import { DataExchangePanel } from '@components/DataExchange/DataExchangePanel';
 import { WorkspacePanel } from '@components/Workspace/WorkspacePanel';
+import { DynamicApiPanel } from '@components/DynamicApi/DynamicApiPanel';
 import { useWorkspaceStore } from '@stores/useWorkspaceStore';
 import { WorkspaceService, type WorkspaceFlow } from '@services/workspaceService';
 import { useAiAssistantStore } from '@stores/useAiAssistantStore';
@@ -38,6 +39,7 @@ export default function App() {
   const [showAgentPanel, setShowAgentPanel] = useState(false);
   const [showDataExchangePanel, setShowDataExchangePanel] = useState(false);
   const [showWorkspacePanel, setShowWorkspacePanel] = useState(false);
+  const [showDynamicApiPanel, setShowDynamicApiPanel] = useState(false);
   const [formBuilderOpen, setFormBuilderOpen] = useState(false);
   const [showLogPanel, setShowLogPanel] = useState(false);
   const [expandedLogNodeId, setExpandedLogNodeId] = useState<string | null>(null);
@@ -434,6 +436,7 @@ export default function App() {
         onToggleAgentPanel={() => setShowAgentPanel((p) => !p)}
         onToggleDataExchange={() => setShowDataExchangePanel((p) => !p)}
         onToggleWorkspace={() => setShowWorkspacePanel((p) => !p)}
+        onToggleDynamicApi={() => setShowDynamicApiPanel((p) => !p)}
         onToggleFormBuilder={() => setFormBuilderOpen((p) => !p)}
         onToggleAiConfig={toggleAiConfig}
         onAutoLayout={handleAutoLayout}
@@ -609,6 +612,9 @@ export default function App() {
             onOpenFlow={handleOpenWorkspaceFlow}
             onSaveCurrentFlow={handleSaveToWorkspace}
           />
+        )}
+        {showDynamicApiPanel && (
+          <DynamicApiPanel onClose={() => setShowDynamicApiPanel(false)} />
         )}
       </div>
 
