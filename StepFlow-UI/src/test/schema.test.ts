@@ -4,8 +4,8 @@ import { categoryById } from '@schemas/categories';
 
 describe('Schema System', () => {
   describe('Registry', () => {
-    it('should have all 26 step schemas registered', () => {
-      expect(stepSchemas.length).toBe(26);
+    it('should have all 27 step schemas registered', () => {
+      expect(stepSchemas.length).toBe(27);
     });
 
     it('should have all 13 categories defined', () => {
@@ -24,7 +24,7 @@ describe('Schema System', () => {
     });
 
     it('should have schema service working', () => {
-      expect(schemaService.getAllSchemas().length).toBe(26);
+      expect(schemaService.getAllSchemas().length).toBe(27);
       expect(schemaService.getCategories().length).toBe(13);
     });
   });
@@ -95,8 +95,8 @@ describe('Schema System', () => {
       expect(stepSchemas.filter((s) => s.category === 'rule').length).toBe(2);
     });
 
-    it('should have Data schemas (3)', () => {
-      expect(stepSchemas.filter((s) => s.category === 'data').length).toBe(3);
+    it('should have Data schemas (4)', () => {
+      expect(stepSchemas.filter((s) => s.category === 'data').length).toBe(4);
     });
 
     it('should have API schemas (2)', () => {

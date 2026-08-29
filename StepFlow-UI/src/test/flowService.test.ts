@@ -55,6 +55,130 @@ describe('FlowService', () => {
       const state = Object.values(result.states)[0];
       expect(state.resource).toContain('ai://');
     });
+
+    it('exports an exchange node as a parameterless Task on dataexchange://', () => {
+      useNodeStore.getState().addNode('stepflow:data:exchange', { x: 0, y: 0 });
+      const node = useNodeStore.getState().nodes[0];
+      node.data.configuration = { profileId: 'demo-order-validation' };
+
+      const result = FlowService.exportFlow();
+      expect(result.states[node.id]).toMatchObject({
+        type: 'Task',
+        resource: 'dataexchange://demo-order-validation',
+      });
+      // No Parameters at all — the C# executor ingests the upstream output directly.
+      expect(result.states[node.id].parameters).toBeUndefined();
+    });
+
+    it('exports an HTTP POST with a JSON body as the structured __handler contract', () => {
+      useNodeStore.getState().addNode('stepflow:api:http', { x: 0, y: 0 });
+      const node = useNodeStore.getState().nodes[0];
+      node.data.configuration = {
+        method: 'POST',
+        url: 'http://localhost:5001/api/dynamic/apis',
+        body: '{"id":"demo-records","name":"Demo Records"}',
+      };
+
+      const result = FlowService.exportFlow();
+      expect(result.states[node.id]).toMatchObject({
+        type: 'Task',
+        resource: 'http://localhost:5001/api/dynamic/apis',
+        parameters: { __handler: 'http', method: 'POST', body: { id: 'demo-records', name: 'Demo Records' } },
+      });
+    });
+
+    it('exports a terminal end node as Pass + end:true without resource or parameters', () => {
+      useNodeStore.getState().addNode('stepflow:terminal:start', { x: 0, y: 0 });
+      useNodeStore.getState().addNode('stepflow:terminal:end', { x: 0, y: 150 });
+      const [start, end] = useNodeStore.getState().nodes;
+      useEdgeStore.getState().addEdge({ id: 'edge-end', source: start.id, target: end.id, type: 'step-edge' });
+
+      const result = FlowService.exportFlow();
+      // The engine has no End state type — termination is signaled by the `end` flag on a Pass.
+      expect(result.states[end.id]).toMatchObject({ type: 'Pass', end: true });
+      expect(result.states[end.id].resource).toBeUndefined();
+      expect(result.states[end.id].parameters).toBeUndefined();
+    });
+
+    it('exports a jsonata node with input_data pass-through for engine evaluation', () => {
+      useNodeStore.getState().addNode('stepflow:transform:jsonata', { x: 0, y: 0 });
+      const node = useNodeStore.getState().nodes[0];
+      node.data.configuration = { expression: '{ processed: $.rowsOut }' };
+
+      const result = FlowService.exportFlow();
+      expect(result.states[node.id]).toMatchObject({
+        type: 'Task',
+        resource: 'transform://jsonata',
+        parameters: { expression: '{ processed: $.rowsOut }', 'input_data.$': '$' },
+      });
+    });
+    it('exports an eav write node with values pass-through for engine persistence', () => {
+      useNodeStore.getState().addNode('stepflow:data:eav', { x: 0, y: 0 });
+      const node = useNodeStore.getState().nodes[0];
+      node.data.configuration = { operation: 'write', entityType: 'refund_decision' };
+
+      const result = FlowService.exportFlow();
+      expect(result.states[node.id]).toMatchObject({
+        type: 'Task',
+        resource: 'eav://refund_decision',
+        parameters: { operation: 'write', entityType: 'refund_decision', 'values.$': '$' },
+      });
+    });
+    it('compiles a graph-format iterator body into executable ASL on export', () => {
+      // Seed a saved sub-flow in graph format — the shape ensureIteratorBody persists.
+      const subFlowId = 'flow-iterator-test';
+      localStorage.setItem(
+        'stepflow-flows',
+        JSON.stringify([
+          {
+            id: subFlowId,
+            name: 'Test Iterator Body',
+            createdAt: new Date().toISOString(),
+            definition: {
+              nodes: [
+                { schemaId: 'stepflow:utility:pass', label: 'Iteration Start' },
+                { schemaId: 'stepflow:data:eav', label: 'Read Row', config: { operation: 'read', entityType: 'test_entity' } },
+              ],
+              edges: [{ source: 'Iteration Start', target: 'Read Row' }],
+            },
+          },
+        ])
+      );
+
+      useNodeStore.getState().addNode('stepflow:terminal:start', { x: 0, y: 0 });
+      const map = useNodeStore.getState().addNode('stepflow:flow:map', { x: 0, y: 150 });
+      if (map) map.data.configuration = { itemsPath: '$.rows', targetFlowId: subFlowId };
+
+      const result = FlowService.exportFlow();
+      const mapState = result.states[map!.id];
+      expect(mapState.type).toBe('Map');
+
+      // The iterator must be compiled ASL ({startAt, states}), not the raw graph format.
+      const iter = mapState.iterator!;
+      expect(iter.startAt).toBeTruthy();
+      expect(iter.states).toBeDefined();
+      expect(Object.keys(iter)).not.toContain('nodes');
+      expect(Object.keys(iter)).not.toContain('edges');
+
+      // Sub-flow nodes compiled into states with correct wiring and resource URIs.
+      const iterStates = Object.values(iter.states);
+      expect(iterStates).toHaveLength(2);
+      const readRow = iterStates.find((s) => s.resource === 'eav://test_entity');
+      expect(readRow?.type).toBe('Task');
+      expect(readRow?.parameters).toMatchObject({ operation: 'read', entityType: 'test_entity' });
+    });
+
+    it('exports an unlinked Map node with the placeholder iterator', () => {
+      useNodeStore.getState().addNode('stepflow:terminal:start', { x: 0, y: 0 });
+      const map = useNodeStore.getState().addNode('stepflow:flow:map', { x: 0, y: 150 });
+      if (map) map.data.configuration = { itemsPath: '$.rows' };
+
+      const result = FlowService.exportFlow();
+      expect(result.states[map!.id].iterator).toEqual({
+        startAt: 'PassThrough',
+        states: { PassThrough: { type: 'Pass', comment: 'Placeholder iterator flow. Please select a valid target flow.' } },
+      });
+    });
   });
 
   describe('saveFlow / listFlows', () => {
@@ -123,6 +247,85 @@ describe('FlowService', () => {
       const node = useNodeStore.getState().nodes[0];
       expect(node.data?.schemaId).toBe('stepflow:api:http');
       expect(node.data?.configuration).toMatchObject({ method: 'POST', url: 'https://api.example.com/orders' });
+    });
+    it('maps dataexchange:// resources back to the exchange node (round-trip)', () => {
+      FlowService.importFlow({
+        startAt: 'Exchange',
+        states: { Exchange: { type: 'Task', resource: 'dataexchange://demo-order-validation' } },
+      });
+
+      const node = useNodeStore.getState().nodes[0];
+      expect(node.data?.schemaId).toBe('stepflow:data:exchange');
+      expect(node.data?.configuration).toMatchObject({ profileId: 'demo-order-validation' });
+    });
+
+    it('round-trips an HTTP POST body from the __handler contract back to node config', () => {
+      FlowService.importFlow({
+        startAt: 'Save',
+        states: {
+          Save: {
+            type: 'Task',
+            resource: 'http://localhost:5001/api/dynamic/apis',
+            parameters: { __handler: 'http', method: 'POST', body: { id: 'demo-records' } },
+          },
+        },
+      });
+
+      const node = useNodeStore.getState().nodes[0];
+      expect(node.data?.schemaId).toBe('stepflow:api:http');
+      expect(node.data?.configuration).toMatchObject({ method: 'POST', url: 'http://localhost:5001/api/dynamic/apis' });
+      expect(JSON.parse(String(node.data?.configuration?.body))).toEqual({ id: 'demo-records' });
+    });
+
+    it('round-trips a jsonata node and strips template-resolution markers from config', () => {
+      useNodeStore.getState().addNode('stepflow:transform:jsonata', { x: 0, y: 0 });
+      const node = useNodeStore.getState().nodes[0];
+      node.data.configuration = { expression: '{ processed: $.rowsOut }' };
+
+      const exported = FlowService.exportFlow();
+      expect(exported.states[node.id].parameters).toMatchObject({ 'input_data.$': '$' });
+
+      useNodeStore.setState({ nodes: [] });
+      useEdgeStore.setState({ edges: [] });
+      FlowService.importFlow(exported);
+
+      const imported = useNodeStore.getState().nodes[0];
+      expect(imported.data?.schemaId).toBe('stepflow:transform:jsonata');
+      expect(imported.data?.configuration).toEqual({ expression: '{ processed: $.rowsOut }' });
+    });
+    it('round-trips an eav write node and strips template-resolution markers from config', () => {
+      useNodeStore.getState().addNode('stepflow:data:eav', { x: 0, y: 0 });
+      const node = useNodeStore.getState().nodes[0];
+      node.data.configuration = { operation: 'write', entityType: 'refund_decision' };
+
+      const exported = FlowService.exportFlow();
+      expect(exported.states[node.id].parameters).toMatchObject({ 'values.$': '$' });
+
+      useNodeStore.setState({ nodes: [] });
+      useEdgeStore.setState({ edges: [] });
+      FlowService.importFlow(exported);
+
+      const imported = useNodeStore.getState().nodes[0];
+      expect(imported.data?.schemaId).toBe('stepflow:data:eav');
+      expect(imported.data?.configuration).toEqual({ operation: 'write', entityType: 'refund_decision' });
+    });
+
+    it('round-trips terminal end states through export and import', () => {
+      useNodeStore.getState().addNode('stepflow:terminal:start', { x: 0, y: 0 });
+      useNodeStore.getState().addNode('stepflow:terminal:end', { x: 0, y: 150 });
+      const [start, end] = useNodeStore.getState().nodes;
+      useEdgeStore.getState().addEdge({ id: 'edge-rt', source: start.id, target: end.id, type: 'step-edge' });
+
+      const exported = FlowService.exportFlow();
+      expect(exported.states[end.id]).toMatchObject({ type: 'Pass', end: true });
+
+      useNodeStore.setState({ nodes: [] });
+      useEdgeStore.setState({ edges: [] });
+      FlowService.importFlow(exported);
+
+      const nodes = useNodeStore.getState().nodes;
+      // Start maps back to a plain pass (pre-existing limitation); end must be exact.
+      expect(nodes.map((n) => n.data?.schemaId)).toEqual(['stepflow:utility:pass', 'stepflow:terminal:end']);
     });
   });
 });

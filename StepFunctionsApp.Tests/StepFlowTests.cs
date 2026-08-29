@@ -51,6 +51,10 @@ namespace StepFunctionsApp.Tests
                 mockFactory.Object,
                 NullLogger<DataExchangeExecutor>.Instance);
 
+            // EAV row store in an isolated temp dir (eav:// handler)
+            var eavRows = new EavRowStore(NullLogger<EavRowStore>.Instance);
+            eavRows.Initialize(Path.Combine(Path.GetTempPath(), "eav-rows-tests", Guid.NewGuid().ToString("N")));
+
             _resourceInvoker = new CompositeResourceInvoker(
                 mockFactory.Object,
                 _ruleEngine,
@@ -62,6 +66,7 @@ namespace StepFunctionsApp.Tests
                 dataExchange,
                 new SshCommandService(new SshHostStore(), _aiDecision), // blank inventory; AI mocked via factory
                 new FetchRemoteFilesService(new SshHostStore()), // blank inventory — fetch:// validation only
+                eavRows,
                 invokerLogger
             );
 

@@ -8,7 +8,7 @@ import { categoryById } from './categories';
 // ── Import all step schemas ──
 import { aiDecisionSchema, aiTextSchema } from './steps/ai';
 import { ruleEngineSchema, msRulesEngineSchema } from './steps/rule';
-import { sqlQuerySchema, duckDbQuerySchema, eavOperationSchema } from './steps/data';
+import { sqlQuerySchema, duckDbQuerySchema, eavOperationSchema, exchangeSchema } from './steps/data';
 import { httpRequestSchema, registeredApiSchema } from './steps/api';
 import { jsonataSchema, scriptSchema } from './steps/transform';
 import { passThroughSchema, waitSchema, branchSchema } from './steps/utility';
@@ -37,10 +37,11 @@ export const stepSchemas: StepSchema[] = [
   // Rule (2)
   ruleEngineSchema,
   msRulesEngineSchema,
-  // Data (3)
+  // Data (4)
   sqlQuerySchema,
   duckDbQuerySchema,
   eavOperationSchema,
+  exchangeSchema,
   // API (2)
   httpRequestSchema,
   registeredApiSchema,

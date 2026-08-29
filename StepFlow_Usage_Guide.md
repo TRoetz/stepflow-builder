@@ -31,7 +31,7 @@ Engine internals (canvas interface, state-type semantics, choice-rule operators,
 StepFlow Builder is a visual designer plus an execution engine for state machines written in an [Amazon States Language](https://docs.aws.amazon.com/step-functions/home.html) (ASL) dialect:
 
 - **`StepFunctionInterpreter.cs`** walks the `States` dictionary, dispatching on each state's `"Type"`.
-- **Task states** carry a `"Resource"` URI. The scheme selects the handler in **`CompositeResourceInvoker.InvokeAsync`** (`StepFunctions/ResourceInvoker.cs`, lines 66–110) — see §2 for all schemes.
+- **Task states** carry a `"Resource"` URI. The scheme selects the handler in **`CompositeResourceInvoker.InvokeAsync`** (`StepFunctions/ResourceInvoker.cs`, lines 70–123) — see §2 for all schemes.
 - Every state shapes its payload through the same pipeline (UserManual §6): `InputPath` → `Parameters` → *(invoke)* → `ResultSelector` → `OutputPath`. The result is a **JToken** that becomes the next state's input.
 
 ### 1.2 State types
@@ -207,7 +207,7 @@ workspace-data/
 
 ## 2. Resource Schemes (Task states)
 
-A `Task` state's `"Resource"` URI is dispatched by scheme in `CompositeResourceInvoker.InvokeAsync` (`StepFunctions/ResourceInvoker.cs`, lines 66–110). The complete set of schemes, verbatim from that method:
+A `Task` state's `"Resource"` URI is dispatched by scheme in `CompositeResourceInvoker.InvokeAsync` (`StepFunctions/ResourceInvoker.cs`, lines 70–123). The complete set of fourteen schemes, verbatim from that method:
 
 | # | Scheme | URI form | Handler behavior (verbatim source) |
 |---|---|---|---|
@@ -216,13 +216,15 @@ A `Task` state's `"Resource"` URI is dispatched by scheme in `CompositeResourceI
 | 3 | `rule://` | `rule://<ruleId>?eav=<entityName>` | NRules engine. With `?eav=` the input is mapped to a strict EAV dictionary via `_eavRegistry.MapPayloadToEav`; without it, legacy naive object mapping (`input.ToObject<Dictionary<string,object>>`). Returns the rule result JToken. |
 | 4 | `rules://` | `rules://<workflowName>` | Microsoft RulesEngine: `_msRulesEngine.ExecuteWorkflow(workflowName, input)`; returns the workflow result as a JObject. |
 | 5 | `transform://` | `transform://<operation>` | If operation is one of `javascript`, `python`, `powershell`, `csharp`, `shell` → routed to `ScriptExecutionService` (input keys: `script` + `input_data`). Any other operation → DuckDB transform with the URI operation overriding `input["operation"]`. DuckDB operations implemented in `DuckDbTransformService`: `query`, `filter`, `project`, `aggregate`, `sort`, `lookup`, `schema`, `sample`, `execute`. |
-| 6 | `ai://` | any path (ignored) | POSTs the input to `{callbackBaseUrl}/api/ai/ask`; if the response has `"isError": true` the state fails with `States.TaskFailed` and the AI's error message. |
+| 6 | `ai://` | any path (ignored) | POSTs the input to `{callbackBaseUrl}/api/ai/ask`; if the response has `"isError": true` the state fails with `States.TaskFailed` and the AI's error message. No `/api/ai/ask` implementation exists in this repo (pre-existing gap) — AI states fail with a connection error until an external LLM service listens at `{callbackBaseUrl}` (`http://localhost:5000`). |
 | 7 | `flow://` | `flow://<flowId>` | Synchronous sub-flow: `_stepService.ExecuteSyncAsync(flowId, input)`. If the child execution is `Failed`, throws `StepEngineException(execution.ErrorCode ?? "SubFlow.Failed", ...)`; otherwise returns `execution.Output`. |
 | 8 | `tool://` | `tool://<name>` | POSTs to `{callbackBaseUrl}/api/tools/{name}/execute` via `InvokeHttpAsync` (structured or legacy body). |
 | 9 | `internal://` | `internal://echo`, `internal://engine/status`, `internal://rules/status`, `internal://transform/status` | Built-in diagnostics: `echo` returns a deep clone of the input; the three `*/status` endpoints return engine status objects. Any other path throws `States.TaskFailed: Unknown internal resource`. |
 | 10 | `dataexchange://` | `dataexchange://<profileId>` | Runs a DataExchange profile pipeline end-to-end: `_dataExchange.ExecuteAsync(profileId, input)` (§4). |
 | 11 | `ssh://` | `ssh://<hostName>` | Curated host inventory (`ssh_hosts.json`) + AI safety check on the command. Command comes from static config or upstream input text; `"override": true` bypasses the harmful-command check; `timeoutSeconds` defaults to 30 (min 1). Output: `{ "host", "command", "exitCode", "stdout", "stderr", "durationMs" }`. |
 | 12 | `fetch://` | `fetch://<hostName>?proto=scp\|sftp\|ftp\|xcopy` | Curated host inventory. Input: `sourcePath` (wildcards `* ?` where the protocol allows — SCP does not), `destDir`, `timeoutSeconds` (default 120). Output: `{ "host", "protocol", "sourcePath", "destDir", "files": [{ "remotePath", "localPath", "sizeBytes" }], "fileCount", "durationMs" }`. |
+| 13 | `sql://` | `sql://<connectionString>` | `HandleSqlAsync`: input `{ query (required), connectionString? }`; the connection string falls back to the URI path after `sql://`. Only local SQLite files are supported — absolute or CWD-relative paths, `file:` URIs, and `Data Source=<path>` forms; anything else that looks like a remote connection string throws `States.TaskFailed: sql:// supports local SQLite database files only (remote connection strings are not supported)`, and a missing file throws `SQLite database file not found: {path}`. SELECT/WITH → `{ rows: [...], count }` (DateTime→ISO-8601, blob→base64); any other statement → `{ changes: n }`. The query runs verbatim — no `@param` binding and no `{{node.field}}` interpolation (both are UI-only features). |
+| 14 | `eav://` | `eav://<entityType>` | `HandleEavAsync`: CRUD against the file-based EAV row store (`eav-data/{domain}.json`, one JSON array per domain). Input `{ operation?, entityType?, values?, rowKeyId? }`; `entityType` falls back to the URI path. `read` (default) → a bare JArray of all rows' Values in append order; `write` → appends one row per element (`values` wins over input minus control keys; scalars wrapped as `{ value }`) → `{ count: n }`; `update`/`patch` require `rowKeyId` + a single values object (replace vs merge) → `{ updated|patched: true }`, missing row → `States.TaskFailed: row not found`; `delete` requires `rowKeyId` → `{ removed: true }`. Invalid domain names surface the store's validation error. |
 
 Any other scheme throws `StepEngineException("States.TaskFailed", "Unknown resource scheme: ...")`, which the state's `Retry`/`Catch` clauses (UserManual §7) can handle.
 

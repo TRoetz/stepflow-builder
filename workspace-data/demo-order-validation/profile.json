@@ -1,0 +1,79 @@
+{
+  "DataExchangeProfileId": 0,
+  "DataExchangeProfileName": "Demo Order Validation",
+  "ProfileId": "demo-order-validation",
+  "IsActive": true,
+  "DataExchangeId": 0,
+  "DataSourceId": 0,
+  "DataSource": {
+    "DataSourceId": 0,
+    "DataSourceName": "Customer Orders (file)",
+    "MediumType": 3,
+    "MediumConfigurationJson": "{\"filePath\": \"smoke/dataexchange-samples/cust_orders.csv\"}",
+    "ImportSchemaId": 0
+  },
+  "PipelineId": 0,
+  "Pipeline": {
+    "PipelineId": 0,
+    "PipelineName": "Order Validation Pipeline",
+    "Description": "Validate order amounts and calculate TotalWithTax (20% tax).",
+    "PipelineStages": [
+      {
+        "PipelineStageId": 0,
+        "PipelineId": 0,
+        "StageType": 0,
+        "ExecutionOrder": 1,
+        "PipelineStageActions": [
+          {
+            "PipelineStageActionId": 0,
+            "PipelineStageId": 0,
+            "ActionId": 0,
+            "Action": {
+              "ActionId": 0,
+              "ActionName": "Validate and Enrich Orders",
+              "Type": 0,
+              "ActionRules": [
+                {
+                  "ActionRuleId": 0,
+                  "ActionId": 0,
+                  "RuleId": 0,
+                  "Rule": {
+                    "RuleId": 0,
+                    "RuleName": "Amount must be positive",
+                    "Type": 0,
+                    "Expression": "{Amount} > 0",
+                    "RequiredLookups": [],
+                    "DefaultFailureMessage": "Order amount must be greater than zero",
+                    "Parameters": [],
+                    "Attributes": []
+                  },
+                  "OutputMergeStrategy": 1
+                },
+                {
+                  "ActionRuleId": 0,
+                  "ActionId": 0,
+                  "RuleId": 0,
+                  "Rule": {
+                    "RuleId": 0,
+                    "RuleName": "Calculate Total With Tax",
+                    "Type": 1,
+                    "Expression": "{Amount} * 1.2",
+                    "RequiredLookups": [],
+                    "Parameters": [],
+                    "Attributes": []
+                  },
+                  "OutputMergeStrategy": 1,
+                  "OutputTargetAttributeName": "TotalWithTax"
+                }
+              ],
+              "PipelineStageActions": [],
+              "SubPipelines": [],
+              "Parameters": {}
+            },
+            "ExecutionOrder": 1
+          }
+        ]
+      }
+    ]
+  }
+}

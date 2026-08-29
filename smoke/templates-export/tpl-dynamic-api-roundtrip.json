@@ -1,0 +1,135 @@
+{
+  "startAt": "85aa210a-6c75-451a-938d-69beddd4f5b7",
+  "states": {
+    "85aa210a-6c75-451a-938d-69beddd4f5b7": {
+      "type": "Pass",
+      "resource": "utility://default",
+      "next": "ea53cdf9-8d89-4374-8d9e-e94ada7a5bad",
+      "parameters": {
+        "description": ""
+      },
+      "comment": "Marks the beginning of the workflow. Every flow starts here.",
+      "inputs": [],
+      "outputs": [
+        "start_output"
+      ]
+    },
+    "ea53cdf9-8d89-4374-8d9e-e94ada7a5bad": {
+      "type": "Task",
+      "resource": "http://localhost:5001/api/dynamic/apis",
+      "next": "363de423-e465-4f3c-80e6-ed5a252f0bc6",
+      "parameters": {
+        "__handler": "http",
+        "method": "POST",
+        "body": {
+          "id": "demo-records",
+          "name": "Demo Records",
+          "nodePath": "Default",
+          "basePath": "/demo-records",
+          "attributeDomain": "demo_records",
+          "operations": [
+            {
+              "method": "GET",
+              "path": "",
+              "handlerType": "eav"
+            },
+            {
+              "method": "POST",
+              "path": "",
+              "handlerType": "eav"
+            }
+          ]
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "comment": "Make HTTP requests to external APIs and services.",
+      "inputs": [
+        "input_body",
+        "input_headers"
+      ],
+      "outputs": [
+        "output_response",
+        "output_status"
+      ]
+    },
+    "363de423-e465-4f3c-80e6-ed5a252f0bc6": {
+      "type": "Task",
+      "resource": "http://localhost:5001/api/dynamic/demo-records",
+      "next": "aa19cf8f-6ef2-4811-bcbf-cc880d9af20c",
+      "parameters": {
+        "__handler": "http",
+        "method": "POST",
+        "body": {
+          "entityId": "rec-demo-1",
+          "entityType": "DemoRecord",
+          "note": "saved via flow template",
+          "amount": 42
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "comment": "Make HTTP requests to external APIs and services.",
+      "inputs": [
+        "input_body",
+        "input_headers"
+      ],
+      "outputs": [
+        "output_response",
+        "output_status"
+      ]
+    },
+    "aa19cf8f-6ef2-4811-bcbf-cc880d9af20c": {
+      "type": "Task",
+      "resource": "http://localhost:5001/api/dynamic/demo-records?entityId=rec-demo-1",
+      "next": "c73d786e-c2d6-4b37-9b6c-48b216095419",
+      "parameters": {
+        "__handler": "http",
+        "method": "GET",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "comment": "Make HTTP requests to external APIs and services.",
+      "inputs": [
+        "input_body",
+        "input_headers"
+      ],
+      "outputs": [
+        "output_response",
+        "output_status"
+      ]
+    },
+    "c73d786e-c2d6-4b37-9b6c-48b216095419": {
+      "type": "Task",
+      "resource": "transform://jsonata",
+      "next": "75f20339-29a5-490a-8f0b-fa0569f93908",
+      "parameters": {
+        "expression": "{ \"count\": $.count, \"entityId\": $.rows[0].entityId, \"note\": $.rows[0].values.note }",
+        "enableDebug": false,
+        "timeout": 5000,
+        "input_data.$": "$"
+      },
+      "comment": "Transform data using JSONata expressions.",
+      "inputs": [
+        "input_data",
+        "input_context"
+      ],
+      "outputs": [
+        "output_result",
+        "output_error"
+      ]
+    },
+    "75f20339-29a5-490a-8f0b-fa0569f93908": {
+      "type": "Pass",
+      "end": true,
+      "comment": "Marks the end of the workflow. Place one or more END states to define flow completion.",
+      "inputs": [
+        "end_input"
+      ],
+      "outputs": []
+    }
+  }
+}

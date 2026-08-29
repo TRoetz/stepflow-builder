@@ -48,6 +48,17 @@ export const httpRequestSchema: StepSchema = {
       description: 'Target URL for the request',
     },
     {
+      id: 'body',
+      label: 'Body (JSON)',
+      type: 'json',
+      default: '{}',
+      condition: (data: NodeData) => {
+        const m = String(data.configuration?.method ?? 'GET').toUpperCase();
+        return m === 'POST' || m === 'PUT' || m === 'PATCH';
+      },
+      description: 'Request body as JSON (sent with POST/PUT/PATCH)',
+    },
+    {
       id: 'headers',
       label: 'Headers',
       type: 'json',

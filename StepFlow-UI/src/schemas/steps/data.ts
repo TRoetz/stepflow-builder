@@ -267,3 +267,53 @@ export const eavOperationSchema: StepSchema = {
     },
   ],
 };
+
+// ── Data Exchange ──
+export const exchangeSchema: StepSchema = {
+  schemaId: 'stepflow:data:exchange',
+  name: 'Data Exchange',
+  category: 'data',
+  description:
+    'Run a registered Data Exchange profile pipeline (validation, calculation, mapping) over the upstream rows.',
+  icon: 'shuffle',
+  color: '#3B82F6',
+  version: '1.0.0',
+  isTemplate: true,
+  tags: ['dataexchange', 'pipeline', 'profile', 'validation'],
+  nodeComponent: 'data',
+
+  inputs: [
+    { id: 'input_data', label: 'Input Data', type: 'any', optional: true, position: 'left' },
+  ],
+
+  outputs: [
+    {
+      id: 'result',
+      label: 'Result',
+      type: 'json',
+      description: 'Execution result (rowsOut, rejectedCount, enrichedRows, stages)',
+      position: 'right',
+    },
+  ],
+
+  configFields: [
+    {
+      id: 'profileId',
+      label: 'Profile ID',
+      type: 'text',
+      required: true,
+      description:
+        'Stable profile identity (dataexchange:// URI target). Create it in the Data Exchange panel first.',
+    },
+  ],
+
+  validation: [
+    {
+      id: 'profileId_required',
+      check: (data: NodeData) => ({
+        isValid: !!data.configuration?.profileId,
+        reason: 'Profile ID is required',
+      }),
+    },
+  ],
+};

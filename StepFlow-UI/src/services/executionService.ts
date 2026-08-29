@@ -9,6 +9,7 @@ import { showToast } from '@stores/useToastStore';
 import { useAiModelConfigStore, type AiModelConfig } from '@stores/useAiModelConfigStore';
 import { callAiApi } from '@stores/useAiAssistantStore';
 import { LOCAL_AI_SERVICES } from '@schemas/steps/ai';
+import jsonata from 'jsonata';
 
 interface ExecutionContext {
   lastOutput: any;
@@ -375,43 +376,65 @@ async function traverseNode(
   try {
     if (node.type === 'stepflow:api:http') {
       const config = step.data?.configuration || {};
-      const url = config.url as string;
-      const method = (config.method as string || 'GET').toUpperCase();
+      let url = String(config.url ?? '');
+      // CORS shim for local dev: the backend has no CORS headers, so route absolute
+      // localhost:5001 URLs through the same origin (Vite proxy forwards /api/*).
+      url = url.replace(/^https?:\/\/(localhost|127\.0\.0\.1):5001/, '');
+      const method = String(config.method ?? 'GET').toUpperCase();
       let headers: Record<string, string> = {};
       try {
         if (config.headers) {
-          headers = typeof config.headers === 'string' ? JSON.parse(config.headers) : config.headers;
+          const h = JSON.parse(String(config.headers));
+          if (h && typeof h === 'object') headers = h;
         }
-      } catch (e) {
-        console.warn('Failed to parse HTTP Request headers:', e);
+      } catch {}
+      if (config.authentication === 'bearer' && config.authToken) headers['Authorization'] = `Bearer ${config.authToken}`;
+      let body: string | undefined;
+      if (method !== 'GET' && method !== 'DELETE' && config.body !== undefined) {
+        const raw = typeof config.body === 'string' ? config.body : JSON.stringify(config.body);
+        try {
+          body = JSON.stringify(JSON.parse(raw));
+        } catch {
+          body = raw; // not valid JSON - send as-is (raw string body)
+        }
       }
-
-      console.log(`[HTTP Request] Fetching: ${url}`);
+      executionStore.setNodeLog(node.id, { nodeName: step.data?.label || 'Step', status: 'running', input: { url, method } });
+      const response = await fetch(url, { method, headers, body });
+      // Mirror the C# engine: read text first, then try JSON; non-JSON bodies are wrapped.
+      const text = await response.text();
+      let parsed: unknown;
       try {
-        const response = await fetch(url, { method, headers });
-        if (response.ok) {
-          output = await response.json();
-        } else {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-      } catch (fetchErr) {
-        console.warn('CORS or network error, using realistic NZD/USD fallback data:', fetchErr);
-        // Fallback data for NZD/USD exchange rate lookup
-        if (url && url.toUpperCase().includes('NZD')) {
-          output = {
-            base: 'NZD',
-            date: new Date().toISOString().split('T')[0],
-            rates: {
-              USD: 0.5982,
-              AUD: 0.9124,
-              EUR: 0.5512,
-              GBP: 0.4715,
-            }
-          };
-        } else {
-          output = { status: 'mocked', message: 'API call simulated successfully', details: String(fetchErr) };
-        }
+        parsed = JSON.parse(text);
+      } catch {
+        parsed = { body: text };
       }
+      output = { status: response.status, ok: response.ok, body: parsed };
+    } else if (node.type === 'stepflow:data:exchange') {
+      const config = step.data?.configuration || {};
+      const profileId = String(config.profileId ?? '');
+      executionStore.setNodeLog(node.id, { nodeName: step.data?.label || 'Step', status: 'running', input: context.lastOutput });
+      try {
+        const response = await fetch('/api/data-exchange/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ profileId, input: context.lastOutput ?? {} }),
+        });
+        output = await response.json();
+      } catch (err) {
+        // Offline fallback - clearly marked simulation envelope derived from input.rows.
+        const rows = Array.isArray(context.lastOutput?.rows) ? context.lastOutput.rows : [];
+        console.warn('Data Exchange backend unreachable, using offline simulation:', err);
+        output = { simulated: true, success: true, profileId, source: 'input.rows', rowsIn: rows.length, rowsOut: rows.length, rejectedCount: 0, enrichedRows: rows, stages: [] };
+      }
+    } else if (node.type === 'stepflow:human:task') {
+      // Local mode cannot suspend the flow - simulate an immediate approval.
+      output = { simulated: true, completedBy: 'local-simulation', result: { approved: true }, input: context.lastOutput };
+    } else if (node.type === 'stepflow:transform:jsonata') {
+      const config = step.data?.configuration || {};
+      const expression = String(config.expression ?? '');
+      if (!expression.trim()) throw new Error('Jsonata expression is required');
+      // Local evaluation via the jsonata npm package - mirrors the C# JsonataEngine.
+      output = await jsonata(expression).evaluate(context.lastOutput ?? {});
     } else if (node.type === 'stepflow:transform:script') {
       const config = step.data?.configuration || {};
       const script = config.script as string;

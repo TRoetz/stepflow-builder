@@ -1,5 +1,5 @@
 import { useNodeStore, StepNode } from '@stores/useNodeStore';
-import { useEdgeStore } from '@stores/useEdgeStore';
+import { useEdgeStore, StepEdge } from '@stores/useEdgeStore';
 import { schemaById } from '@schemas/index';
 import { flowTemplates } from '@schemas/templates';
 
@@ -15,6 +15,7 @@ export interface StateDefinition {
   type: string;
   resource?: string;
   next?: string;
+  end?: boolean;
   parameters?: Record<string, unknown>;
   task?: Record<string, unknown>;
   completion?: Record<string, unknown>;
@@ -36,8 +37,14 @@ export const FlowService = {
    * Export current canvas as a StateMachineDefinition.
    */
   exportFlow(): StateMachineDefinition {
-    const nodes = useNodeStore.getState().nodes;
-    const edges = useEdgeStore.getState().edges;
+    return this.compileGraphToAsl(useNodeStore.getState().nodes, useEdgeStore.getState().edges);
+  },
+
+  /**
+   * Compile a graph (xyflow nodes + edges) into an executable ASL definition.
+   * Used for both the canvas export and Map node iterator bodies saved in graph format.
+   */
+  compileGraphToAsl(nodes: StepNode[], edges: StepEdge[]): StateMachineDefinition {
 
     // Find start node (first node or node with no incoming edges)
     const targetNodeIds = new Set(edges.map((e) => e.target));
@@ -68,15 +75,7 @@ export const FlowService = {
           itemsPath: (config.itemsPath as string) || '$.items',
           maxConcurrency: Number(config.maxConcurrency ?? 1),
           resultPath: (config.resultPath as string) || '$.results',
-          iterator: subFlow?.definition || {
-            startAt: 'PassThrough',
-            states: {
-              'PassThrough': {
-                type: 'Pass',
-                comment: 'Placeholder iterator flow. Please select a valid target flow.',
-              }
-            }
-          },
+          iterator: this.normalizeIteratorDefinition(subFlow?.definition),
           next: nextNodes[0] || undefined
         };
       } else if (aslType === 'HumanTask') {
@@ -111,21 +110,61 @@ export const FlowService = {
         };
       } else {
         const config = (node.data?.configuration || {}) as Record<string, unknown>;
-        let parameters: Record<string, unknown> = { ...config };
-        if ((node.data?.schemaId as string)?.startsWith('stepflow:ssh:')) {
+        const schemaId = node.data?.schemaId as string;
+        let parameters: Record<string, unknown> | undefined;
+
+        if (schemaId.startsWith('stepflow:data:exchange')) {
+          // No Parameters at all: the executor ingests the upstream output directly.
+          parameters = undefined;
+        } else if (schemaId.startsWith('stepflow:api:http')) {
+          // Structured contract mirroring the C# http handler exactly.
+          const method = String(config.method || 'GET').toUpperCase();
+          parameters = { __handler: 'http', method };
+          if (method !== 'GET' && method !== 'DELETE') {
+            let body = config.body;
+            if (typeof body === 'string' && body.trim()) {
+              try {
+                body = JSON.parse(body);
+              } catch {
+                /* keep raw string */
+              }
+            }
+            parameters.body = body ?? {};
+          }
+          const headers = safeParseRecord(config.headers);
+          if (headers) parameters.headers = headers;
+          if (config.authentication === 'bearer' && config.authToken) {
+            parameters.auth = { type: 'Bearer', token: String(config.authToken) };
+          }
+        } else if (schemaId.startsWith('stepflow:ssh:')) {
           // Static command wins; otherwise pass through the upstream input text.
           const hasStaticCommand = typeof config.command === 'string' && config.command.trim().length > 0;
           const incomingCount = edges.filter((e) => e.target === node.id).length;
+          parameters = { ...config };
           if (!hasStaticCommand && incomingCount > 0) {
             delete parameters.command; // avoid an empty literal shadowing the passthrough
             parameters['command.$'] = '$';
           }
+        } else if (schemaId.startsWith('stepflow:transform:jsonata')) {
+          // The engine evaluates the expression against input_data; pass through the upstream output.
+          parameters = { ...config, 'input_data.$': '$' };
+        } else if (schemaId.startsWith('stepflow:data:eav')) {
+          // The engine's eav:// handler persists input.values ?? the input minus control keys; for write/update/patch, copy the upstream output into values.
+          const op = String(config.operation || 'read');
+          parameters = op === 'write' || op === 'update' || op === 'patch'
+            ? { ...config, 'values.$': '$' }
+            : { ...config };
+        } else {
+          parameters = { ...config };
         }
+
+        const isEnd = schemaId === 'stepflow:terminal:end';
         states[node.id] = {
           type: aslType,
-          resource: buildResourceUri(node),
+          ...(isEnd ? {} : { resource: buildResourceUri(node) }),
           next: nextNodes[0] || undefined,
-          parameters,
+          ...(parameters && !isEnd ? { parameters } : {}),
+          ...(isEnd ? { end: true } : {}),
           comment: node.data?.description || undefined,
           inputs: schema?.inputs.map((i) => i.id),
           outputs: schema?.outputs.map((o) => o.id),
@@ -136,6 +175,32 @@ export const FlowService = {
     return {
       startAt: startNode?.id || '',
       states,
+    };
+  },
+
+  /**
+   * Normalize a saved iterator definition into compiled ASL. The engine's Map executor requires an executable sub-flow ({startAt, states}); bodies created by ensureIteratorBody are stored in graph format ({nodes, edges}), so compile them here. Already-compiled ASL passes through as-is; anything else falls back to a placeholder.
+   */
+  normalizeIteratorDefinition(definition: unknown): StateMachineDefinition {
+    if (definition && typeof definition === 'object') {
+      const d = definition as Record<string, unknown>;
+      if (Array.isArray(d.nodes) && Array.isArray(d.edges)) {
+        // Graph format — compile to ASL. Edges reference nodes by label, so node ids become labels.
+        const subEdges: StepEdge[] = (d.edges as Array<{ source?: string; target?: string }>).map((e) => ({
+          id: `edge-${e.source}-${e.target}`,
+          source: String(e.source ?? ''),
+          target: String(e.target ?? ''),
+        }));
+        return this.compileGraphToAsl(graphNodesToStepNodes(d.nodes), subEdges);
+      }
+      if (typeof d.startAt === 'string' && d.states && typeof d.states === 'object') {
+        // Already compiled ASL — pass through.
+        return definition as StateMachineDefinition;
+      }
+    }
+    return {
+      startAt: 'PassThrough',
+      states: { PassThrough: { type: 'Pass', comment: 'Placeholder iterator flow. Please select a valid target flow.' } },
     };
   },
 
@@ -484,6 +549,7 @@ function buildResourceUri(node: StepNode): string {
   if (schemaId?.startsWith('stepflow:data:sql')) return `sql://${config?.connectionString || 'default'}`;
   if (schemaId?.startsWith('stepflow:data:duckdb')) return `duckdb://default`;
   if (schemaId?.startsWith('stepflow:data:eav')) return `eav://${config?.entityType || 'default'}`;
+  if (schemaId?.startsWith('stepflow:data:exchange')) return `dataexchange://${config?.profileId || 'default'}`;
   if (schemaId?.startsWith('stepflow:api:http')) {
     const url = config?.url as string || 'localhost';
     if (url.startsWith('http://') || url.startsWith('https://')) return url;
@@ -518,6 +584,8 @@ function mapSchemaIdToAslStateType(schemaId: string, category: string): string {
   return 'Task';
 }
 function resolveSchemaId(state: StateDefinition): string {
+  // Terminal end states are exported as Pass + end:true (the engine has no End state type).
+  if (state.end === true) return 'stepflow:terminal:end';
   // Map resource URI back to schemaId
   const resource = state.resource || '';
   if (state.type === 'HumanTask' || resource.startsWith('human://')) return 'stepflow:human:task';
@@ -527,6 +595,7 @@ function resolveSchemaId(state: StateDefinition): string {
   if (resource.startsWith('sql://')) return 'stepflow:data:sql';
   if (resource.startsWith('duckdb://')) return 'stepflow:data:duckdb';
   if (resource.startsWith('eav://')) return 'stepflow:data:eav';
+  if (resource.startsWith('dataexchange://')) return 'stepflow:data:exchange';
   if (resource.startsWith('http://') || resource.startsWith('https://')) return 'stepflow:api:http';
   if (resource.startsWith('api://')) return 'stepflow:api:registered';
   if (resource.startsWith('ssh://')) return 'stepflow:ssh:command';
@@ -539,6 +608,20 @@ function resolveSchemaId(state: StateDefinition): string {
   if (resource.startsWith('utility://branch')) return 'stepflow:utility:branch';
 
   return 'stepflow:utility:pass';
+}
+
+/** Parse a JSON string (or pass through an object) into a flat record; null when absent or invalid. */
+function safeParseRecord(value: unknown): Record<string, unknown> | null {
+  if (value == null) return null;
+  let v = value;
+  if (typeof v === 'string') {
+    try {
+      v = JSON.parse(v);
+    } catch {
+      return null;
+    }
+  }
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
 }
 
 /** Rebuild node configuration from an imported ASL state (handles HumanTask's Task/Completion contract). */
@@ -563,7 +646,30 @@ function reconstructConfiguration(state: StateDefinition): Record<string, unknow
       resultPath: state.resultPath ?? '',
     };
   }
-  return state.parameters || {};
+  // Data Exchange — profile id lives in the resource URI.
+  if ((state.resource || '').startsWith('dataexchange://')) {
+    const profileId = (state.resource as string).slice('dataexchange://'.length).replace(/\/+$/, '');
+    return { profileId };
+  }
+  // HTTP request — structured __handler contract back into node config fields.
+  if ((state.parameters as Record<string, unknown> | undefined)?.__handler === 'http') {
+    const p = state.parameters as Record<string, unknown>;
+    let body = p.body;
+    if (body !== undefined && typeof body !== 'string') body = JSON.stringify(body, null, 2);
+    const headers = safeParseRecord(p.headers);
+    const auth = p.auth as Record<string, unknown> | undefined;
+    return {
+      url: state.resource || '',
+      method: String(p.method ?? 'GET'),
+      ...(body !== undefined ? { body } : {}),
+      ...(headers ? { headers: JSON.stringify(headers, null, 2) } : {}),
+      ...(auth?.token ? { authentication: auth.type === 'Basic' ? 'basic' : 'bearer', authToken: String(auth.token) } : {}),
+    };
+  }
+  const params: Record<string, unknown> = { ...(state.parameters || {}) };
+  // Template-resolution markers (e.g. "input_data.$") are engine-side wiring, not node config.
+  for (const key of Object.keys(params)) if (key.endsWith('.$')) delete params[key];
+  return params;
 }
 
 function loadSavedFlows(): Array<{ id: string; name: string; description?: string; createdAt: string; definition: StateMachineDefinition }> {
@@ -573,4 +679,16 @@ function loadSavedFlows(): Array<{ id: string; name: string; description?: strin
   } catch {
     return [];
   }
+}
+
+/** Convert saved graph-format nodes ({schemaId, label, config}) into StepNode objects keyed by label (graph edges reference labels). */
+function graphNodesToStepNodes(raw: unknown[]): StepNode[] {
+  return raw.map((n) => {
+    const nodeDef = n as { schemaId?: string; label?: string; description?: string; config?: Record<string, unknown>; position?: { x: number; y: number } };
+    return {
+      id: nodeDef.label || `node-${Math.random().toString(36).slice(2)}`,
+      data: { schemaId: nodeDef.schemaId ?? '', label: nodeDef.label ?? '', description: nodeDef.description, configuration: nodeDef.config ?? {} },
+      position: nodeDef.position ?? { x: 0, y: 0 },
+    } as StepNode;
+  });
 }

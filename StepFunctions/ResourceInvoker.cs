@@ -3,6 +3,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Data.Sqlite;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -34,6 +35,7 @@ namespace StepFunctionsApp.StepFunctions
         private readonly DataExchangeExecutor _dataExchange;
         private readonly SshCommandService _sshCommands;
         private readonly FetchRemoteFilesService _fetchFiles;
+        private readonly EavRowStore _eavRows;
         private readonly ILogger<CompositeResourceInvoker> _logger;
         private readonly string _callbackBaseUrl = "http://localhost:5000"; // Should come from config
 
@@ -48,6 +50,7 @@ namespace StepFunctionsApp.StepFunctions
             DataExchangeExecutor dataExchange,
             SshCommandService sshCommands,
             FetchRemoteFilesService fetchFiles,
+            EavRowStore eavRows,
             ILogger<CompositeResourceInvoker> logger)
         {
             _httpClientFactory = httpClientFactory;
@@ -60,6 +63,7 @@ namespace StepFunctionsApp.StepFunctions
             _dataExchange = dataExchange;
             _sshCommands = sshCommands;
             _fetchFiles = fetchFiles;
+            _eavRows = eavRows;
             _logger = logger;
         }
 
@@ -107,6 +111,14 @@ namespace StepFunctionsApp.StepFunctions
             if (resource.StartsWith("fetch://"))
                 return await HandleFetchAsync(resource, input, ct);
 
+            // Local SQLite query: sql://<connectionString> (file path, "file:" URI, or "Data Source=<path>")
+            if (resource.StartsWith("sql://"))
+                return await HandleSqlAsync(resource, input, ct);
+
+            // EAV row store CRUD: eav://<entityType> (read/write/update/patch/delete on eav-data/{domain}.json)
+            if (resource.StartsWith("eav://"))
+                return await HandleEavAsync(resource, input, ct);
+
             throw new StepEngineException("States.TaskFailed", $"Unknown resource scheme: {resource}");
         }
 
@@ -140,6 +152,17 @@ namespace StepFunctionsApp.StepFunctions
                 var inputData = input["input_data"] ?? input["parameters"]?["input_data"] ?? input;
                 
                 return await _scriptExecution.ExecuteScriptAsync(operation, script, inputData, ct);
+            }
+            if (lowerOp == "jsonata")
+            {
+                var expression = input["expression"]?.ToString() ?? input["parameters"]?["expression"]?.ToString();
+                if (string.IsNullOrWhiteSpace(expression))
+                    throw new ArgumentException("transform://jsonata requires an 'expression' parameter");
+
+                // Upstream data arrives via the standard template property ("input_data.$": "$" in ASL Parameters).
+                var data = input["input_data"] ?? input["parameters"]?["input_data"] ?? input;
+                _logger.LogInformation("Evaluating JSONata expression ({Length} chars)", expression.Length);
+                return JsonataProcessor.Evaluate(expression, data);
             }
 
             _logger.LogDebug("Executing DuckDB transform: {Operation}", operation);
@@ -337,5 +360,217 @@ namespace StepFunctionsApp.StepFunctions
                 ["durationMs"] = (long)result.DurationMs
             };
         }
+
+        /// <summary>
+        /// Executes a SQL statement against a local SQLite database file.
+        /// Input: { query (required), connectionString? } — the connection string falls back to the URI path after sql://.
+        /// Only local SQLite files are supported (absolute or CWD-relative paths, "file:" URIs, or "Data Source=&lt;path&gt;" forms);
+        /// remote connection strings fail with an explicit error rather than a silent no-op.
+        /// SELECT/WITH returns { rows: [...], count }; any other statement returns { changes }.
+        /// The query runs verbatim — there is no @param binding and no {{node.field}} interpolation (both are UI-only features);
+        /// wire dynamic values upstream via JSONata or ". parameters.
+        /// </summary>
+        private async Task<JToken> HandleSqlAsync(string resource, JToken input, CancellationToken ct)
+        {
+            var query = input is JObject q && q["query"]?.Type == JTokenType.String ? (string?)q["query"] : null;
+            if (string.IsNullOrWhiteSpace(query))
+                throw new StepEngineException("States.TaskFailed", "sql:// requires a 'query' parameter");
+
+            var connectionString = input is JObject c && c["connectionString"]?.Type == JTokenType.String ? (string?)c["connectionString"] ?? "" : "";
+            if (string.IsNullOrWhiteSpace(connectionString))
+                // URI fallback: preserve a leading slash (absolute path) — only trim trailing slashes/whitespace.
+                connectionString = resource["sql://".Length..].Trim().TrimEnd('/');
+            var dbPath = ResolveSqliteFilePath(connectionString);
+
+            _logger.LogInformation("Executing SQL against {Db}: {Query}", dbPath, query);
+
+            using var connection = new SqliteConnection($"Data Source={dbPath};Pooling=False");
+            await connection.OpenAsync(ct).ConfigureAwait(false);
+            using var command = connection.CreateCommand();
+            command.CommandText = query;
+
+            if (IsSqlQuery(query))
+            {
+                using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                var rows = new JArray();
+                while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                {
+                    var row = new JObject();
+                    for (var i = 0; i < reader.FieldCount; i++)
+                        row[reader.GetName(i)] = SqliteValueToJToken(reader.GetValue(i));
+                    rows.Add(row);
+                }
+                return new JObject { ["rows"] = rows, ["count"] = rows.Count };
+            }
+
+            var changes = await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            return new JObject { ["changes"] = changes };
+        }
+
+        /// <summary>True when the statement starts with SELECT or WITH (the only forms that produce a result set here).</summary>
+        private static bool IsSqlQuery(string query)
+        {
+            var i = 0;
+            while (i < query.Length && char.IsWhiteSpace(query[i])) i++;
+            var start = i;
+            while (i < query.Length && char.IsLetterOrDigit(query[i])) i++;
+            return query[start..i].ToUpperInvariant() is "SELECT" or "WITH";
+        }
+
+        /// <summary>Resolves a sql:// connection string to an existing local SQLite file path.</summary>
+        private static string ResolveSqliteFilePath(string connectionString)
+        {
+            var cs = connectionString.Trim();
+
+            if (cs.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+            {
+                // URI form: strip query/fragment; "file:///abs" and "file://host/abs" are absolute, anything else is relative.
+                var path = cs["file:".Length..];
+                var cut = path.IndexOfAny(new[] { '?', '#' });
+                if (cut >= 0) path = path[..cut];
+                if (path.StartsWith("//")) path = "/" + path[2..];
+                cs = path;
+            }
+            else if (cs.Contains('='))
+            {
+                // "Data Source=<path>" form — a connection string without that key is remote and unsupported.
+                string? dataSource = null;
+                foreach (var part in cs.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    var eq = part.IndexOf('=');
+                    if (eq > 0 && part[..eq].Trim().Equals("Data Source", StringComparison.OrdinalIgnoreCase))
+                        dataSource = part[(eq + 1)..];
+                }
+                if (dataSource == null)
+                    throw new StepEngineException("States.TaskFailed", "sql:// supports local SQLite database files only (remote connection strings are not supported)");
+                cs = dataSource;
+            }
+
+            var fullPath = Path.GetFullPath(cs);
+            if (!File.Exists(fullPath))
+                throw new StepEngineException("States.TaskFailed", $"SQLite database file not found: {fullPath}");
+            return fullPath;
+        }
+
+        /// <summary>Converts a SQLite column value to JSON: DateTime → ISO-8601 string, blob → base64, everything else typed.</summary>
+        private static JToken SqliteValueToJToken(object? value) => value switch
+        {
+            null or DBNull => JValue.CreateNull(),
+            bool b => new JValue(b),
+            int i => new JValue(i),
+            long l => new JValue(l),
+            double d => new JValue(d),
+            float f => new JValue(f),
+            decimal m => new JValue(m),
+            DateTime dt => new JValue(dt.ToString("o")),
+            byte[] bytes => new JValue(Convert.ToBase64String(bytes)),
+            _ => new JValue(value.ToString() ?? string.Empty)
+        };
+
+        /// <summary>
+        /// CRUD against the file-based EAV row store (eav-data/{entityType}.json).
+        /// Input: { operation?, entityType?, values?, rowKeyId? } — entityType falls back to the URI path after eav://.
+        /// read (default): returns a bare JArray of all rows' Values objects in append order; input is ignored by design.
+        /// write: appends one row per element of values (JObject → single row, scalar wrapped as { value }); output { count }.
+        /// update/patch: replaces or merges the Values of the row with rowKeyId; output { updated } / { patched }.
+        /// delete: removes the row with rowKeyId; output { removed }.
+        /// </summary>
+        private Task<JToken> HandleEavAsync(string resource, JToken input, CancellationToken ct)
+        {
+            var obj = input as JObject ?? new JObject();
+            var entityType = (string?)obj["entityType"] ?? resource["eav://".Length..].Trim('/');
+            if (string.IsNullOrWhiteSpace(entityType))
+                throw new StepEngineException("States.TaskFailed", "eav:// requires an entity type (URI path or 'entityType' parameter)");
+
+            var operation = ((string?)obj["operation"] ?? "read").ToLowerInvariant();
+            _logger.LogInformation("EAV {Operation} on domain {Domain}", operation, entityType);
+
+            try
+            {
+                switch (operation)
+                {
+                    case "read":
+                        return Task.FromResult<JToken>(new JArray(_eavRows.ListRows(entityType).Select(r => (JToken)r.Values.DeepClone())));
+
+                    case "write":
+                    {
+                        var rows = ResolveEavValues(obj, excludeRowKeyId: false);
+                        foreach (var values in rows) _eavRows.AppendRow(entityType, new EavRow { Values = values });
+                        return Task.FromResult<JToken>(new JObject { ["count"] = rows.Count });
+                    }
+
+                    case "update":
+                    case "patch":
+                    {
+                        var rowKeyId = (string?)obj["rowKeyId"];
+                        if (string.IsNullOrWhiteSpace(rowKeyId))
+                            throw new StepEngineException("States.TaskFailed", $"eav:// {operation} requires a 'rowKeyId' parameter");
+                        var rows = ResolveEavValues(obj, excludeRowKeyId: true);
+                        if (rows.Count != 1)
+                            throw new StepEngineException("States.TaskFailed", $"eav:// {operation} requires a single 'values' object");
+                        var ok = operation == "update"
+                            ? _eavRows.UpdateRow(entityType, rowKeyId!, rows[0])
+                            : _eavRows.PatchRow(entityType, rowKeyId!, rows[0]);
+                        if (!ok) throw new StepEngineException("States.TaskFailed", "row not found");
+                        return Task.FromResult<JToken>(new JObject { [operation == "update" ? "updated" : "patched"] = true });
+                    }
+
+                    case "delete":
+                    {
+                        var rowKeyId = (string?)obj["rowKeyId"];
+                        if (string.IsNullOrWhiteSpace(rowKeyId))
+                            throw new StepEngineException("States.TaskFailed", "eav:// delete requires a 'rowKeyId' parameter");
+                        if (!_eavRows.RemoveRow(entityType, rowKeyId!))
+                            throw new StepEngineException("States.TaskFailed", "row not found");
+                        return Task.FromResult<JToken>(new JObject { ["removed"] = true });
+                    }
+
+                    default:
+                        throw new StepEngineException("States.TaskFailed", $"eav:// unknown operation '{operation}' (valid: read, write, update, patch, delete)");
+                }
+            }
+            catch (ArgumentException ex)
+            {
+                // Surface the store's domain-name validation error under the standard task-failure code.
+                throw new StepEngineException("States.TaskFailed", ex.Message);
+            }
+        }
+
+        /// <summary>Extracts the values to persist from an eav:// input: explicit 'values' wins; otherwise the input minus control keys.</summary>
+        private static List<JObject> ResolveEavValues(JObject input, bool excludeRowKeyId)
+        {
+            var values = input["values"];
+            if (values == null || values.Type == JTokenType.Null)
+            {
+                // No explicit 'values': the upstream payload minus control keys is the row data.
+                var rest = new JObject();
+                foreach (var prop in input.Properties())
+                    if (!IsEavControlKey(prop.Name, excludeRowKeyId)) rest[prop.Name] = prop.Value;
+                values = rest;
+            }
+
+            List<JObject> rows;
+            if (values is JArray arr)
+                rows = arr.Select(ToEavValues).ToList();
+            else if (values is JObject obj && obj.Count > 0)
+                rows = new List<JObject> { (JObject)obj.DeepClone() };
+            else if (values.Type == JTokenType.Object || values.Type == JTokenType.Array)
+                throw new StepEngineException("States.TaskFailed", "eav:// write requires non-empty 'values'");
+            else
+                rows = new List<JObject> { new JObject { ["value"] = values } };
+
+            if (rows.Count == 0)
+                throw new StepEngineException("States.TaskFailed", "eav:// write requires non-empty 'values'");
+            return rows;
+        }
+
+        private static bool IsEavControlKey(string name, bool excludeRowKeyId) =>
+            name is "operation" or "entityType" || (excludeRowKeyId && name == "rowKeyId");
+
+        private static JObject ToEavValues(JToken item) => item switch
+        {
+            JObject obj => (JObject)obj.DeepClone(),
+            _ => new JObject { ["value"] = item }
+        };
     }
 }

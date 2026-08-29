@@ -1,0 +1,79 @@
+{
+  "startAt": "6cb11ce2-b30b-46af-93bb-df9e40d303a2",
+  "states": {
+    "6cb11ce2-b30b-46af-93bb-df9e40d303a2": {
+      "type": "Pass",
+      "resource": "utility://default",
+      "next": "53c19d79-6e7f-4e48-94e0-6bcf2e97c12f",
+      "parameters": {
+        "description": ""
+      },
+      "comment": "Marks the beginning of the workflow. Every flow starts here.",
+      "inputs": [],
+      "outputs": [
+        "start_output"
+      ]
+    },
+    "53c19d79-6e7f-4e48-94e0-6bcf2e97c12f": {
+      "type": "Task",
+      "resource": "transform://jsonata",
+      "next": "c9664091-627f-4aca-a0ec-c6beb322d46b",
+      "parameters": {
+        "expression": "{ \"requestId\": 'REQ-001', \"reason\": 'Quarterly budget review', \"amount\": 5000 }",
+        "enableDebug": false,
+        "timeout": 5000,
+        "input_data.$": "$"
+      },
+      "comment": "Transform data using JSONata expressions.",
+      "inputs": [
+        "input_data",
+        "input_context"
+      ],
+      "outputs": [
+        "output_result",
+        "output_error"
+      ]
+    },
+    "c9664091-627f-4aca-a0ec-c6beb322d46b": {
+      "type": "HumanTask",
+      "next": "6cea68fe-a672-4e10-8843-8eac4110006c",
+      "task": {
+        "title": "Quarterly budget review - approve request REQ-001",
+        "assignee": "finance-team"
+      },
+      "completion": {
+        "Type": "api"
+      },
+      "comment": "Suspend the flow until a person completes an external action (approval, review, file drop). Completion arrives via POST /api/human-tasks/{id}/complete or by dropping {taskId}.json into the watched directory."
+    },
+    "6cea68fe-a672-4e10-8843-8eac4110006c": {
+      "type": "Task",
+      "resource": "transform://jsonata",
+      "next": "c08bea4e-39cb-43ac-aa92-e960e6e72953",
+      "parameters": {
+        "expression": "{ \"approved\": $.approved, \"decision\": $.decision }",
+        "enableDebug": false,
+        "timeout": 5000,
+        "input_data.$": "$"
+      },
+      "comment": "Transform data using JSONata expressions.",
+      "inputs": [
+        "input_data",
+        "input_context"
+      ],
+      "outputs": [
+        "output_result",
+        "output_error"
+      ]
+    },
+    "c08bea4e-39cb-43ac-aa92-e960e6e72953": {
+      "type": "Pass",
+      "end": true,
+      "comment": "Marks the end of the workflow. Place one or more END states to define flow completion.",
+      "inputs": [
+        "end_input"
+      ],
+      "outputs": []
+    }
+  }
+}

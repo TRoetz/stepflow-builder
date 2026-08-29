@@ -127,11 +127,13 @@ export const flowTemplates: FlowTemplate[] = [
           },
           position: { x: 840, y: 180 },
         },
+        { schemaId: 'stepflow:terminal:end', label: 'Iteration End', position: { x: 1120, y: 180 } },
       ],
       edges: [
         { source: 'Iteration Start', target: 'Read Row' },
         { source: 'Read Row', target: 'Generate Text' },
         { source: 'Generate Text', target: 'Decide' },
+        { source: 'Decide', target: 'Iteration End' },
       ],
     },
   },
@@ -153,12 +155,12 @@ export const flowTemplates: FlowTemplate[] = [
         {
           schemaId: 'stepflow:transform:jsonata',
           label: 'Normalize Rows',
-          config: { expression: '{ amount, reason, customer_id }' },
+          config: { expression: '$map($, function($v) { return { "amount": $v.amount, "reason": $v.reason, "customer_id": $v.customer_id } })' },
         },
         {
           schemaId: 'stepflow:flow:map',
           label: 'Review Each Row',
-          config: {},
+          config: { itemsPath: '$', resultPath: '$' },
         },
         {
           schemaId: 'stepflow:data:eav',
@@ -224,12 +226,12 @@ export const flowTemplates: FlowTemplate[] = [
         {
           schemaId: 'stepflow:transform:jsonata',
           label: 'Report OK',
-          config: { expression: '{ healthy: true, status: $.status }' },
+          config: { expression: '{ "healthy": true, "status": $.status }' },
         },
         {
           schemaId: 'stepflow:transform:jsonata',
           label: 'Report Issue',
-          config: { expression: '{ healthy: false, status: $.status }' },
+          config: { expression: '{ "healthy": false, "status": $.status }' },
         },
         { schemaId: 'stepflow:terminal:end', label: 'End' },
       ],
@@ -240,6 +242,128 @@ export const flowTemplates: FlowTemplate[] = [
         { source: 'Healthy?', target: 'Report Issue' },
         { source: 'Report OK', target: 'End' },
         { source: 'Report Issue', target: 'End' },
+      ],
+    },
+  },
+  {
+    id: 'tpl-data-exchange-pipeline',
+    name: 'DataExchange Pipeline',
+    icon: '🔍',
+    description:
+      'Build order rows locally, run them through a registered Data Exchange profile (validation + calculation), and summarize the result. Prerequisite: create the "demo-order-validation" profile first - via the Data Exchange panel or `curl -X POST localhost:5001/api/data-exchange/profiles -d @smoke/dataexchange-samples/demo-order-validation.profile.json`. Works with zero input on the C# engine because the rows come from the Jsonata node.',
+    tags: ['dataexchange', 'pipeline', 'validation', 'jsonata'],
+    mainFlow: {
+      nodes: [
+        { schemaId: 'stepflow:terminal:start', label: 'Start' },
+        {
+          schemaId: 'stepflow:transform:jsonata',
+          label: 'Build Input Rows',
+          config: {
+            expression:
+              `{ "rows": [ { "OrderId": 'ORD-001', "CustomerCode": 'CUST-A', "Amount": 250 }, { "OrderId": 'ORD-002', "CustomerCode": 'CUST-B', "Amount": 80.5 }, { "OrderId": 'ORD-003', "CustomerCode": 'CUST-C', "Amount": -15 }, { "OrderId": 'ORD-004', "CustomerCode": 'CUST-A', "Amount": 120 } ] }`,
+          },
+        },
+        {
+          schemaId: 'stepflow:data:exchange',
+          label: 'Exchange',
+          config: { profileId: 'demo-order-validation' },
+        },
+        {
+          schemaId: 'stepflow:transform:jsonata',
+          label: 'Summarize Result',
+          config: { expression: '{ "processed": $.rowsOut, "rejected": $.rejectedCount, "firstRowTotalWithTax": $.enrichedRows[0].TotalWithTax }' },
+        },
+        { schemaId: 'stepflow:terminal:end', label: 'End' },
+      ],
+      edges: [
+        { source: 'Start', target: 'Build Input Rows' },
+        { source: 'Build Input Rows', target: 'Exchange' },
+        { source: 'Exchange', target: 'Summarize Result' },
+        { source: 'Summarize Result', target: 'End' },
+      ],
+    },
+  },
+  {
+    id: 'tpl-dynamic-api-roundtrip',
+    name: 'Dynamic API Round Trip',
+    icon: '🔄',
+    description:
+      'Create a dynamic EAV-backed API definition, save a record through it, read the record back, and verify the round trip. Rows land on disk at eav-data/demo_records.json. The explicit id makes step 1 an idempotent upsert - re-running the flow never fails with a conflict. The API can equally be created in the Dynamic API panel instead of step 1.',
+    tags: ['dynamicapi', 'eav', 'http', 'post', 'get'],
+    mainFlow: {
+      nodes: [
+        { schemaId: 'stepflow:terminal:start', label: 'Start' },
+        {
+          schemaId: 'stepflow:api:http',
+          label: 'Create Demo API',
+          config: {
+            method: 'POST',
+            url: 'http://localhost:5001/api/dynamic/apis',
+            body: '{"id":"demo-records","name":"Demo Records","nodePath":"Default","basePath":"/demo-records","attributeDomain":"demo_records","operations":[{"method":"GET","path":"","handlerType":"eav"},{"method":"POST","path":"","handlerType":"eav"}]}',
+          },
+        },
+        {
+          schemaId: 'stepflow:api:http',
+          label: 'Save Record via POST',
+          config: {
+            method: 'POST',
+            url: 'http://localhost:5001/api/dynamic/demo-records',
+            body: '{"entityId":"rec-demo-1","entityType":"DemoRecord","note":"saved via flow template","amount":42}',
+          },
+        },
+        {
+          schemaId: 'stepflow:api:http',
+          label: 'Read Record via GET',
+          config: { method: 'GET', url: 'http://localhost:5001/api/dynamic/demo-records?entityId=rec-demo-1' },
+        },
+        {
+          schemaId: 'stepflow:transform:jsonata',
+          label: 'Verify Round Trip',
+          config: { expression: '{ "count": $.count, "entityId": $.rows[0].entityId, "note": $.rows[0].values.note }' },
+        },
+        { schemaId: 'stepflow:terminal:end', label: 'End' },
+      ],
+      edges: [
+        { source: 'Start', target: 'Create Demo API' },
+        { source: 'Create Demo API', target: 'Save Record via POST' },
+        { source: 'Save Record via POST', target: 'Read Record via GET' },
+        { source: 'Read Record via GET', target: 'Verify Round Trip' },
+        { source: 'Verify Round Trip', target: 'End' },
+      ],
+    },
+  },
+  {
+    id: 'tpl-human-task-approval',
+    name: 'Human Task Approval',
+    icon: '🙋',
+    description:
+      'Prepare an approval request, hand it to a human task, and record the decision. Real execution suspends until someone completes the task via POST /api/human-tasks/{id}/complete; local UI mode simulates an immediate approval.',
+    tags: ['human', 'approval', 'workflow'],
+    mainFlow: {
+      nodes: [
+        { schemaId: 'stepflow:terminal:start', label: 'Start' },
+        {
+          schemaId: 'stepflow:transform:jsonata',
+          label: 'Prepare Request',
+          config: { expression: `{ "requestId": 'REQ-001', "reason": 'Quarterly budget review', "amount": 5000 }` },
+        },
+        {
+          schemaId: 'stepflow:human:task',
+          label: 'Approve?',
+          config: { taskTitle: 'Quarterly budget review - approve request REQ-001', assignee: 'finance-team' },
+        },
+        {
+          schemaId: 'stepflow:transform:jsonata',
+          label: 'Record Decision',
+          config: { expression: '{ "approved": $.approved, "decision": $.decision }' },
+        },
+        { schemaId: 'stepflow:terminal:end', label: 'End' },
+      ],
+      edges: [
+        { source: 'Start', target: 'Prepare Request' },
+        { source: 'Prepare Request', target: 'Approve?' },
+        { source: 'Approve?', target: 'Record Decision' },
+        { source: 'Record Decision', target: 'End' },
       ],
     },
   },

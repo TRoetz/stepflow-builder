@@ -120,7 +120,7 @@ Built-in error codes and semantics: UserManual §7.
 
 ## 4. Resource schemes (Task states)
 
-`CompositeResourceInvoker.InvokeAsync` (`StepFunctions/ResourceInvoker.cs`) dispatches on the `resource` URI scheme — the complete set of twelve:
+`CompositeResourceInvoker.InvokeAsync` (`StepFunctions/ResourceInvoker.cs`) dispatches on the `resource` URI scheme — the complete set of fourteen:
 
 | # | Scheme | URI form | Behavior |
 |---|---|---|---|
@@ -128,13 +128,15 @@ Built-in error codes and semantics: UserManual §7.
 | 3 | `rule://` | `rule://<ruleId>?eav=<entity>` | NRules rule execution; optional EAV mapping of dynamic JSON to a strict entity dictionary |
 | 4 | `rules://` | `rules://<workflowName>` | Microsoft RulesEngine workflow |
 | 5 | `transform://` | `transform://<operation>` | DuckDB transform (or script) over the input — batch SQL, joins, aggregations |
-| 6 | `ai://` | any path (ignored) | POSTs the input to `{callbackBaseUrl}/api/ai/ask`; fails with `States.TaskFailed` if the response has `"isError": true`. **`callbackBaseUrl` is hardcoded to `http://localhost:5000`** — the UI backend's port, not this app's 5001 |
+| 6 | `ai://` | any path (ignored) | POSTs the input to `{callbackBaseUrl}/api/ai/ask`; fails with `States.TaskFailed` if the response has `"isError": true`. **`callbackBaseUrl` is hardcoded to `http://localhost:5000`** — the UI backend's port, not this app's 5001. No `/api/ai/ask` implementation exists in this repo (pre-existing gap) — AI states fail with a connection error until an external LLM service listens there |
 | 7 | `flow://` | `flow://<flowId>` | Synchronous sub-flow execution; a failed child throws its error code (or `SubFlow.Failed`) |
 | 8 | `tool://` | `tool://<toolName>` | POSTs the input to `{callbackBaseUrl}/api/tools/{toolName}/execute`; same hardcoded `http://localhost:5000` base as `ai://` |
 | 9 | `internal://` | `internal://echo`, `internal://engine/status`, `internal://rules/status`, `internal://transform/status` | Built-in diagnostics; any other path throws `States.TaskFailed: Unknown internal resource`. **Use `internal://echo` for smoke tests** — it returns a deep clone of the input with no external dependencies |
 | 10 | `dataexchange://` | `dataexchange://<profileId>` | Runs a DataExchange profile pipeline end-to-end (§6) |
 | 11 | `ssh://` | `ssh://<hostName>` | Curated host inventory (`ssh_hosts.json`) + AI safety check on the command (`"override": true` in input bypasses it); output `{ host, command, exitCode, stdout, stderr, durationMs }`; `timeoutSeconds` default 30 (values below 1 are reset to 30) |
 | 12 | `fetch://` | `fetch://<hostName>?proto=scp\|sftp\|ftp\|xcopy` | Remote file fetch with wildcards (SCP: none); input `sourcePath`, `destDir`, `timeoutSeconds` (default 120) |
+| 13 | `sql://` | `sql://<connectionString>` | Local SQLite file only (absolute/CWD-relative path, `file:` URI, or `Data Source=<path>`); remote connection strings fail with an explicit error. Input `{ query }` required; SELECT/WITH → `{ rows: [...], count }`, any other statement → `{ changes: n }`. No `@param` binding or `{{node.field}}` interpolation (UI-only) — wire dynamic values upstream via JSONata/`.$` |
+| 14 | `eav://` | `eav://<entityType>` | CRUD on the file-based EAV row store (`eav-data/{domain}.json`). Input `{ operation?, values?, rowKeyId? }`: `read` (default) → bare JArray of rows in append order; `write` (explicit `values`, or upstream output via `"values.$": "$"`) → `{ count: n }`; `update`/`patch` (need `rowKeyId`) → `{ updated|patched: true }`; `delete` → `{ removed: true }` |
 
 ## 5. Human tasks
 

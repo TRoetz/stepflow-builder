@@ -1,0 +1,48 @@
+{
+  "dataExchangeProfileName": "Demo Order Validation",
+  "profileId": "demo-order-validation",
+  "isActive": true,
+  "dataSource": {
+    "dataSourceName": "Customer Orders (file)",
+    "mediumType": 3,
+    "mediumConfigurationJson": "{\"filePath\": \"smoke/dataexchange-samples/cust_orders.csv\"}"
+  },
+  "pipeline": {
+    "pipelineName": "Order Validation Pipeline",
+    "description": "Validate order amounts and calculate TotalWithTax (20% tax).",
+    "pipelineStages": [
+      {
+        "stageType": "DataTreatment",
+        "executionOrder": 1,
+        "pipelineStageActions": [
+          {
+            "executionOrder": 1,
+            "action": {
+              "actionName": "Validate and Enrich Orders",
+              "type": 0,
+              "actionRules": [
+                {
+                  "rule": {
+                    "ruleName": "Amount must be positive",
+                    "type": 0,
+                    "expression": "{Amount} > 0",
+                    "defaultFailureMessage": "Order amount must be greater than zero"
+                  }
+                },
+                {
+                  "outputTargetAttributeName": "TotalWithTax",
+                  "outputMergeStrategy": 1,
+                  "rule": {
+                    "ruleName": "Calculate Total With Tax",
+                    "type": 1,
+                    "expression": "{Amount} * 1.2"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
