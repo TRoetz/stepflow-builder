@@ -105,6 +105,9 @@ namespace StepFunctionsApp.Controllers
                     return BadRequest(new { error = $"operations[{i}].method must be one of GET, POST, PUT, PATCH, DELETE" });
                 if (op.Path != "" && !op.Path.StartsWith('/'))
                     return BadRequest(new { error = $"operations[{i}].path must be empty or start with '/'" });
+                var fullPath = DynamicApiMatcher.JoinPaths(basePath, op.Path);
+                if (fullPath == "/apis" || fullPath.StartsWith("/apis/", StringComparison.Ordinal))
+                    return BadRequest(new { error = "basePath cannot use the reserved '/apis' management prefix" });
 
                 foreach (var seg in DynamicApiMatcher.PathSegments(DynamicApiMatcher.JoinPaths(basePath, op.Path)))
                     if (DynamicApiMatcher.IsTemplate(seg) && !TemplateParamRegex.IsMatch(seg[1..^1]))

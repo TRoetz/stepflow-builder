@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using StepFunctionsApp.StepFunctions;
@@ -27,7 +28,6 @@ public class Program
             .ConfigureWebHostDefaults(webBuilder =>
             {
                 webBuilder.UseStartup<Startup>();
-                webBuilder.UseUrls("http://localhost:5001");
             });
 }
 public class Startup
@@ -140,6 +140,23 @@ public class Startup
             provider.GetRequiredService<IOptions<FormDataOptions>>().Value.DatabasePath,
             provider.GetService<ILogger<SqliteDynamicApiStore>>()));
         services.AddSingleton<DynamicApiDispatcher>();
+        // Dynamic API hosting: management port + one scoped port per workspace node (DynamicApi section).
+        var dynamicHosting = _config.GetSection(DynamicApiHostingOptions.SectionName).Get<DynamicApiHostingOptions>() ?? new();
+        dynamicHosting.Validate(); // fail fast with a clear message before Kestrel tries to bind
+        services.AddSingleton(dynamicHosting);
+        services.Configure<KestrelServerOptions>(kestrel =>
+        {
+            void Bind(int port)
+            {
+                var address = (dynamicHosting.ListenAddress ?? "localhost").Trim();
+                if (address is "" or "*" or "0.0.0.0") kestrel.ListenAnyIP(port);
+                else if (address.Equals("localhost", StringComparison.OrdinalIgnoreCase)) kestrel.ListenLocalhost(port); // 127.0.0.1 + [::1], same as today's UseUrls
+                else if (System.Net.IPAddress.TryParse(address, out var ip)) kestrel.Listen(ip, port);
+                else throw new InvalidOperationException($"DynamicApi:ListenAddress '{address}' must be 'localhost', '*', or an IP literal");
+            }
+            Bind(dynamicHosting.ManagementPort);
+            foreach (var ep in dynamicHosting.Endpoints) Bind(ep.Port);
+        });
         services.AddSingleton<ISchemaDefinitionStore>(provider =>
         {
             var options = provider.GetRequiredService<IOptions<FormDataOptions>>().Value;
@@ -187,6 +204,25 @@ public class Startup
         app.UseStaticFiles();
         
         app.UseRouting();
+        // Scoped business-unit/project ports: serve only that node's dynamic API surface plus health; everything else 404s.
+        var hostingOptions = app.ApplicationServices.GetRequiredService<DynamicApiHostingOptions>();
+        app.Use(async (context, next) =>
+        {
+            var binding = hostingOptions.BindingForPort(context.Connection.LocalPort);
+            if (binding == null) { await next(); return; } // management port → full surface
+            var path = context.Request.Path.Value ?? "";
+            bool allowed = path.Equals("/api/health", StringComparison.OrdinalIgnoreCase)
+                || (path.StartsWith("/api/dynamic/", StringComparison.OrdinalIgnoreCase)
+                    && !path.StartsWith("/api/dynamic/apis", StringComparison.OrdinalIgnoreCase)); // /apis* is management CRUD — never exposed on node ports
+            if (!allowed)
+            {
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                context.Response.ContentType = "application/json";
+                await context.Response.WriteAsync("{\"error\":\"Not found on this endpoint\"}");
+                return;
+            }
+            await next();
+        });
         app.UseEndpoints(endpoints =>
         {
             // MCP (Model Context Protocol) endpoint for AI harnesses (Streamable HTTP).
@@ -219,8 +255,22 @@ public class Startup
             endpoints.Map("/api/dynamic/openapi.json", context =>
             {
                 var domains = context.RequestServices.GetRequiredService<IAttributeDomainStore>();
+                var hosting = context.RequestServices.GetRequiredService<DynamicApiHostingOptions>();
+                var binding = hosting.BindingForPort(context.Connection.LocalPort);
                 context.Response.ContentType = "application/json";
-                return context.Response.WriteAsync(DynamicApiOpenApiGenerator.Build(dynamicApis.GetAll(), domains).ToString(Formatting.None));
+                return context.Response.WriteAsync(DynamicApiOpenApiGenerator.Build(dynamicApis.GetAll(binding?.NodePath), domains).ToString(Formatting.None));
+            });
+            // Operator view of port → node bindings (NGINX config authoring aid).
+            endpoints.Map("/api/dynamic/endpoints", context =>
+            {
+                var hosting = context.RequestServices.GetRequiredService<DynamicApiHostingOptions>();
+                context.Response.ContentType = "application/json";
+                return context.Response.WriteAsync(JsonConvert.SerializeObject(new
+                {
+                    managementPort = hosting.ManagementPort,
+                    listenAddress = hosting.ListenAddress,
+                    endpoints = hosting.Endpoints.Select(e => new { port = e.Port, nodePath = e.NodePath })
+                }, Formatting.None));
             });
             var dynamicDispatcher = app.ApplicationServices.GetRequiredService<DynamicApiDispatcher>();
             endpoints.Map("/api/dynamic/{**rest}", async context => await dynamicDispatcher.HandleAsync(context));

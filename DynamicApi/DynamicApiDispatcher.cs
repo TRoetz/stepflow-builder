@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using StepFunctionsApp.StepFunctions;
@@ -28,6 +29,7 @@ public class DynamicApiDispatcher
     private readonly EavRowStore _eavRows;
     private readonly DataExchange.DataExchangeExecutor _dataExchange;
     private readonly WorkspaceStore _workspace;
+    private readonly DynamicApiHostingOptions _hosting;
     private readonly ILogger<DynamicApiDispatcher> _logger;
 
     public DynamicApiDispatcher(
@@ -37,6 +39,7 @@ public class DynamicApiDispatcher
         EavRowStore eavRows,
         DataExchange.DataExchangeExecutor dataExchange,
         WorkspaceStore workspace,
+        DynamicApiHostingOptions hosting,
         ILogger<DynamicApiDispatcher>? logger = null)
     {
         _store = store;
@@ -45,6 +48,7 @@ public class DynamicApiDispatcher
         _eavRows = eavRows;
         _dataExchange = dataExchange;
         _workspace = workspace;
+        _hosting = hosting;
         _logger = logger ?? NullLogger<DynamicApiDispatcher>.Instance;
     }
 
@@ -80,7 +84,9 @@ public class DynamicApiDispatcher
 
     private async Task<(int Status, JToken Body, string? ApiId, string? Handler)> DispatchAsync(HttpContext context, string method, string rest)
     {
-        var apis = _store.GetAll();
+        // Scoped port → only this node's subtree; management/unknown port → all APIs.
+        var binding = _hosting.BindingForPort(context.Connection.LocalPort);
+        var apis = _store.GetAll(binding?.NodePath);
         var matched = DynamicApiMatcher.Match(method, rest, apis);
 
         if (matched == null)

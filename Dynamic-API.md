@@ -6,6 +6,41 @@ StepFunctionsApp (ASP.NET Core 10, `C:/Source/stepflow-builder/StepFunctionsApp`
 
 End state: `POST /api/dynamic/apis` defines an API; requests to `/api/dynamic/{basePath}/{opPath}` are auth-checked and executed by the configured handler; `GET /api/dynamic/openapi.json` returns a spec covering all active APIs; the React builder has a "Dynamic API" panel for CRUD + OpenAPI viewing + live testing.
 
+## Hosting behind NGINX (multi-port, per business unit)
+
+The host binds **one Kestrel port per workspace node** in addition to the management port, so an NGINX reverse proxy can route each domain/project to its own dedicated backend endpoint. Scoping key is the **TCP port the connection arrived on** (`HttpContext.Connection.LocalPort`) — not the `Host` header — so hitting a node port directly (no proxy) is equally scoped.
+
+### Configuration (`DynamicApi` section, appsettings.json or env vars)
+
+|Key|Default|Meaning|
+|---|---|---|
+|`ManagementPort`|`5001`|Full management surface: builder UI at `/`, all controllers, MCP, and dynamic APIs of **every** node.|
+|`ListenAddress`|`localhost`|Every endpoint binds here. Use `*` (or an IP literal) for cross-host deployment behind NGINX on another machine.|
+|`Endpoints[]`|`(empty)`|One entry per business unit / project: `{ "Port": 5101, "NodePath": "Acme UI/Website" }`. The port serves dynamic APIs whose `nodePath` is that node **or nested under it**; everything else on the port 404s.|
+
+Sample (shipped in appsettings.json):
+
+```json
+"DynamicApi": {
+  "ManagementPort": 5001,
+  "ListenAddress": "localhost",
+  "Endpoints": [ { "Port": 5101, "NodePath": "Acme UI/Website" } ]
+}
+```
+
+Environment overrides (double-underscore form): `DynamicApi__ManagementPort=6000`, `DynamicApi__ListenAddress=*`, `DynamicApi__Endpoints__0__Port=5102`, `DynamicApi__Endpoints__0__NodePath="Acme UI/Website"`. Invalid config fails fast at startup with a clear message (out-of-range port, duplicate port, or NodePath not shaped `org` / `org/project` / `org/project/sub`).
+
+### What each port serves
+
+- **Management port** — unchanged from before: everything.
+- **Node port** — only `/api/dynamic/{…}` for APIs in that node's subtree (including its scoped OpenAPI spec at `/api/dynamic/openapi.json`) plus `GET /api/health`. The builder UI, MCP, and API definition CRUD (`/api/dynamic/apis`) are management-only; on a node port they 404.
+- **Operator endpoint** — `GET /api/dynamic/endpoints` (management port) returns `{ "managementPort": …, "listenAddress": …, "endpoints": [ { "port", "nodePath" } ] }`; use it to author/verify NGINX upstreams.
+
+### Routing model
+
+NGINX maps each domain → its upstream port (`proxy_pass http://127.0.0.1:5101;`); the app does the rest by arrival port. A ready-made same-host config (with TLS skeleton) lives in [`deploy/nginx-stepflow.conf`](deploy/nginx-stepflow.conf).
+
+
 ## Approach
 
 All new backend code lives in a new root folder `DynamicApi/` (mirrors `DataExchange/`). All JSON over the wire is camelCase via the existing `KeyPreservingCamelCaseContractResolver`. Error bodies follow the existing convention: `{ "error": "message" }`.
