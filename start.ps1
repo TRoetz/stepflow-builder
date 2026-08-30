@@ -3,8 +3,10 @@
 
 $ErrorActionPreference = 'Stop'
 
-# Frontend project lives in the StepFlow-UI subfolder of this repo
+# Repo layout: backend in StepFunctionsApp/, frontend in StepFlow-UI/ — both siblings of this script.
 $uiRoot = Join-Path $PSScriptRoot 'StepFlow-UI'
+$backendRoot   = Join-Path $PSScriptRoot 'StepFunctionsApp'
+$testHostRoot  = Join-Path $backendRoot 'Stepflow-Builder-Tests'
 
 Write-Host ''
 Write-Host '  StepFlow Builder' -ForegroundColor Cyan
@@ -64,11 +66,11 @@ if (-not (Test-Path (Join-Path $uiRoot 'node_modules'))) {
 
 # Start .NET 10 Backend in separate terminal window
 Write-Host '  Starting .NET 10 Execution Engine...' -ForegroundColor Cyan
-Start-Process dotnet -ArgumentList "run"
+Start-Process dotnet -ArgumentList "run", "--project", $backendRoot -WorkingDirectory $backendRoot
 
 # Start Fake Test API Host on port 5095 (target of Flows/FakeData_*.json)
 Write-Host '  Starting Fake Test API Host (port 5095)...' -ForegroundColor Cyan
-Start-Process dotnet -ArgumentList "run", "--project", "Stepflow-Builder-Tests"
+Start-Process dotnet -ArgumentList "run", "--project", $testHostRoot -WorkingDirectory $testHostRoot
 
 # Start Vite dev server (Proxies /api to .NET backend on port 5001)
 Write-Host '  Starting Frontend Dev Server (port 3001)...' -ForegroundColor Cyan

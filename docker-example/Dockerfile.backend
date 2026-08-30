@@ -1,0 +1,16 @@
+# StepFlow backend (.NET 10). Build context = repo root (see docker-compose.yml).
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+COPY StepFunctionsApp/StepFunctionsApp.csproj StepFunctionsApp/
+COPY StepFlow.DynamicApi.Core/ StepFlow.DynamicApi.Core/
+RUN dotnet restore StepFunctionsApp/StepFunctionsApp.csproj
+COPY StepFunctionsApp/ StepFunctionsApp/
+RUN dotnet publish StepFunctionsApp/StepFunctionsApp.csproj -c Release -o /app/publish
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+WORKDIR /app
+COPY --from=build /app/publish .
+# Sample workspace data (tracked in git): flows, EAV rows and the published "Orders API".
+COPY StepFunctionsApp/stepflow_data.db ./
+EXPOSE 5001
+ENTRYPOINT ["dotnet", "StepFunctionsApp.dll"]

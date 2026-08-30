@@ -1,0 +1,14 @@
+# Standalone host exposing published dynamic APIs (.NET 10). Build context = repo root (see docker-compose.yml).
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+COPY DynamicApiHost/DynamicApiHost.csproj DynamicApiHost/
+COPY StepFlow.DynamicApi.Core/ StepFlow.DynamicApi.Core/
+RUN dotnet restore DynamicApiHost/DynamicApiHost.csproj
+COPY DynamicApiHost/ DynamicApiHost/
+RUN dotnet publish DynamicApiHost/DynamicApiHost.csproj -c Release -o /app/publish
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+WORKDIR /app
+COPY --from=build /app/publish .
+EXPOSE 5002
+ENTRYPOINT ["dotnet", "DynamicApiHost.dll"]

@@ -1,0 +1,16 @@
+# Keep the Docker build context small: VCS, node_modules, .NET build output.
+.git/
+StepFlow-UI/node_modules/
+StepFlow-UI/dist/
+StepFunctionsApp/bin/
+StepFunctionsApp/obj/
+DynamicApiHost/bin/
+DynamicApiHost/obj/
+StepFlow.DynamicApi.Core/bin/
+StepFlow.DynamicApi.Core/obj/
+# Test projects live inside StepFunctionsApp/ - anchor the paths (bare names don't match at depth).
+StepFunctionsApp/Stepflow-Builder-Tests/
+StepFunctionsApp/StepFunctionsApp.Tests/
+*.db-journal
+# Local publish output (hundreds of MB of build artifacts, not needed in the image).
+StepFunctionsApp/publish/

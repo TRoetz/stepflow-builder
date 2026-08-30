@@ -11,9 +11,9 @@ Deep reference material lives in this repo — read it before non-trivial work:
 
 | Document | Contents |
 |---|---|
-| `../docs/StepFlow_Usage_Guide.md` | Full node catalog (25 types), 10 end-to-end scenarios with complete ASL JSON, DataExchange profile anatomy + example, SSIS & Logic Apps migration procedures |
-| `../docs/UserManual.md` | Engine internals: state-type semantics, choice-rule operators, payload pipeline order, error handling (`Retry`/`Catch`) |
-| `Converters/README.md` | BPMN/SSIS conversion pipeline (pattern matching → manifest → rollback) |
+| `docs/StepFlow_Usage_Guide.md` | Full node catalog (25 types), 10 end-to-end scenarios with complete ASL JSON, DataExchange profile anatomy + example, SSIS & Logic Apps migration procedures |
+| `docs/UserManual.md` | Engine internals: state-type semantics, choice-rule operators, payload pipeline order, error handling (`Retry`/`Catch`) |
+| `StepFunctionsApp/Converters/README.md` | BPMN/SSIS conversion pipeline (pattern matching → manifest → rollback) |
 | `README.md` | Project layout, backend integration overview |
 
 ## 1. Hosts & ports — read this first
@@ -22,8 +22,8 @@ Two separate hosts exist; flows in the sample scenarios reference **both**:
 
 | Host | Port | What it serves | Start with |
 |---|---|---|---|
-| Main app (`StepFunctionsApp`) | `http://localhost:5001` (fixed by `Program.cs` `UseUrls`; override via `ASPNETCORE_URLS`) | Flow engine REST API, `/mcp`, human tasks, DataExchange | `dotnet run` from the repo root (the csproj is at the top level) |
-| Fake test host (`Stepflow-Builder-Tests`) | `http://localhost:5095` (fixed by its `Program.cs`) | Only the fake commerce/data APIs under `/api/fake/*` used by sample flows and DataExchange fixtures | `dotnet run --project Stepflow-Builder-Tests` |
+| Main app (`StepFunctionsApp`) | `http://localhost:5001` (bound per the `DynamicApi` section of appsettings.json; override via `DynamicApi__ListenAddress`) | Flow engine REST API, `/mcp`, human tasks, DataExchange | `dotnet run --project StepFunctionsApp` from the repo root |
+| Fake test host (`Stepflow-Builder-Tests`) | `http://localhost:5095` (fixed by its `Program.cs`) | Only the fake commerce/data APIs under `/api/fake/*` used by sample flows and DataExchange fixtures | `dotnet run --project StepFunctionsApp/Stepflow-Builder-Tests` from the repo root |
 
 Health check: `GET http://localhost:5001/api/health` (liveness + flow-state store status).
 
@@ -206,7 +206,7 @@ Flows and DataExchange profiles are organized on disk in a three-level tree — 
 
 ## 10. Migration into StepFlow
 
-- **SSIS packages**: the repo ships a converter pipeline (`Converters/`) — BPMN/SSIS → pattern match against `WorkflowPatterns.json` → conversion manifest with per-step decisions and rollback info. Procedure + concept-mapping table + walkthrough of a real converted flow: **StepFlow_Usage_Guide.md §6**.
+- **SSIS packages**: the repo ships a converter pipeline (`StepFunctionsApp/Converters/`) — BPMN/SSIS → pattern match against `WorkflowPatterns.json` → conversion manifest with per-step decisions and rollback info. Procedure + concept-mapping table + walkthrough of a real converted flow: **StepFlow_Usage_Guide.md §6**.
 - **Azure Logic Apps**: manual porting — map each action to the nearest StepFlow construct (HTTP → `http(s)://` Task, conditions → `Choice`, loops → `Map`, delays → `Wait`, approvals → `HumanTask`). Procedure + worked example: **StepFlow_Usage_Guide.md §7**.
 
 ## 11. Working patterns for agents

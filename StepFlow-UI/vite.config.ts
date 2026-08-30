@@ -19,8 +19,9 @@ export default defineConfig({
     },
   },
   build: {
-    // Build into the parent backend's dist/ so StepFunctionsApp serves it unchanged (see Program.cs).
-    outDir: '../dist',
+    // Standalone frontend output: StepFlow-UI/dist/. The docker-example nginx image serves this;
+    // for single-process mode copy dist/ next to the backend as StepFunctionsApp/dist (Program.cs still serves it).
+    outDir: './dist',
     emptyOutDir: true,
     rollupOptions: {
       input: {

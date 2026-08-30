@@ -1,0 +1,37 @@
+# StepFlow docker showcase — frontend + dynamic API host + backend as one stack.
+#
+#   http://localhost:8080/                          -> builder UI (nginx serves the SPA, proxies /api and /mcp to the backend)
+#   http://localhost:5001/api/health                -> backend direct ("healthy")
+#   curl -H "Authorization: Bearer 7336d1c033212a69afeba44a99bbdbb5" \
+#        http://localhost:5002/api/dynamic/orders/  -> published Orders API via DynamicApiHost (sample data in stepflow_data.db)
+
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: docker-example/Dockerfile.backend
+    ports:
+      - "5001:5001"
+    environment:
+      # appsettings.json binds localhost; open the port so sibling containers can reach it.
+      DynamicApi__ListenAddress: "*"
+
+  dynamic-api:
+    build:
+      context: ..
+      dockerfile: docker-example/Dockerfile.dynamic-api
+    ports:
+      - "5002:5002"
+    # appsettings.json pins "Urls" to localhost and wins over the ASPNETCORE_URLS env var;
+    # --urls is the highest-precedence source, so use it to open the port for container networking.
+    command: ["--urls", "http://+:5002"]
+    environment:
+      # Pulls the published-API catalog from the backend (30 s poll, self-heals if it starts later).
+      Engine__BaseUrl: "http://backend:5001"
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker-example/Dockerfile.frontend
+    ports:
+      - "8080:80"
