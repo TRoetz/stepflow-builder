@@ -2,7 +2,7 @@
 
 A practical reference for building, running, and migrating workflows in **StepFlow**: the durable state-machine engine (`StepFunctions/`), the visual builder (`StepFlow-UI/`), and the data-exchange pipeline subsystem (`DataExchange/`).
 
-This guide is example-driven. For engine internals (checkpointing, storage layout, configuration keys) see [`UserManual.md`](./UserManual.md); for BPMN conversion see [`BPMN_Converter_Guide.md`](./BPMN_Converter_Guide.md).
+This guide is example-driven. For engine internals (checkpointing, storage layout, configuration keys) see [`UserManual.md`](../docs/UserManual.md); for BPMN conversion see [`BPMN_Converter_Guide.md`](../docs/BPMN_Converter_Guide.md).
 
 **Contents**
 

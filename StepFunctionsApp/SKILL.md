@@ -11,8 +11,8 @@ Deep reference material lives in this repo — read it before non-trivial work:
 
 | Document | Contents |
 |---|---|
-| `StepFlow_Usage_Guide.md` | Full node catalog (25 types), 10 end-to-end scenarios with complete ASL JSON, DataExchange profile anatomy + example, SSIS & Logic Apps migration procedures |
-| `UserManual.md` | Engine internals: state-type semantics, choice-rule operators, payload pipeline order, error handling (`Retry`/`Catch`) |
+| `../docs/StepFlow_Usage_Guide.md` | Full node catalog (25 types), 10 end-to-end scenarios with complete ASL JSON, DataExchange profile anatomy + example, SSIS & Logic Apps migration procedures |
+| `../docs/UserManual.md` | Engine internals: state-type semantics, choice-rule operators, payload pipeline order, error handling (`Retry`/`Catch`) |
 | `Converters/README.md` | BPMN/SSIS conversion pipeline (pattern matching → manifest → rollback) |
 | `README.md` | Project layout, backend integration overview |
 
