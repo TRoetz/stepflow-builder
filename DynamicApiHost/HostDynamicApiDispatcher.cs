@@ -210,9 +210,21 @@ public sealed class HostDynamicApiDispatcher
         switch (method)
         {
             case "GET":
-                // Forward the incoming query string verbatim (entityId/limit/offset).
-                url = $"api/eav/{Uri.EscapeDataString(domainName)}/rows{context.Request.QueryString.Value ?? ""}";
+            {
+                EavGetMapping mapping;
+                try
+                {
+                    mapping = EavGetMapper.Map(matched.Operation.Path, matched.PathParams, context.Request.QueryString.Value);
+                }
+                catch (ArgumentException ex)
+                {
+                    return (StatusCodes.Status400BadRequest, Error(ex.Message));
+                }
+
+                var route = mapping.Mode == EavGetMode.Lookup ? $"rows/{Uri.EscapeDataString(mapping.Id!)}" : "rows";
+                url = $"api/eav/{Uri.EscapeDataString(domainName)}/{route}{(mapping.Query.Length > 0 ? "?" + mapping.Query : "")}";
                 break;
+            }
             case "POST":
                 url = $"api/eav/{Uri.EscapeDataString(domainName)}/rows";
                 break;

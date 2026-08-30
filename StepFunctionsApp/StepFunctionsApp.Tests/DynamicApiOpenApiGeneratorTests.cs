@@ -137,7 +137,7 @@ namespace StepFunctionsApp.Tests
             var doc = DynamicApiOpenApiGenerator.Build(new[] { api }, new FakeDomainStore());
 
             var getParams = doc["paths"]!["/rows"]!["get"]!["parameters"]!.Select(p => (string)p!["name"]!).ToArray();
-            Assert.Equal(new[] { "entityId", "limit", "offset" }, getParams);
+            Assert.Equal(new[] { "entityId", "sort", "page", "limit", "offset", "fields" }, getParams); // full query language for collection mode
 
             var putOp = doc["paths"]!["/rows/{rowKeyId}"]!["put"]!;
             var pathParam = putOp["parameters"]!.Single(p => (string)p!["in"] == "path");
@@ -151,6 +151,48 @@ namespace StepFunctionsApp.Tests
             var responses = doc2["paths"]!["/rows2"]!["post"]!["responses"]!;
             Assert.NotNull(responses["201"]);
             Assert.Null(responses["200"]);
+        }
+
+        [Fact]
+        public void Build_EavLookupOp_DocumentsSingleRowContract()
+        {
+            var api = Api("l", "/lookup", new DynamicApiOperation { Method = "GET", Path = "/{id}", HandlerType = "eav" });
+            api.AttributeDomain = "Widget";
+
+            var doc = DynamicApiOpenApiGenerator.Build(new[] { api }, new FakeDomainStore());
+            var op = doc["paths"]!["/lookup/{id}"]!["get"]!;
+
+            // Path param + the fields projection only - no collection query params.
+            Assert.Equal(new[] { "id", "fields" }, op["parameters"]!.Select(p => (string)p!["name"]!).ToArray());
+            var idParam = op["parameters"]!.Single(p => (string)p!["in"] == "path");
+            Assert.True((bool)idParam["required"]!);
+
+            // Description + anyOf success schema: object for a unique match, array on several.
+            Assert.Contains("Single-row lookup", (string)op["description"]!, StringComparison.OrdinalIgnoreCase);
+            var schema = op["responses"]!["200"]!["schema"]!;
+            var anyOf = (JArray)schema["anyOf"]!;
+            Assert.Equal(2, anyOf.Count);
+            Assert.Equal("#/components/schemas/EavRow", (string)anyOf[0]!["$ref"]!);
+            Assert.Equal("array", (string)anyOf[1]!["type"]!);
+        }
+
+        [Fact]
+        public void Build_EavEntityFilterOp_DocumentsCollectionWithEntityId()
+        {
+            var api = Api("f", "", new DynamicApiOperation { Method = "GET", Path = "/{org}/comments", HandlerType = "eav" });
+            api.AttributeDomain = "Widget";
+
+            var doc = DynamicApiOpenApiGenerator.Build(new[] { api }, new FakeDomainStore());
+            var op = doc["paths"]!["/{org}/comments"]!["get"]!;
+
+            // Path param + full query language (entityId is merged in at runtime from the path value).
+            Assert.Equal(new[] { "org", "entityId", "sort", "page", "limit", "offset", "fields" }, op["parameters"]!.Select(p => (string)p!["name"]!).ToArray());
+            Assert.Contains("filtered by entityId", (string)op["description"]!, StringComparison.OrdinalIgnoreCase);
+
+            // Collection success schema: rows + count.
+            var schema = op["responses"]!["200"]!["schema"]!;
+            Assert.NotNull(schema["properties"]!["rows"]);
+            Assert.NotNull(schema["properties"]!["count"]);
         }
     }
 }

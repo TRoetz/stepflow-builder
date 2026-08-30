@@ -157,6 +157,95 @@ namespace StepFunctionsApp.Tests
             Assert.Equal(0, (int)b6!["count"]!);
         }
 
+        [Fact]
+        public async Task Dispatch_EavGet_QueryLanguageAndLookup_MatchEngineSurface()
+        {
+            // Collection op on the base path + single-row lookup op; both must answer like /api/eav/{domain}/rows.
+            await CreateApiAsync("E2E EAV Full API", "/eav-full", _domain,
+                new { method = "GET", path = "", handlerType = "eav" },
+                new { method = "POST", path = "", handlerType = "eav" },
+                new { method = "DELETE", path = "/{rowKeyId}", handlerType = "eav" },
+                new { method = "GET", path = "/{id}", handlerType = "eav" });
+
+            var keys = new List<string>();
+            try
+            {
+                foreach (var (entityId, name, qty) in new[] { ("e1", "alpha", 3), ("e2", "beta", 1), ("e1", "gamma", 2), ("solo", "delta", 9) })
+                {
+                    var (s, b) = await SendAsync(_client, HttpMethod.Post, "/api/dynamic/eav-full", new { entityId, entityType = "Gadget", name, qty });
+                    Assert.Equal(System.Net.HttpStatusCode.Created, s);
+                    keys.Add((string)b!["rowKeyId"]!);
+                }
+
+                // Sort desc + limit: count stays the post-filter total, page is sliced.
+                var (s1, b1) = await SendAsync(_client, HttpMethod.Get, "/api/dynamic/eav-full?sort=-qty&limit=2", null);
+                Assert.Equal(System.Net.HttpStatusCode.OK, s1);
+                Assert.Equal(4, (int)b1!["count"]!);
+                var page1 = b1["rows"]!.ToArray();
+                Assert.Equal(2, page1.Length);
+                Assert.Equal(9, (int)page1[0]!["values"]!["qty"]!); // qty 9 first when descending
+
+                // Page 2 of limit-2 pages: two remaining rows.
+                var (s2, b2) = await SendAsync(_client, HttpMethod.Get, "/api/dynamic/eav-full?page=2&limit=2", null);
+                Assert.Equal(System.Net.HttpStatusCode.OK, s2);
+                Assert.Equal(4, (int)b2!["count"]!);
+                Assert.Equal(2, b2["rows"]!.ToArray().Length);
+
+                // Field projection keeps rowKeyId and drops everything else.
+                var (s3, b3) = await SendAsync(_client, HttpMethod.Get, "/api/dynamic/eav-full?fields=name", null);
+                Assert.Equal(System.Net.HttpStatusCode.OK, s3);
+                foreach (var row in b3!["rows"]!.Values<JObject>())
+                {
+                    var names = row.Properties().Select(p => p.Name).OrderBy(n => n).ToArray();
+                    Assert.Equal(new[] { "name", "rowKeyId" }, names);
+                    Assert.Null(row["values"]);
+                }
+
+                // Single-row lookup: unique entity id -> object.
+                var (g1, r1) = await SendAsync(_client, HttpMethod.Get, "/api/dynamic/eav-full/solo", null);
+                Assert.Equal(System.Net.HttpStatusCode.OK, g1);
+                Assert.Equal(JTokenType.Object, r1!.Type);
+                Assert.Equal("Gadget", (string)r1["entityType"]!);
+
+                // Entity id matching several rows -> array of all matches.
+                var (g2, r2) = await SendAsync(_client, HttpMethod.Get, "/api/dynamic/eav-full/e1", null);
+                Assert.Equal(System.Net.HttpStatusCode.OK, g2);
+                Assert.Equal(JTokenType.Array, r2!.Type);
+                Assert.Equal(2, ((JArray)r2).Count);
+
+                // No entity match -> RowKeyId fallback returns the row.
+                var (g3, r3) = await SendAsync(_client, HttpMethod.Get, $"/api/dynamic/eav-full/{keys[0]}", null);
+                Assert.Equal(System.Net.HttpStatusCode.OK, g3);
+                Assert.Equal(keys[0], (string)r3!["rowKeyId"]!);
+
+                // Unknown id -> 404 naming the id.
+                var (g4, r4) = await SendAsync(_client, HttpMethod.Get, "/api/dynamic/eav-full/no-such-row", null);
+                Assert.Equal(System.Net.HttpStatusCode.NotFound, g4);
+                Assert.Contains("no-such-row", (string)r4!["error"]!, StringComparison.OrdinalIgnoreCase);
+            }
+            finally
+            {
+                foreach (var key in keys)
+                    await SendAsync(_client, HttpMethod.Delete, $"/api/dynamic/eav-full/{key}", null);
+            }
+        }
+
+        [Fact]
+        public async Task CreateApi_EavGet_TwoPathParams_Returns400()
+        {
+            var (status, body) = await SendAsync(_client, HttpMethod.Post, "/api/dynamic/apis", new
+            {
+                name = "E2E EAV Two Params",
+                nodePath = _org,
+                basePath = "/eav-two-params",
+                attributeDomain = _domain,
+                operations = new[] { new { method = "GET", path = "/{a}/{b}", handlerType = "eav" } },
+            });
+
+            Assert.Equal(System.Net.HttpStatusCode.BadRequest, status);
+            Assert.Contains("at most one", (string)body!["error"]!, StringComparison.OrdinalIgnoreCase);
+        }
+
         // ── bearer auth ────────────────────────────────────────────────────
 
         [Fact]

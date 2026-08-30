@@ -1,0 +1,4 @@
+- flow / dataExchange / attributeDomain handlers untouched.                                                                              
+- PUT/PATCH/DELETE eav endpoints unchanged (still rowKeyId-keyed).                                                                                 
+- Accepted behavior change: engine List no longer 400s on non-numeric limit/offset via MVC binding — lenient fallback to defaults instead (matches dispatcher precedent, documented in EavQuery header).                                                                                             █ │
+- Malformed percent-encoding in path params passes through undecoded (Uri.UnescapeDataString is permissive) — documented in EavGetMapper.

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
@@ -230,16 +231,29 @@ public class DynamicApiDispatcher
         switch (context.Request.Method.ToUpperInvariant())
         {
             case "GET":
-                var query = context.Request.Query;
-                string? entityId = query["entityId"].ToString();
-                int limit = ParseInt(query["limit"], 100);
-                int offset = ParseInt(query["offset"], 0);
-                var rows = _eavRows.ListRows(domainName).ToList();
-                if (!string.IsNullOrWhiteSpace(entityId))
-                    rows = rows.Where(r => string.Equals(r.EntityId?.ToString(), entityId, StringComparison.Ordinal)).ToList();
-                var total = rows.Count;
-                var page = rows.Skip(Math.Max(0, offset)).Take(limit <= 0 ? 100 : limit).Select(r => JObject.FromObject(r, WireJson));
-                return (StatusCodes.Status200OK, new JObject { ["rows"] = new JArray(page), ["count"] = total });
+            {
+                EavGetMapping mapping;
+                try
+                {
+                    mapping = EavGetMapper.Map(op.Path, matched.PathParams, context.Request.QueryString.Value);
+                    var options = EavQuery.Parse(new QueryCollection(QueryHelpers.ParseQuery(mapping.Query)));
+
+                    if (mapping.Mode == EavGetMode.Lookup)
+                    {
+                        var matches = EavQuery.Lookup(_eavRows.ListRows(domainName), mapping.Id!).Select(r => EavQuery.Shape(r, options.Fields)).ToArray();
+                        return matches.Length == 0
+                            ? (StatusCodes.Status404NotFound, Error($"Row '{mapping.Id}' not found"))
+                            : (StatusCodes.Status200OK, matches.Length == 1 ? (JToken)matches[0] : new JArray(matches));
+                    }
+
+                    var (page, total) = EavQuery.Apply(_eavRows.ListRows(domainName), options);
+                    return (StatusCodes.Status200OK, new JObject { ["rows"] = new JArray(page), ["count"] = total });
+                }
+                catch (ArgumentException ex)
+                {
+                    return (StatusCodes.Status400BadRequest, Error(ex.Message));
+                }
+            }
 
             case "POST":
                 var (body, parseError) = DynamicApiInput.ParseBody(rawBody);
@@ -286,8 +300,6 @@ public class DynamicApiDispatcher
     }
 
     // ── shared helpers ──────────────────────────────────────────────────────────────
-
-    private static int ParseInt(string? value, int fallback) => int.TryParse(value, out var v) ? v : fallback;
 
     private static string? GetPathParam(JObject pathParams, string name) =>
         pathParams.Properties().FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))?.Value.ToString();

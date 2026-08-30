@@ -61,11 +61,25 @@ public static class DynamicApiOpenApiGenerator
                             ["required"] = true,
                             ["schema"] = new JObject { ["type"] = "string" }
                         });
+                bool eavLookup = IsEavGetLookup(api, op);
                 if (op.HandlerType == "eav" && op.Method.Equals("GET", StringComparison.OrdinalIgnoreCase))
                 {
-                    parameters.Add(new JObject { ["name"] = "entityId", ["in"] = "query", ["required"] = false, ["schema"] = new JObject { ["type"] = "string" } });
-                    parameters.Add(new JObject { ["name"] = "limit", ["in"] = "query", ["required"] = false, ["schema"] = new JObject { ["type"] = "integer", ["default"] = 100 } });
-                    parameters.Add(new JObject { ["name"] = "offset", ["in"] = "query", ["required"] = false, ["schema"] = new JObject { ["type"] = "integer", ["default"] = 0 } });
+                    var routeTemplates = DynamicApiMatcher.PathSegments(DynamicApiMatcher.JoinPaths(api.BasePath, op.Path)).Count(s => DynamicApiMatcher.IsTemplate(s));
+                    if (eavLookup)
+                    {
+                        operation["description"] = "Single-row lookup by EntityId (falls back to RowKeyId): 404 when nothing matches, an object for a unique match, an array when the entityId matched several rows.";
+                        parameters.Add(new JObject { ["name"] = "fields", ["in"] = "query", ["required"] = false, ["schema"] = new JObject { ["type"] = "string" }, ["description"] = "Comma-separated row fields to project; rowKeyId is always kept" });
+                    }
+                    else
+                    {
+                        if (routeTemplates > 0) operation["description"] = "Collection filtered by entityId = the path parameter value, with the full query language applied.";
+                        parameters.Add(new JObject { ["name"] = "entityId", ["in"] = "query", ["required"] = false, ["schema"] = new JObject { ["type"] = "string" }, ["description"] = "Filter rows where entityId equals this value" });
+                        parameters.Add(new JObject { ["name"] = "sort", ["in"] = "query", ["required"] = false, ["schema"] = new JObject { ["type"] = "string" }, ["description"] = "Comma-separated fields; '-' prefix descends (e.g. capturedAtUtc,-entityId)" });
+                        parameters.Add(new JObject { ["name"] = "page", ["in"] = "query", ["required"] = false, ["schema"] = new JObject { ["type"] = "integer" }, ["description"] = "1-based page number; mutually exclusive with offset" });
+                        parameters.Add(new JObject { ["name"] = "limit", ["in"] = "query", ["required"] = false, ["schema"] = new JObject { ["type"] = "integer", ["default"] = 100 } });
+                        parameters.Add(new JObject { ["name"] = "offset", ["in"] = "query", ["required"] = false, ["schema"] = new JObject { ["type"] = "integer" }, ["description"] = "Mutually exclusive with page" });
+                        parameters.Add(new JObject { ["name"] = "fields", ["in"] = "query", ["required"] = false, ["schema"] = new JObject { ["type"] = "string" }, ["description"] = "Comma-separated row fields to project; rowKeyId is always kept" });
+                    }
                 }
                 if (parameters.Count > 0) operation["parameters"] = parameters;
 
@@ -88,7 +102,7 @@ public static class DynamicApiOpenApiGenerator
                 // Responses: success (201 for eav POST) + 401 when tokened + 404/500.
                 var responses = new JObject();
                 string successCode = op.HandlerType == "eav" && op.Method.Equals("POST", StringComparison.OrdinalIgnoreCase) ? "201" : "200";
-                responses[successCode] = new JObject { ["description"] = SuccessDescription(op), ["schema"] = SuccessSchema(op, domainComponent) };
+                responses[successCode] = new JObject { ["description"] = eavLookup ? "Matched row(s): an object for a unique match, an array when the entityId matched several rows" : SuccessDescription(op), ["schema"] = SuccessSchema(op, domainComponent, eavLookup) };
                 if (!string.IsNullOrEmpty(api.BearerToken))
                     responses["401"] = new JObject { ["description"] = "Invalid or missing bearer token" };
                 responses["404"] = new JObject { ["description"] = "Resource not found" };
@@ -165,7 +179,7 @@ public static class DynamicApiOpenApiGenerator
             _ => "Operation succeeded"
         };
 
-    private static JToken SuccessSchema(DynamicApiOperation op, string? domainComponent)
+    private static JToken SuccessSchema(DynamicApiOperation op, string? domainComponent, bool eavLookup)
     {
         var method = op.Method.ToUpperInvariant();
         switch (op.HandlerType)
@@ -176,16 +190,23 @@ public static class DynamicApiOpenApiGenerator
             case "eav":
                 return method switch
                 {
-                    // The dispatcher returns { rows: [...], count } - the spec describes that shape, not a bare array.
-                    "GET" => new JObject
-                    {
-                        ["type"] = "object",
-                        ["properties"] = new JObject
+                    // Collection -> { rows: [...], count }; lookup -> object for a unique match, array on multiple.
+                    "GET" => eavLookup
+                        ? new JObject
                         {
-                            ["rows"] = new JObject { ["type"] = "array", ["items"] = new JObject { ["$ref"] = "#/components/schemas/EavRow" } },
-                            ["count"] = new JObject { ["type"] = "integer" }
+                            ["anyOf"] = new JArray(
+                                new JObject { ["$ref"] = "#/components/schemas/EavRow" },
+                                new JObject { ["type"] = "array", ["items"] = new JObject { ["$ref"] = "#/components/schemas/EavRow" } })
                         }
-                    },
+                        : new JObject
+                        {
+                            ["type"] = "object",
+                            ["properties"] = new JObject
+                            {
+                                ["rows"] = new JObject { ["type"] = "array", ["items"] = new JObject { ["$ref"] = "#/components/schemas/EavRow" } },
+                                ["count"] = new JObject { ["type"] = "integer" }
+                            }
+                        },
                     "POST" or "PUT" or "PATCH" => new JObject { ["$ref"] = "#/components/schemas/EavRow" },
                     _ => new JObject { ["type"] = "object" } // DELETE -> { status, rowKeyId }
                 };
@@ -194,6 +215,12 @@ public static class DynamicApiOpenApiGenerator
                 return new JObject { ["type"] = "object" };
         }
     }
+
+    /// <summary>Static twin of EavGetMapper's runtime mode for an eav GET op (save-time validation caps path params at one).</summary>
+    private static bool IsEavGetLookup(DynamicApiDefinition api, DynamicApiOperation op) =>
+        op.HandlerType == "eav" && op.Method.Equals("GET", StringComparison.OrdinalIgnoreCase)
+        && DynamicApiMatcher.PathSegments(DynamicApiMatcher.JoinPaths(api.BasePath, op.Path)).Count(s => DynamicApiMatcher.IsTemplate(s)) > 0
+        && DynamicApiMatcher.PathSegments(op.Path).Length <= 1;
 
     /// <summary>OpenAPI schema for an attribute type (ordinals per AttributeDataType: String=0 … Array=5).</summary>
     private static JObject TypeSchema(AttributeDataType dataType) => dataType switch

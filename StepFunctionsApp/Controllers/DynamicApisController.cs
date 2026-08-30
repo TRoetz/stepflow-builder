@@ -132,9 +132,15 @@ namespace StepFunctionsApp.Controllers
                             return BadRequest(new { error = $"operations[{i}].profileId is required for handlerType 'dataExchange'" });
                         break;
                     case "attributeDomain":
+                        if (string.IsNullOrWhiteSpace(op.DomainName ?? def.AttributeDomain))
+                            return BadRequest(new { error = $"operations[{i}] needs a domain: set operations[{i}].domainName or the api-level attributeDomain" });
+                        break;
                     case "eav":
                         if (string.IsNullOrWhiteSpace(op.DomainName ?? def.AttributeDomain))
                             return BadRequest(new { error = $"operations[{i}] needs a domain: set operations[{i}].domainName or the api-level attributeDomain" });
+                        if (op.Method.Equals("GET", StringComparison.OrdinalIgnoreCase) &&
+                            DynamicApiMatcher.PathSegments(DynamicApiMatcher.JoinPaths(basePath, op.Path)).Count(s => DynamicApiMatcher.IsTemplate(s)) > 1)
+                            return BadRequest(new { error = $"operations[{i}].path supports at most one {{param}} for eav GET operations" });
                         break;
                 }
 

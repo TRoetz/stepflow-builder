@@ -21,18 +21,33 @@ namespace StepFunctionsApp.Controllers
             _eavRows = eavRows;
         }
 
-        // All rows for a domain, optionally filtered by entityId and paged (limit/offset).
+        // All rows for a domain with the full query language (filter/sort/page/limit/offset/fields - see EavQuery).
         [HttpGet("api/eav/{domain}/rows")]
-        public IActionResult List(string domain, [FromQuery] string? entityId, [FromQuery] int limit = 100, [FromQuery] int offset = 0)
+        public IActionResult List(string domain)
         {
             try
             {
-                var rows = _eavRows.ListRows(domain).ToList();
-                if (!string.IsNullOrWhiteSpace(entityId))
-                    rows = rows.Where(r => string.Equals(r.EntityId?.ToString(), entityId, StringComparison.Ordinal)).ToList();
-                var total = rows.Count;
-                var page = rows.Skip(Math.Max(0, offset)).Take(limit <= 0 ? 100 : limit);
-                return Ok(new { rows = page, count = total });
+                var options = EavQuery.Parse(Request.Query);
+                var (page, total) = EavQuery.Apply(_eavRows.ListRows(domain), options);
+                return Ok(new JObject { ["rows"] = new JArray(page), ["count"] = total });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
+        // Single row by EntityId (falls back to RowKeyId): 404 when nothing matches, an object for a unique match,
+        // an array when the entityId matched several rows. Only 'fields' is honored from the query string.
+        [HttpGet("api/eav/{domain}/rows/{id}")]
+        public IActionResult Get(string domain, string id)
+        {
+            try
+            {
+                var options = EavQuery.Parse(Request.Query);
+                var matches = EavQuery.Lookup(_eavRows.ListRows(domain), id).Select(r => EavQuery.Shape(r, options.Fields)).ToArray();
+                if (matches.Length == 0) return NotFound(new { error = $"Row '{id}' not found" });
+                return Ok(matches.Length == 1 ? matches[0] : new JArray(matches));
             }
             catch (ArgumentException ex)
             {

@@ -99,6 +99,114 @@ namespace StepFunctionsApp.Tests
             Assert.NotNull(b3!["error"]);
         }
 
+        [Fact]
+        public async Task List_FullQueryLanguage_FilterSortPageLimitOffsetFields()
+        {
+            // Seed three rows (entityId e1/e2/e1, name alpha/beta/gamma, qty 3/1/2); removed again so the shared domain stays empty.
+            var keys = new List<string>();
+            try
+            {
+                foreach (var (entityId, name, qty) in new[] { ("e1", "alpha", 3), ("e2", "beta", 1), ("e1", "gamma", 2) })
+                {
+                    var (s, b) = await SendAsync(_client, HttpMethod.Post, $"/api/eav/{_domain}/rows", new { entityId, entityType = "Gadget", name, qty });
+                    Assert.Equal(HttpStatusCode.Created, s);
+                    keys.Add((string)b!["rowKeyId"]!);
+                }
+
+                // Filter by a captured Values key; AND across different keys; OR across repeated keys.
+                var (s1, b1) = await SendAsync(_client, HttpMethod.Get, $"/api/eav/{_domain}/rows?name=alpha&entityType=Gadget", null);
+                Assert.Equal(HttpStatusCode.OK, s1);
+                Assert.Equal(1, (int)b1!["count"]!);
+                Assert.Equal("alpha", (string)b1["rows"]![0]!["values"]!["name"]!);
+
+                var (s2, b2) = await SendAsync(_client, HttpMethod.Get, $"/api/eav/{_domain}/rows?name=alpha&name=gamma", null);
+                Assert.Equal(HttpStatusCode.OK, s2);
+                Assert.Equal(2, (int)b2!["count"]!);
+
+                // Sort desc by a Values key with limit: count stays the post-filter total, page is sliced.
+                var (s3, b3) = await SendAsync(_client, HttpMethod.Get, $"/api/eav/{_domain}/rows?sort=-qty&limit=2", null);
+                Assert.Equal(HttpStatusCode.OK, s3);
+                Assert.Equal(3, (int)b3!["count"]!);
+                var page3 = b3["rows"]!.ToArray();
+                Assert.Equal(2, page3.Length);
+                Assert.Equal(3, (int)page3[0]!["values"]!["qty"]!); // qty 3 first when descending
+
+                // Page 2 of limit-2 pages: the single remaining row.
+                var (s4, b4) = await SendAsync(_client, HttpMethod.Get, $"/api/eav/{_domain}/rows?page=2&limit=2", null);
+                Assert.Equal(HttpStatusCode.OK, s4);
+                Assert.Equal(3, (int)b4!["count"]!);
+                Assert.Single(b4["rows"]!.ToArray());
+
+                // Field projection keeps rowKeyId for CRUD addressing and drops everything else.
+                var (s5, b5) = await SendAsync(_client, HttpMethod.Get, $"/api/eav/{_domain}/rows?fields=name", null);
+                Assert.Equal(HttpStatusCode.OK, s5);
+                foreach (var row in b5!["rows"]!.Values<JObject>())
+                {
+                    var names = row.Properties().Select(p => p.Name).OrderBy(n => n).ToArray();
+                    Assert.Equal(new[] { "name", "rowKeyId" }, names);
+                    Assert.Null(row["values"]);
+                }
+
+                // page + offset together -> 400.
+                var (s6, b6) = await SendAsync(_client, HttpMethod.Get, $"/api/eav/{_domain}/rows?page=1&offset=5", null);
+                Assert.Equal(HttpStatusCode.BadRequest, s6);
+                Assert.Contains("page", (string)b6!["error"]!, StringComparison.OrdinalIgnoreCase);
+            }
+            finally
+            {
+                foreach (var key in keys)
+                    await SendAsync(_client, HttpMethod.Delete, $"/api/eav/{_domain}/rows/{key}", null);
+            }
+        }
+
+        [Fact]
+        public async Task Get_SingleRowLookup_EntityIdFirst_RowKeyIdFallback_MultipleArray_Unknown404()
+        {
+            var keys = new List<string>();
+            try
+            {
+                // Two rows share entityId "dup"; one is unique; all are removed afterwards.
+                var (s1, b1) = await SendAsync(_client, HttpMethod.Post, $"/api/eav/{_domain}/rows", new { entityId = "dup", entityType = "Gadget", name = "one" });
+                Assert.Equal(HttpStatusCode.Created, s1);
+                keys.Add((string)b1!["rowKeyId"]!);
+
+                var (s2, b2) = await SendAsync(_client, HttpMethod.Post, $"/api/eav/{_domain}/rows", new { entityId = "dup", entityType = "Gadget", name = "two" });
+                Assert.Equal(HttpStatusCode.Created, s2);
+                keys.Add((string)b2!["rowKeyId"]!);
+
+                var (s3, b3) = await SendAsync(_client, HttpMethod.Post, $"/api/eav/{_domain}/rows", new { entityId = "solo", entityType = "Gadget", name = "three" });
+                Assert.Equal(HttpStatusCode.Created, s3);
+                keys.Add((string)b3!["rowKeyId"]!);
+
+                // Unique entity id -> a single object.
+                var (g1, r1) = await SendAsync(_client, HttpMethod.Get, $"/api/eav/{_domain}/rows/solo", null);
+                Assert.Equal(HttpStatusCode.OK, g1);
+                Assert.Equal(JTokenType.Object, r1!.Type);
+                Assert.Equal("Gadget", (string)r1["entityType"]!);
+
+                // Entity id matching several rows -> an array of all matches.
+                var (g2, r2) = await SendAsync(_client, HttpMethod.Get, $"/api/eav/{_domain}/rows/dup", null);
+                Assert.Equal(HttpStatusCode.OK, g2);
+                Assert.Equal(JTokenType.Array, r2!.Type);
+                Assert.Equal(2, ((JArray)r2).Count);
+
+                // No entity match -> RowKeyId fallback returns the row.
+                var (g3, r3) = await SendAsync(_client, HttpMethod.Get, $"/api/eav/{_domain}/rows/{keys[0]}", null);
+                Assert.Equal(HttpStatusCode.OK, g3);
+                Assert.Equal(keys[0], (string)r3!["rowKeyId"]!);
+
+                // Unknown id -> 404 naming the id.
+                var (g4, r4) = await SendAsync(_client, HttpMethod.Get, $"/api/eav/{_domain}/rows/no-such-row", null);
+                Assert.Equal(HttpStatusCode.NotFound, g4);
+                Assert.Contains("no-such-row", (string)r4!["error"]!, StringComparison.OrdinalIgnoreCase);
+            }
+            finally
+            {
+                foreach (var key in keys)
+                    await SendAsync(_client, HttpMethod.Delete, $"/api/eav/{_domain}/rows/{key}", null);
+            }
+        }
+
         // ── test host factory (isolated state dirs; eav-data stays CWD-relative like in production) ──
 
         public sealed class Factory : WebApplicationFactory<Program>
