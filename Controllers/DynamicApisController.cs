@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json.Linq;
+using StepFlow.DynamicApi;
 using StepFunctionsApp.DynamicApi;
 using StepFunctionsApp.Workspace;
 
@@ -29,9 +30,10 @@ namespace StepFunctionsApp.Controllers
             _workspace = workspace;
         }
 
-        // All active APIs, optionally filtered by workspace node (segment-aware prefix).
+        // All active APIs, optionally filtered by workspace node (segment-aware prefix) and published state.
         [HttpGet("api/dynamic/apis")]
-        public IActionResult List([FromQuery] string? nodePath) => Ok(_store.GetAll(nodePath));
+        public IActionResult List([FromQuery] string? nodePath, [FromQuery] bool? published) =>
+            Ok(published == null ? _store.GetAll(nodePath) : _store.GetAll(nodePath).Where(a => a.IsPublished == published.Value));
 
         // A single API by id (active or not), so inactive ones can be re-saved as active.
         [HttpGet("api/dynamic/apis/{id}")]
@@ -83,6 +85,7 @@ namespace StepFunctionsApp.Controllers
                 AttributeDomain = string.IsNullOrWhiteSpace((string?)payload["attributeDomain"]) ? null : ((string)payload["attributeDomain"]).Trim(),
                 BearerToken = (string?)payload["bearerToken"], // empty/null = open access
                 IsActive = payload["isActive"]?.Type == JTokenType.Boolean ? (bool)payload["isActive"]! : true,
+                IsPublished = payload["isPublished"]?.Type == JTokenType.Boolean ? (bool)payload["isPublished"]! : false,
             };
 
             var seenRoutes = new HashSet<(string Method, string Path)>();
@@ -144,7 +147,14 @@ namespace StepFunctionsApp.Controllers
             }
 
             // ── 3. Route conflicts with other active APIs (same method + full path) ───
+            // Resolve the row this save will update so its own routes don't count as a conflict:
+            // an explicit id, or - like SqliteDynamicApiStore.Save - the existing API whose
+            // Name+NodePath matches (case-insensitive name), whose id the store reuses.
             var selfId = string.IsNullOrWhiteSpace(def.Id) ? null : def.Id;
+            if (selfId == null)
+                selfId = _store.GetAll().FirstOrDefault(a =>
+                    string.Equals(a.Name, def.Name, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(a.NodePath, def.NodePath ?? "", StringComparison.Ordinal))?.Id;
             foreach (var other in _store.GetAll())
             {
                 if (selfId != null && string.Equals(other.Id, selfId, StringComparison.Ordinal)) continue;

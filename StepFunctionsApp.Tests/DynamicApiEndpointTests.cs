@@ -271,6 +271,70 @@ namespace StepFunctionsApp.Tests
             Assert.NotNull(doc["components"]!["schemas"]!["EavRow"]);
         }
 
+        // ── engine surface for DynamicApiHost ─────────────────────────────
+        [Fact]
+        public async Task AttributeDomain_GetByName_ReturnsEntry_AndUnknownIs404()
+        {
+            var (created, _) = await SendAsync(_client, HttpMethod.Post, "/api/attribute-domains", new { attributeDomain = new { attributeDomainName = _domain } });
+            Assert.Equal(System.Net.HttpStatusCode.OK, created);
+
+            var (s1, b1) = await SendAsync(_client, HttpMethod.Get, $"/api/attribute-domains/{_domain}", null);
+            Assert.Equal(System.Net.HttpStatusCode.OK, s1);
+            Assert.Equal(_domain, (string)b1!["attributeDomain"]!["attributeDomainName"]!);
+
+            var (s2, b2) = await SendAsync(_client, HttpMethod.Get, "/api/attribute-domains/no-such-domain-xyz", null);
+            Assert.Equal(System.Net.HttpStatusCode.NotFound, s2);
+        }
+
+        [Fact]
+        public async Task ExecuteSync_UnknownFlow_Returns404()
+        {
+            var id = "no-such-flow-" + Guid.NewGuid().ToString("N");
+            var (status, body) = await SendAsync(_client, HttpMethod.Post, $"/api/flows/execute-sync/{id}", new { });
+            Assert.Equal(System.Net.HttpStatusCode.NotFound, status);
+            Assert.Contains(id, (string)body!["error"]!, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // ── published flag (external host exposure) ───────────────────────
+        [Fact]
+        public async Task PublishedFlag_RoundTrips_AndFiltersList()
+        {
+            var payload = new Dictionary<string, object?>
+            {
+                ["name"] = "E2E Publish API",
+                ["nodePath"] = _org,
+                ["basePath"] = "/publish-test",
+                ["isPublished"] = true,
+                ["operations"] = new[] { new { method = "GET", path = "", handlerType = "flow", flowId = "any-flow" } },
+            };
+            var (created, body) = await SendAsync(_client, HttpMethod.Post, "/api/dynamic/apis", payload);
+            Assert.Equal(System.Net.HttpStatusCode.Created, created);
+            var id = (string)body!["id"]!;
+
+            // Wire shape round-trips as camelCase isPublished.
+            var (get1, g1) = await SendAsync(_client, HttpMethod.Get, $"/api/dynamic/apis/{id}", null);
+            Assert.Equal(System.Net.HttpStatusCode.OK, get1);
+            Assert.True((bool)g1!["isPublished"]!);
+
+            // published=true contains it; published=false does not.
+            var (s1, b1) = await SendAsync(_client, HttpMethod.Get, $"/api/dynamic/apis?nodePath={_org}&published=true", null);
+            Assert.Contains((JArray)b1!, r => string.Equals((string?)r!["id"], id, StringComparison.Ordinal));
+
+            var (s2, b2) = await SendAsync(_client, HttpMethod.Get, $"/api/dynamic/apis?nodePath={_org}&published=false", null);
+            Assert.DoesNotContain((JArray)b2!, r => string.Equals((string?)r!["id"], id, StringComparison.Ordinal));
+
+            // Unpublish via re-save (same name+nodePath reuses the id).
+            payload["isPublished"] = false;
+            var (updated, _) = await SendAsync(_client, HttpMethod.Post, "/api/dynamic/apis", payload);
+            Assert.Equal(System.Net.HttpStatusCode.OK, updated);
+
+            var (s3, b3) = await SendAsync(_client, HttpMethod.Get, $"/api/dynamic/apis?nodePath={_org}&published=false", null);
+            Assert.Contains((JArray)b3!, r => string.Equals((string?)r!["id"], id, StringComparison.Ordinal));
+
+            var (s4, b4) = await SendAsync(_client, HttpMethod.Get, $"/api/dynamic/apis?nodePath={_org}&published=true", null);
+            Assert.DoesNotContain((JArray)b4!, r => string.Equals((string?)r!["id"], id, StringComparison.Ordinal));
+        }
+
         // ── test host factory (isolated state dirs) ────────────────────────
 
         public sealed class Factory : WebApplicationFactory<Program>

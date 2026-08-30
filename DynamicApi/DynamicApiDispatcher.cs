@@ -1,11 +1,10 @@
 using System.Diagnostics;
-using System.Security.Cryptography;
-using System.Text;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using StepFlow.DynamicApi;
 using StepFunctionsApp.StepFunctions;
 using StepFunctionsApp.Workspace;
 
@@ -29,6 +28,7 @@ public class DynamicApiDispatcher
     private readonly EavRowStore _eavRows;
     private readonly DataExchange.DataExchangeExecutor _dataExchange;
     private readonly WorkspaceStore _workspace;
+    private readonly FlowResolver _flowResolver;
     private readonly DynamicApiHostingOptions _hosting;
     private readonly ILogger<DynamicApiDispatcher> _logger;
 
@@ -39,6 +39,7 @@ public class DynamicApiDispatcher
         EavRowStore eavRows,
         DataExchange.DataExchangeExecutor dataExchange,
         WorkspaceStore workspace,
+        FlowResolver flowResolver,
         DynamicApiHostingOptions hosting,
         ILogger<DynamicApiDispatcher>? logger = null)
     {
@@ -48,6 +49,7 @@ public class DynamicApiDispatcher
         _eavRows = eavRows;
         _dataExchange = dataExchange;
         _workspace = workspace;
+        _flowResolver = flowResolver;
         _hosting = hosting;
         _logger = logger ?? NullLogger<DynamicApiDispatcher>.Instance;
     }
@@ -102,7 +104,7 @@ public class DynamicApiDispatcher
         var handler = matched.Operation.HandlerType;
 
         // Per-API bearer token: exactly "Bearer <token>" (single space), constant-time compare.
-        if (!string.IsNullOrEmpty(matched.Api.BearerToken) && !CheckBearer(context, matched.Api.BearerToken))
+        if (!string.IsNullOrEmpty(matched.Api.BearerToken) && !DynamicApiAuth.CheckBearer(context.Request.Headers.Authorization.ToString(), matched.Api.BearerToken!))
         {
             context.Response.Headers["WWW-Authenticate"] = "Bearer realm=\"stepflow-dynamic\"";
             return (StatusCodes.Status401Unauthorized, Error("Invalid or missing bearer token"), apiId, handler);
@@ -111,7 +113,7 @@ public class DynamicApiDispatcher
         // Read the raw body once for methods that may carry one.
         string? rawBody = null;
         if (method is "POST" or "PUT" or "PATCH")
-            rawBody = await ReadRawBodyAsync(context);
+            rawBody = await DynamicApiInput.ReadRawBodyAsync(context);
 
         (int status, JToken body) = handler switch
         {
@@ -128,11 +130,11 @@ public class DynamicApiDispatcher
 
     private async Task<(int Status, JToken Body)> HandleFlowAsync(HttpContext context, MatchedOperation matched, string? rawBody)
     {
-        var (body, parseError) = ParseBody(rawBody);
+        var (body, parseError) = DynamicApiInput.ParseBody(rawBody);
         if (parseError != null) return (StatusCodes.Status400BadRequest, Error(parseError));
 
-        var input = MergeInput(body, context.Request.Query, matched.PathParams);
-        var def = ResolveFlow(matched.Operation.FlowId!);
+        var input = DynamicApiInput.MergeInput(body, context.Request.Query, matched.PathParams);
+        var def = _flowResolver.ResolveFlow(matched.Operation.FlowId!);
         if (def == null) return (StatusCodes.Status404NotFound, Error($"Flow '{matched.Operation.FlowId}' not found"));
 
         try
@@ -154,43 +156,15 @@ public class DynamicApiDispatcher
         }
     }
 
-    /// <summary>Resolves a flow id/name: in-memory registry first, then workspace sub-project flow files (registered on the fly).</summary>
-    private StateMachineDefinition? ResolveFlow(string flowIdOrName)
-    {
-        var sm = _stepService.GetStateMachine(flowIdOrName);
-        if (sm != null) return sm.Definition;
-
-        foreach (var sub in _workspace.ListAllSubProjects())
-        {
-            if (_workspace.LoadFlowDefinition(sub, flowIdOrName) is not { Length: > 0 } json) continue;
-            try
-            {
-                var doc = JObject.Parse(json);
-                var statesObj = doc["states"] as JObject;
-                if (statesObj == null || !statesObj.HasValues) continue;
-
-                var startAt = doc["startAt"]?.ToString() ?? statesObj.Properties().FirstOrDefault()?.Name ?? "";
-                var meta = _workspace.ListFlows(sub).FirstOrDefault(f => f.Id == flowIdOrName).Meta; // may be default when missing — guard null
-                var def = new StateMachineDefinition { StartAt = startAt, States = statesObj.ToObject<Dictionary<string, StateDefinition>>()! };
-                _stepService.RegisterStateMachine(meta?.Name ?? flowIdOrName, def, meta?.Description, id: flowIdOrName);
-                return def;
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogWarning(ex, "Skipping workspace flow '{Flow}' in sub-project '{Sub}' during dynamic API resolution", flowIdOrName, sub);
-            }
-        }
-        return null;
-    }
 
     // ── dataExchange handler ────────────────────────────────────────────────────────
 
     private async Task<(int Status, JToken Body)> HandleDataExchangeAsync(HttpContext context, MatchedOperation matched, string? rawBody)
     {
-        var (body, parseError) = ParseBody(rawBody);
+        var (body, parseError) = DynamicApiInput.ParseBody(rawBody);
         if (parseError != null) return (StatusCodes.Status400BadRequest, Error(parseError));
 
-        var input = MergeInput(body, context.Request.Query, matched.PathParams);
+        var input = DynamicApiInput.MergeInput(body, context.Request.Query, matched.PathParams);
         try
         {
             var result = await _dataExchange.ExecuteAsync(matched.Operation.ProfileId!, input, context.RequestAborted);
@@ -226,7 +200,7 @@ public class DynamicApiDispatcher
             case "POST":
             case "PUT":
             case "PATCH":
-                var (body, parseError) = ParseBody(rawBody);
+            var (body, parseError) = DynamicApiInput.ParseBody(rawBody);
                 if (parseError != null) return (StatusCodes.Status400BadRequest, Error(parseError));
                 var entry = body.ToObject<AttributeDomainEntry>(WireJson) ?? new AttributeDomainEntry();
                 if (entry.AttributeDomain == null) entry.AttributeDomain = new AttributeDomainData();
@@ -268,7 +242,7 @@ public class DynamicApiDispatcher
                 return (StatusCodes.Status200OK, new JObject { ["rows"] = new JArray(page), ["count"] = total });
 
             case "POST":
-                var (body, parseError) = ParseBody(rawBody);
+                var (body, parseError) = DynamicApiInput.ParseBody(rawBody);
                 if (parseError != null) return (StatusCodes.Status400BadRequest, Error(parseError));
                 // Top-level entityId/entityType become row fields; everything else is captured values.
                 var row = new EavRow();
@@ -286,7 +260,7 @@ public class DynamicApiDispatcher
 
             case "PUT":
             case "PATCH":
-                var (patchBody, patchError) = ParseBody(rawBody);
+                var (patchBody, patchError) = DynamicApiInput.ParseBody(rawBody);
                 if (patchError != null) return (StatusCodes.Status400BadRequest, Error(patchError));
                 var rowKeyId = GetPathParam(matched.PathParams, "rowKeyId");
                 if (string.IsNullOrWhiteSpace(rowKeyId))
@@ -312,53 +286,6 @@ public class DynamicApiDispatcher
     }
 
     // ── shared helpers ──────────────────────────────────────────────────────────────
-
-    /// <summary>Parses the raw JSON body; (empty object, null) when there is none.</summary>
-    private static (JObject Body, string? Error) ParseBody(string? rawBody)
-    {
-        if (string.IsNullOrWhiteSpace(rawBody)) return (new JObject(), null);
-        try
-        {
-            var parsed = JToken.Parse(rawBody);
-            return parsed is JObject obj ? (obj, null) : (null!, "Body must be a valid JSON object");
-        }
-        catch (JsonException ex)
-        {
-            return (null!, $"Body is not valid JSON: {ex.Message}");
-        }
-    }
-
-    /// <summary>Reads the request body when it carries application/json; null otherwise.</summary>
-    private static async Task<string?> ReadRawBodyAsync(HttpContext context)
-    {
-        var contentType = context.Request.ContentType ?? "";
-        if (!contentType.Contains("application/json", StringComparison.OrdinalIgnoreCase)) return null;
-        using var reader = new StreamReader(context.Request.Body);
-        var text = await reader.ReadToEndAsync();
-        return string.IsNullOrWhiteSpace(text) ? null : text;
-    }
-
-    /// <summary>Merges handler input: body properties, then query-string values (as strings), then path params (path params win).</summary>
-    private static JObject MergeInput(JObject body, IQueryCollection query, JObject pathParams)
-    {
-        var input = new JObject();
-        foreach (var prop in body.Properties()) input[prop.Name] = prop.Value;
-        foreach (var kv in query)
-            foreach (var value in kv.Value) input[kv.Key] = value;
-        foreach (var prop in pathParams.Properties()) input[prop.Name] = prop.Value;
-        return input;
-    }
-
-    /// <summary>Constant-time bearer comparison to avoid leaking the token position via timing.</summary>
-    private static bool CheckBearer(HttpContext context, string expected)
-    {
-        var header = context.Request.Headers.Authorization.ToString();
-        const string prefix = "Bearer ";
-        if (header.Length <= prefix.Length || !header.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
-        var a = Encoding.UTF8.GetBytes(header[prefix.Length..]);
-        var b = Encoding.UTF8.GetBytes(expected);
-        return a.Length == b.Length && CryptographicOperations.FixedTimeEquals(a, b);
-    }
 
     private static int ParseInt(string? value, int fallback) => int.TryParse(value, out var v) ? v : fallback;
 

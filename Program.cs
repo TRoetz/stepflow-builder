@@ -139,6 +139,7 @@ public class Startup
         services.AddSingleton<IDynamicApiStore>(provider => new SqliteDynamicApiStore(
             provider.GetRequiredService<IOptions<FormDataOptions>>().Value.DatabasePath,
             provider.GetService<ILogger<SqliteDynamicApiStore>>()));
+        services.AddSingleton<FlowResolver>();
         services.AddSingleton<DynamicApiDispatcher>();
         // Dynamic API hosting: management port + one scoped port per workspace node (DynamicApi section).
         var dynamicHosting = _config.GetSection(DynamicApiHostingOptions.SectionName).Get<DynamicApiHostingOptions>() ?? new();

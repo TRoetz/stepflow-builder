@@ -25,6 +25,9 @@
     <PackageReference Include="SSH.NET" Version="2024.1.0" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\StepFlow.DynamicApi.Core\StepFlow.DynamicApi.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
     <Compile Remove="StepFunctionsApp.Tests\**" />
     <Content Remove="StepFunctionsApp.Tests\**" />
     <EmbeddedResource Remove="StepFunctionsApp.Tests\**" />

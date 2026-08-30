@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json.Linq;
+using StepFunctionsApp.DynamicApi;
 using StepFunctionsApp.StepFunctions;
 
 namespace StepFunctionsApp.Controllers
@@ -13,11 +14,13 @@ namespace StepFunctionsApp.Controllers
     {
         private readonly StepFunctionService _stepService;
         private readonly SshHostStore _sshHosts;
+        private readonly FlowResolver _flowResolver;
 
-        public FlowsController(StepFunctionService stepService, SshHostStore sshHosts)
+        public FlowsController(StepFunctionService stepService, SshHostStore sshHosts, FlowResolver flowResolver)
         {
             _stepService = stepService;
             _sshHosts = sshHosts;
+            _flowResolver = flowResolver;
         }
 
         // List curated SSH hosts (name/host/port only — never credentials)
@@ -116,6 +119,7 @@ namespace StepFunctionsApp.Controllers
         {
             try
             {
+                if (_flowResolver.ResolveFlow(id) == null) return NotFound(new { error = $"Flow '{id}' not found" });
                 var execution = await _stepService.ExecuteSyncAsync(id, input);
                 return Ok(new
                 {

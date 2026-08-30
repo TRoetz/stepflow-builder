@@ -4,6 +4,7 @@ using System.Linq;
 using Newtonsoft.Json.Linq;
 using StepFlow.DataModel.Entities;
 using StepFlow.DataModel.Entities.MetaData;
+using StepFlow.DynamicApi;
 using StepFunctionsApp.DynamicApi;
 using StepFunctionsApp.StepFunctions;
 using Xunit;

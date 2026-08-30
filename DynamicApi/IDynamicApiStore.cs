@@ -1,3 +1,4 @@
+using StepFlow.DynamicApi;
 namespace StepFunctionsApp.DynamicApi;
 
 /// <summary>Persistence for dynamic API definitions (one row per API in stepflow_data.db).</summary>

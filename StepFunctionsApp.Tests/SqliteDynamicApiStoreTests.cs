@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using StepFlow.DynamicApi;
 using StepFunctionsApp.DynamicApi;
 using Xunit;
 

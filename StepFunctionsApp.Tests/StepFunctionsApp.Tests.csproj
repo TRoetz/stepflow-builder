@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\StepFunctionsApp.csproj" />
+    <ProjectReference Include="..\..\DynamicApiHost\DynamicApiHost.csproj" />
     <ProjectReference Include="..\Stepflow-Builder-Tests\Stepflow-Builder-Tests.csproj" />
   </ItemGroup>
 

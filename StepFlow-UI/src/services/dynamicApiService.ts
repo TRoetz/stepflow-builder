@@ -28,6 +28,7 @@ export interface DynamicApiDefinition {
   attributeDomain?: string | null;
   bearerToken?: string | null; // empty/null = open access
   isActive: boolean;
+  isPublished?: boolean; // exposed on external dynamic API hosts (DynamicApiHost)
   operations: DynamicApiOperation[];
   createdAt?: string;
   updatedAt?: string;

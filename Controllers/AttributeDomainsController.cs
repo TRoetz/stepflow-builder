@@ -28,6 +28,15 @@ namespace StepFunctionsApp.Controllers
         public IActionResult List() => Ok(_store.GetAll().Select(d =>
             AttributeDomainMapping.FromPoco(d, _store.GetByName(d.AttributeDomainName).schema)));
 
+        // A single domain by name (with its optional linked schema definition).
+        [HttpGet("api/attribute-domains/{name}")]
+        public IActionResult GetByName(string name)
+        {
+            var (domain, schema) = _store.GetByName(name);
+            if (domain == null) return NotFound(new { error = $"Attribute domain '{name}' not found" });
+            return Ok(AttributeDomainMapping.FromPoco(domain, schema)); // same shape as list items and the dispatcher's GET
+        }
+
         // Create or replace a domain by name (body: AttributeDomainEntry JSON).
         [HttpPost("api/attribute-domains")]
         public IActionResult Save([FromBody] AttributeDomainEntry entry)

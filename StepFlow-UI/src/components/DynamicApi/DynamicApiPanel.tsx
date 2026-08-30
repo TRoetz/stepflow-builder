@@ -53,6 +53,7 @@ interface DraftApi {
   attributeDomain: string;
   bearerToken: string;
   isActive: boolean;
+  published: boolean;
   operations: DraftOp[];
 }
 
@@ -66,6 +67,7 @@ function toDraft(def: DynamicApiDefinition): DraftApi {
     attributeDomain: def.attributeDomain ?? '',
     bearerToken: def.bearerToken ?? '',
     isActive: def.isActive !== false,
+    published: def.isPublished === true,
     operations: (def.operations ?? []).map((o) => ({
       method: o.method || 'GET',
       path: o.path ?? '',
@@ -193,7 +195,7 @@ export function DynamicApiPanel({ onClose }: DynamicApiPanelProps) {
     }
     const d: DraftApi = {
       name: '', description: '', nodePath: selectedNodePath, basePath: '/',
-      attributeDomain: domainNames[0] ?? '', bearerToken: '', isActive: true,
+      attributeDomain: domainNames[0] ?? '', bearerToken: '', isActive: true, published: false,
       operations: [{ ...NEW_OP, domainName: domainNames[0] ?? '' }],
     };
     setDraft(d);
@@ -252,7 +254,7 @@ export function DynamicApiPanel({ onClose }: DynamicApiPanelProps) {
     try {
       const res = await DynamicApiService.save({
         id: draft.id, name, description: draft.description.trim() || null, nodePath: draft.nodePath, basePath,
-        attributeDomain: draft.attributeDomain || null, bearerToken: draft.bearerToken || null, isActive: draft.isActive, operations,
+        attributeDomain: draft.attributeDomain || null, bearerToken: draft.bearerToken || null, isActive: draft.isActive, isPublished: draft.published, operations,
       });
       showToast({ type: 'success', message: res.created ? `API "${name}" created` : `API "${name}" saved` });
       setDraft((d) => (d ? { ...d, id: res.id } : d));
@@ -410,6 +412,7 @@ export function DynamicApiPanel({ onClose }: DynamicApiPanelProps) {
                     <span className="text-xs text-gray-200 truncate flex-1">{api.name}</span>
                     {api.bearerToken && <span title="Bearer token required" className="shrink-0"><Lock className="w-3 h-3 text-amber-400" /></span>}
                     {!api.isActive && <span className="text-[9px] uppercase text-gray-600 shrink-0">off</span>}
+                    {api.isPublished && <span title="Published - exposed on external dynamic API hosts" className="text-[9px] uppercase text-emerald-400 shrink-0">pub</span>}
                     <button className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 shrink-0" title="Delete API"
                       onClick={(e) => { e.stopPropagation(); void handleDelete(api); }}>
                       <Trash2 className="w-3 h-3" />
@@ -478,6 +481,11 @@ export function DynamicApiPanel({ onClose }: DynamicApiPanelProps) {
                 <input type="checkbox" className="accent-indigo-500" checked={draft.isActive}
                   onChange={(e) => setDraft({ ...draft, isActive: e.target.checked })} />
                 Active (inactive APIs are skipped by the dispatcher and OpenAPI spec)
+              </label>
+              <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                <input type="checkbox" className="accent-indigo-500" checked={draft.published}
+                  onChange={(e) => setDraft({ ...draft, published: e.target.checked })} />
+                Published (exposed on external dynamic API hosts)
               </label>
 
               {/* Operations */}

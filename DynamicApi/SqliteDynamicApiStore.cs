@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
+using StepFlow.DynamicApi;
 using StepFunctionsApp.StepFunctions;
 
 namespace StepFunctionsApp.DynamicApi;
@@ -28,6 +29,7 @@ public sealed class SqliteDynamicApiStore : IDynamicApiStore, IDisposable
           attribute_domain TEXT,
           bearer_token TEXT,
           is_active INTEGER NOT NULL DEFAULT 1,
+          is_published INTEGER NOT NULL DEFAULT 0,
           operations_json TEXT NOT NULL,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
@@ -35,7 +37,7 @@ public sealed class SqliteDynamicApiStore : IDynamicApiStore, IDisposable
         CREATE INDEX IF NOT EXISTS idx_dynamic_apis_node ON dynamic_apis(node_path);
         """;
 
-    private const string Columns = "api_id, name, description, node_path, base_path, attribute_domain, bearer_token, is_active, operations_json, created_at, updated_at";
+    private const string Columns = "api_id, name, description, node_path, base_path, attribute_domain, bearer_token, is_active, is_published, operations_json, created_at, updated_at";
 
     private static readonly JsonSerializerSettings OpsJson = new() { ContractResolver = new CamelCasePropertyNamesContractResolver() };
 
@@ -53,6 +55,24 @@ public sealed class SqliteDynamicApiStore : IDynamicApiStore, IDisposable
         {
             cmd.CommandText = StoreDdl;
             cmd.ExecuteNonQuery();
+        }
+
+        // Idempotent migration for databases created before the published flag existed.
+        using (var pragma = conn.CreateCommand())
+        {
+            pragma.CommandText = "PRAGMA table_info(dynamic_apis);";
+            bool hasPublished = false;
+            using var reader = pragma.ExecuteReader();
+            while (reader.Read())
+                if (string.Equals(reader.GetString(1), "is_published", StringComparison.OrdinalIgnoreCase))
+                    hasPublished = true;
+            if (!hasPublished)
+            {
+                using var alter = conn.CreateCommand();
+                alter.CommandText = "ALTER TABLE dynamic_apis ADD COLUMN is_published INTEGER NOT NULL DEFAULT 0;";
+                alter.ExecuteNonQuery();
+                _logger?.LogInformation("Migrated dynamic_apis table: added is_published column (existing APIs default to unpublished)");
+            }
         }
     }
 
@@ -135,8 +155,8 @@ public sealed class SqliteDynamicApiStore : IDynamicApiStore, IDisposable
 
             using var upsert = conn.CreateCommand();
             upsert.CommandText = """
-                INSERT INTO dynamic_apis (api_id, name, description, node_path, base_path, attribute_domain, bearer_token, is_active, operations_json, created_at, updated_at)
-                VALUES ($id, $name, $desc, $node, $base, $domain, $token, $active, $ops, $created, $updated)
+                INSERT INTO dynamic_apis (api_id, name, description, node_path, base_path, attribute_domain, bearer_token, is_active, is_published, operations_json, created_at, updated_at)
+                VALUES ($id, $name, $desc, $node, $base, $domain, $token, $active, $published, $ops, $created, $updated)
                 ON CONFLICT(api_id) DO UPDATE SET
                   name = excluded.name,
                   description = excluded.description,
@@ -145,6 +165,7 @@ public sealed class SqliteDynamicApiStore : IDynamicApiStore, IDisposable
                   attribute_domain = excluded.attribute_domain,
                   bearer_token = excluded.bearer_token,
                   is_active = excluded.is_active,
+                  is_published = excluded.is_published,
                   operations_json = excluded.operations_json,
                   updated_at = excluded.updated_at;
                 """;
@@ -156,6 +177,7 @@ public sealed class SqliteDynamicApiStore : IDynamicApiStore, IDisposable
             upsert.Parameters.AddWithValue("$domain", (object?)def.AttributeDomain ?? DBNull.Value);
             upsert.Parameters.AddWithValue("$token", (object?)def.BearerToken ?? DBNull.Value);
             upsert.Parameters.AddWithValue("$active", def.IsActive ? 1L : 0L);
+            upsert.Parameters.AddWithValue("$published", def.IsPublished ? 1L : 0L);
             upsert.Parameters.AddWithValue("$ops", JsonConvert.SerializeObject(def.Operations ?? new List<DynamicApiOperation>(), OpsJson));
             upsert.Parameters.AddWithValue("$created", createdAt.ToString("o", CultureInfo.InvariantCulture));
             upsert.Parameters.AddWithValue("$updated", def.UpdatedAt.ToString("o", CultureInfo.InvariantCulture));
@@ -191,9 +213,10 @@ public sealed class SqliteDynamicApiStore : IDynamicApiStore, IDisposable
         AttributeDomain = r.IsDBNull(5) ? null : r.GetString(5),
         BearerToken = r.IsDBNull(6) ? null : r.GetString(6),
         IsActive = r.GetInt64(7) != 0,
-        Operations = ParseOperations(r.GetString(8)),
-        CreatedAt = DateTime.Parse(r.GetString(9), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
-        UpdatedAt = DateTime.Parse(r.GetString(10), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+        IsPublished = r.GetInt64(8) != 0,
+        Operations = ParseOperations(r.GetString(9)),
+        CreatedAt = DateTime.Parse(r.GetString(10), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+        UpdatedAt = DateTime.Parse(r.GetString(11), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
     };
 
     private static DynamicApiDefinition? ReadRowById(SqliteConnection conn, string id)
