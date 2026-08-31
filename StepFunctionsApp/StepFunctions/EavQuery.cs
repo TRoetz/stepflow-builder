@@ -14,7 +14,8 @@ namespace StepFunctionsApp.StepFunctions;
 //    Reserved keys: sort, page, limit, offset, fields. entityId is an ordinary filter key.
 //  - sort=capturedAtUtc,-entityId : comma list; '-' prefix descends; unknown keys are no-ops;
 //    missing values sort first (empty string).
-//  - pagination: limit (default 100), offset, or page (1-based); page+offset together -> ArgumentException.
+//  - pagination: limit (default 100), offset, or page (1-based); page+offset together -> ArgumentException;
+//    unparseable limit/offset/page values fall back to defaults (lenient).
 //  - fields=a,b projects rows to those wire names (top-level camelCase properties or Values keys);
 //    rowKeyId is always kept so clients can still address the row for CRUD.
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

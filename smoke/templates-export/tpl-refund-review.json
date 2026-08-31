@@ -1,0 +1,160 @@
+{
+  "startAt": "a5868578-463b-41b0-a6f3-eeda80b414c7",
+  "states": {
+    "a5868578-463b-41b0-a6f3-eeda80b414c7": {
+      "type": "Pass",
+      "resource": "utility://default",
+      "next": "4f98aa3a-3f12-45ef-97b3-eeeaba4ce470",
+      "parameters": {
+        "description": ""
+      },
+      "comment": "Marks the beginning of the workflow. Every flow starts here.",
+      "inputs": [],
+      "outputs": [
+        "start_output"
+      ]
+    },
+    "4f98aa3a-3f12-45ef-97b3-eeeaba4ce470": {
+      "type": "Task",
+      "resource": "eav://customer_refund_request",
+      "next": "5b6c7d30-ae09-4b1a-9a31-dbf61c32da04",
+      "parameters": {
+        "operation": "read",
+        "attributeFilter": "",
+        "rowPath": "$[0]",
+        "columnSelector": "",
+        "entityTypeMapping": "",
+        "enableVersioning": false,
+        "entityType": "customer_refund_request"
+      },
+      "comment": "Entity-Attribute-Value operations for flexible data modeling. Inside a Map loop, row columns are picked from the parent flow's data source.",
+      "inputs": [
+        "input_entity",
+        "input_attributes"
+      ],
+      "outputs": [
+        "output_result",
+        "output_metadata"
+      ]
+    },
+    "5b6c7d30-ae09-4b1a-9a31-dbf61c32da04": {
+      "type": "Task",
+      "resource": "transform://jsonata",
+      "next": "c53315ae-950c-463d-85b6-5d6d48829589",
+      "parameters": {
+        "expression": "$map($, function($v) { return { \"amount\": $v.amount, \"reason\": $v.reason, \"customer_id\": $v.customer_id } })",
+        "enableDebug": false,
+        "timeout": 5000,
+        "input_data.$": "$"
+      },
+      "comment": "Transform data using JSONata expressions.",
+      "inputs": [
+        "input_data",
+        "input_context"
+      ],
+      "outputs": [
+        "output_result",
+        "output_error"
+      ]
+    },
+    "c53315ae-950c-463d-85b6-5d6d48829589": {
+      "type": "Map",
+      "itemsPath": "$",
+      "maxConcurrency": 1,
+      "resultPath": "$",
+      "iterator": {
+        "startAt": "Iteration Start",
+        "states": {
+          "Iteration Start": {
+            "type": "Pass",
+            "resource": "utility://pass",
+            "next": "Read Row",
+            "parameters": {},
+            "inputs": [
+              "input_data"
+            ],
+            "outputs": [
+              "output_data"
+            ]
+          },
+          "Read Row": {
+            "type": "Task",
+            "resource": "eav://customer_refund_request",
+            "next": "Approve Refund?",
+            "parameters": {
+              "operation": "read",
+              "entityType": "customer_refund_request"
+            },
+            "inputs": [
+              "input_entity",
+              "input_attributes"
+            ],
+            "outputs": [
+              "output_result",
+              "output_metadata"
+            ]
+          },
+          "Approve Refund?": {
+            "type": "Task",
+            "resource": "ai://azureOpenAI",
+            "next": "Iteration End",
+            "parameters": {
+              "model": "gpt-4-turbo",
+              "prompt": "Decide whether this refund request should be approved. Consider the amount and reason. Respond with a clear approve/deny decision."
+            },
+            "inputs": [
+              "input_data",
+              "input_context"
+            ],
+            "outputs": [
+              "output_result",
+              "output_decision"
+            ]
+          },
+          "Iteration End": {
+            "type": "Pass",
+            "end": true,
+            "inputs": [
+              "end_input"
+            ],
+            "outputs": []
+          }
+        }
+      },
+      "next": "ed2d0c2e-09e0-4208-b82e-19db76b46ef8"
+    },
+    "ed2d0c2e-09e0-4208-b82e-19db76b46ef8": {
+      "type": "Task",
+      "resource": "eav://refund_decision",
+      "next": "4fd09d42-873b-44c3-9307-81ae2d9e8c38",
+      "parameters": {
+        "operation": "write",
+        "attributeFilter": "",
+        "rowPath": "$[0]",
+        "columnSelector": "",
+        "entityTypeMapping": "",
+        "enableVersioning": false,
+        "entityType": "refund_decision",
+        "values.$": "$"
+      },
+      "comment": "Entity-Attribute-Value operations for flexible data modeling. Inside a Map loop, row columns are picked from the parent flow's data source.",
+      "inputs": [
+        "input_entity",
+        "input_attributes"
+      ],
+      "outputs": [
+        "output_result",
+        "output_metadata"
+      ]
+    },
+    "4fd09d42-873b-44c3-9307-81ae2d9e8c38": {
+      "type": "Pass",
+      "end": true,
+      "comment": "Marks the end of the workflow. Place one or more END states to define flow completion.",
+      "inputs": [
+        "end_input"
+      ],
+      "outputs": []
+    }
+  }
+}

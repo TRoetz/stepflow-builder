@@ -6,7 +6,7 @@ StepFlow Builder is a visual builder for serverless-style flows (ASL) plus an EA
 |---|---|---|---|---|
 | Backend / execution engine | `StepFunctionsApp/` | ASP.NET Core (.NET 10) | 5001 (management) + per-node ports | Owns all state; runs flows, EAV rows, forms, data exchange; exposes REST controllers, MCP endpoint, and the dynamic API dispatcher in-process |
 | Dynamic API host | `DynamicApiHost/` | ASP.NET Core (.NET 10) | 5002 | External twin of the in-process dispatcher: serves only *published* dynamic APIs with per-API bearer auth; executes handlers over HTTP against the backend engine |
-| Frontend (builder UI) | `StepFlow-UI/` | React 19 + Vite SPA | 3001 (dev) / static build | Visual flow builder, EAV/data-exchange editors, dynamic API panel. All calls are hardcoded relative `/api/*` — **same-origin only** |
+| Frontend (builder UI) | `StepFlow-UI/` | React 19 + Vite SPA | 3001 (dev) / static build | Visual flow builder, EAV/data-exchange editors, dynamic API panel. Calls are hardcoded relative `/api/*` (**same-origin only**), except the AI wizard's test phase, which may target a user-supplied CORS-enabled DynamicApiHost URL |
 
 Shared library: `StepFlow.DynamicApi.Core/` — route matching, bearer auth, and input merging used by both the backend's in-process dispatcher and DynamicApiHost, so the two surfaces behave identically.
 
@@ -89,6 +89,7 @@ The UI hardcodes relative `/api/*` paths everywhere (no env var, no baseURL). It
 - Dev: vite dev server on :3001 proxies `/api` → `localhost:5001`.
 - Docker showcase: nginx serves `dist/` and proxies `/api` + `/mcp` → backend.
 - Single-process mode: copy `dist/` next to the backend binary — it is served from CWD automatically, so UI + API share :5001 with no proxy at all.
+- Exception: the AI dynamic API wizard's Test & Deploy phase can send requests to a user-supplied `DynamicApiHost` base URL (e.g. `http://host:5002/api/dynamic`) — that host is CORS-enabled for exactly this purpose; every other call stays same-origin.
 
 ## Data integration loop
 

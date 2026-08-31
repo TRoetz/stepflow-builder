@@ -84,6 +84,48 @@ export class DynamicApiService {
     if (!res.ok) return fail(res);
     return (await res.json()) as Record<string, unknown>;
   }
+  // ── Context fetches for the AI wizard (same-origin metadata endpoints) ─────────
+
+  /** Attribute domains with their attributes trimmed to name + dataType. */
+  static async domains(): Promise<{ name: string; attributes: { name: string; dataType: number }[] }[]> {
+    const res = await fetch('/api/attribute-domains');
+    if (!res.ok) return fail(res);
+    const entries = (await res.json()) as Array<{ attributeDomain?: { attributeDomainName?: string; attributes?: Array<{ attributeName?: string; dataType?: number }> } | null }>;
+    return entries
+      .map((e) => ({
+        name: e.attributeDomain?.attributeDomainName ?? '',
+        attributes: (e.attributeDomain?.attributes ?? [])
+          .filter((a) => typeof a.attributeName === 'string' && a.attributeName.length > 0)
+          .map((a) => ({ name: a.attributeName as string, dataType: typeof a.dataType === 'number' ? a.dataType : 0 })),
+      }))
+      .filter((d) => d.name);
+  }
+
+  /** Flow ids + names. */
+  static async flows(): Promise<{ id: string; name: string }[]> {
+    const res = await fetch('/api/flows');
+    if (!res.ok) return fail(res);
+    const list = (await res.json()) as Array<{ id?: string | number; name?: string }>;
+    return list
+      .map((f) => ({ id: String(f.id ?? ''), name: f.name || String(f.id ?? '') }))
+      .filter((f) => f.id);
+  }
+
+  /** Data exchange profiles (same value convention as the panel editor: profile name, falling back to #id). */
+  static async profiles(): Promise<{ id: string; name: string }[]> {
+    const res = await fetch('/api/data-exchange/profiles');
+    if (!res.ok) return fail(res);
+    const list = (await res.json()) as Array<{ dataExchangeProfileId?: number | string; dataExchangeProfileName?: string }>;
+    return list.map((p) => ({ id: p.dataExchangeProfileName ?? String(p.dataExchangeProfileId), name: p.dataExchangeProfileName ?? `#${p.dataExchangeProfileId}` }));
+  }
+
+  /** Up to `limit` sample EAV rows for a domain (capped at 50). */
+  static async eavSampleRows(domain: string, limit = 3): Promise<Record<string, unknown>[]> {
+    const res = await fetch(`/api/eav/${encodeURIComponent(domain)}/rows?limit=${Math.max(1, Math.min(50, limit))}`);
+    if (!res.ok) return fail(res);
+    const body = (await res.json()) as { rows?: Record<string, unknown>[] };
+    return body.rows ?? [];
+  }
 
   /** Mirrors DynamicApiMatcher.JoinPaths: collapse '//', single leading '/', no trailing '/' (except bare "/"). */
   static joinPaths(basePath: string, opPath: string): string {

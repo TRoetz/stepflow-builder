@@ -30,6 +30,22 @@ namespace StepFunctionsApp.Tests
         }
 
         [Fact]
+        public void Map_MalformedPercentSequence_PassesThroughUndecoded()
+        {
+            var mapping = EavGetMapper.Map("/{id}", Params(("id", "a%zzb")), null);
+
+            Assert.Equal("a%zzb", mapping.Id); // permissive: malformed sequence survives both decode passes
+        }
+
+        [Fact]
+        public void Map_LiteralPercentHex_IsReDecoded_SecondPass()
+        {
+            var mapping = EavGetMapper.Map("/{id}", Params(("id", "100%25off")), null);
+
+            Assert.Equal("100%off", mapping.Id); // accepted second-pass semantics: literal %XX is re-decoded
+        }
+
+        [Fact]
         public void Map_SingleParam_EmptyOpPath_Lookup()
         {
             // Identity parameter supplied by the API base path, op path empty.

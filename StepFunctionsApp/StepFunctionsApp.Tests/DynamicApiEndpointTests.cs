@@ -201,6 +201,17 @@ namespace StepFunctionsApp.Tests
                     Assert.Null(row["values"]);
                 }
 
+                // Percent-encoded path segment over real HTTP: framework decodes once ('my%20id' -> 'my id'),
+                // EavGetMapper's permissive second pass is a no-op on it.
+                var (se, be) = await SendAsync(_client, HttpMethod.Post, "/api/dynamic/eav-full", new { entityId = "my id", entityType = "Gadget", name = "epsilon", qty = 5 });
+                Assert.Equal(System.Net.HttpStatusCode.Created, se);
+                keys.Add((string)be!["rowKeyId"]!); // cleaned up by the existing finally block
+
+                var (ge, re) = await SendAsync(_client, HttpMethod.Get, "/api/dynamic/eav-full/my%20id", null);
+                Assert.Equal(System.Net.HttpStatusCode.OK, ge);
+                Assert.Equal(JTokenType.Object, re!.Type);
+                Assert.Equal("Gadget", (string)re["entityType"]!);
+
                 // Single-row lookup: unique entity id -> object.
                 var (g1, r1) = await SendAsync(_client, HttpMethod.Get, "/api/dynamic/eav-full/solo", null);
                 Assert.Equal(System.Net.HttpStatusCode.OK, g1);

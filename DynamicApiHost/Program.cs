@@ -27,8 +27,12 @@ public sealed class HostProgram
         builder.Services.AddSingleton<CatalogService>();
         builder.Services.AddHostedService(sp => sp.GetRequiredService<CatalogService>()); // IHostedService: initial pull + periodic polling
         builder.Services.AddSingleton<HostDynamicApiDispatcher>();
+        // CORS: the builder UI (any origin) tests published APIs against this host in the wizard's test phase.
+        // Bearer auth still gates every dynamic route; the engine itself stays same-origin only.
+        builder.Services.AddCors(options => options.AddPolicy("DynamicApi", p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
         var app = builder.Build();
+        app.UseCors("DynamicApi");
 
         app.Map("/health", (CatalogService catalog) =>
         {

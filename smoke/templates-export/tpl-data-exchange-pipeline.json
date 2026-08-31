@@ -1,0 +1,79 @@
+{
+  "startAt": "8d99204e-2089-4178-831a-8a6ac0035aa2",
+  "states": {
+    "8d99204e-2089-4178-831a-8a6ac0035aa2": {
+      "type": "Pass",
+      "resource": "utility://default",
+      "next": "1abe55c6-5437-4f14-a10c-bbd78d7426b4",
+      "parameters": {
+        "description": ""
+      },
+      "comment": "Marks the beginning of the workflow. Every flow starts here.",
+      "inputs": [],
+      "outputs": [
+        "start_output"
+      ]
+    },
+    "1abe55c6-5437-4f14-a10c-bbd78d7426b4": {
+      "type": "Task",
+      "resource": "transform://jsonata",
+      "next": "bd93115b-41b5-4069-bd2e-aabae0de3c48",
+      "parameters": {
+        "expression": "{ \"rows\": [ { \"OrderId\": 'ORD-001', \"CustomerCode\": 'CUST-A', \"Amount\": 250 }, { \"OrderId\": 'ORD-002', \"CustomerCode\": 'CUST-B', \"Amount\": 80.5 }, { \"OrderId\": 'ORD-003', \"CustomerCode\": 'CUST-C', \"Amount\": -15 }, { \"OrderId\": 'ORD-004', \"CustomerCode\": 'CUST-A', \"Amount\": 120 } ] }",
+        "enableDebug": false,
+        "timeout": 5000,
+        "input_data.$": "$"
+      },
+      "comment": "Transform data using JSONata expressions.",
+      "inputs": [
+        "input_data",
+        "input_context"
+      ],
+      "outputs": [
+        "output_result",
+        "output_error"
+      ]
+    },
+    "bd93115b-41b5-4069-bd2e-aabae0de3c48": {
+      "type": "Task",
+      "resource": "dataexchange://demo-order-validation",
+      "next": "01d0fa74-086d-4263-9346-df4fce00251a",
+      "comment": "Run a registered Data Exchange profile pipeline (validation, calculation, mapping) over the upstream rows.",
+      "inputs": [
+        "input_data"
+      ],
+      "outputs": [
+        "result"
+      ]
+    },
+    "01d0fa74-086d-4263-9346-df4fce00251a": {
+      "type": "Task",
+      "resource": "transform://jsonata",
+      "next": "3892ea1f-1bb9-4ccf-a37f-e7d2d680726d",
+      "parameters": {
+        "expression": "{ \"processed\": $.rowsOut, \"rejected\": $.rejectedCount, \"firstRowTotalWithTax\": $.enrichedRows[0].TotalWithTax }",
+        "enableDebug": false,
+        "timeout": 5000,
+        "input_data.$": "$"
+      },
+      "comment": "Transform data using JSONata expressions.",
+      "inputs": [
+        "input_data",
+        "input_context"
+      ],
+      "outputs": [
+        "output_result",
+        "output_error"
+      ]
+    },
+    "3892ea1f-1bb9-4ccf-a37f-e7d2d680726d": {
+      "type": "Pass",
+      "end": true,
+      "comment": "Marks the end of the workflow. Place one or more END states to define flow completion.",
+      "inputs": [
+        "end_input"
+      ],
+      "outputs": []
+    }
+  }
+}

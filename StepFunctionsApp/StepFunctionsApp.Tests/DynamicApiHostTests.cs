@@ -143,6 +143,31 @@ namespace StepFunctionsApp.Tests
             Assert.Empty(Engine.Requests); // matching is local; the engine is never contacted
         }
 
+        [Fact]
+        public async Task Cors_Preflight_AllowsCrossOriginBuilderRequests()
+        {
+            var request = new HttpRequestMessage(HttpMethod.Options, "/api/dynamic/orders");
+            request.Headers.Add("Origin", "http://builder.example");
+            request.Headers.TryAddWithoutValidation("Access-Control-Request-Method", "GET");
+
+            using var response = await _client.SendAsync(request);
+
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+            Assert.Equal("*", response.Headers.GetValues("Access-Control-Allow-Origin").Single());
+            Assert.Contains("GET", response.Headers.GetValues("Access-Control-Allow-Methods"));
+        }
+
+        [Fact]
+        public async Task Cors_SimpleRequest_IncludesAllowOriginHeader()
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, "/health");
+            request.Headers.Add("Origin", "http://builder.example");
+
+            using var response = await _client.SendAsync(request);
+
+            Assert.Equal("*", response.Headers.GetValues("Access-Control-Allow-Origin").Single());
+        }
+
         // ── test host factory: stubbed engine handler + fixed base URL ────────────────
 
         public sealed class Factory : WebApplicationFactory<HostProgram>

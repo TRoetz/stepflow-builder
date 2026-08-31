@@ -114,7 +114,7 @@ function renderElement(el) {
       return `<button type="button" disabled style="opacity:.5;">${esc(label)}</button>`;
     case 'Dropdown': {
       const options = (el.Children ?? []).filter((c) => c.Type === 'DropdownOption');
-      const opts = options.map((o) => `<option value="${esc(o.Value ?? '')}" ${String(val) === String(o.Value ?? '') ? 'selected' : ''}>${esc(o.DisplayText || o.Value ?? '')}</option>`).join('');
+      const opts = options.map((o) => `<option value="${esc(o.Value ?? '')}" ${String(val) === String(o.Value ?? '') ? 'selected' : ''}>${esc(o.DisplayText || (o.Value ?? ''))}</option>`).join('');
       return fieldShell(key, label, false, helpText,
         `<select data-key="${esc(key)}" data-type="text" ${readOnly ? 'disabled' : ''}><option value="">— select —</option>${opts}</select>`);
     }

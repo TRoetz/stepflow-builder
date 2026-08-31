@@ -26,7 +26,10 @@ public readonly record struct EavGetMapping(EavGetMode Mode, string? Id, string 
 ///  - one param on an empty or one-segment op path ({id}) -> Lookup rows/{value}, query passed through (the engine honors only 'fields');
 ///  - one param on a multi-segment op path ({id}/comments) -> EntityFilter: collection with entityId={value} merged into the query.
 ///    A client-sent entityId equal to the parameter value is deduped; a different value conflicts (ArgumentException).
-/// PathParams values arrive percent-encoded from DynamicApiMatcher.Match and are decoded here. Two or more path params are invalid for eav GET ops
+/// PathParams values arrive already decoded: both in-repo callers feed DynamicApiMatcher.Match from context.Request.Path.Value,
+/// which ASP.NET Core unescapes once and permissively (malformed percent sequences such as '%zz' pass through undecoded).
+/// The Uri.UnescapeDataString call below is a permissive second pass (accepted behavior): it leaves malformed sequences untouched
+/// and re-decodes values containing literal %XX (e.g. '100%25off' -> '100%off'). Two or more path params are invalid for eav GET ops
 /// (rejected at save time); Map throws anyway so a hand-built API cannot misbehave silently.
 /// </summary>
 public static class EavGetMapper

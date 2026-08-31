@@ -1,0 +1,174 @@
+{
+  "startAt": "bbd7ae02-de4b-4a24-bb19-9e4b2044216e",
+  "states": {
+    "bbd7ae02-de4b-4a24-bb19-9e4b2044216e": {
+      "type": "Pass",
+      "resource": "utility://default",
+      "next": "e3081dff-df85-4f3d-b706-9f3e2acc4554",
+      "parameters": {
+        "description": ""
+      },
+      "comment": "Marks the beginning of the workflow. Every flow starts here.",
+      "inputs": [],
+      "outputs": [
+        "start_output"
+      ]
+    },
+    "e3081dff-df85-4f3d-b706-9f3e2acc4554": {
+      "type": "Task",
+      "resource": "sql://<your-connection-string>",
+      "next": "f48ac848-11da-47d3-bd6b-8b9f86718771",
+      "parameters": {
+        "query": "SELECT * FROM your_table",
+        "outputColumns": "",
+        "commandTimeout": 30000,
+        "enableCaching": false,
+        "cacheTTL": 300,
+        "connectionString": "<your-connection-string>"
+      },
+      "comment": "Execute SQL queries against a database connection.",
+      "inputs": [
+        "input_parameters",
+        "input_dataset"
+      ],
+      "outputs": [
+        "output_rows",
+        "output_count"
+      ]
+    },
+    "f48ac848-11da-47d3-bd6b-8b9f86718771": {
+      "type": "Map",
+      "itemsPath": "$.rows",
+      "maxConcurrency": 1,
+      "resultPath": "$.results",
+      "iterator": {
+        "startAt": "Iteration Start",
+        "states": {
+          "Iteration Start": {
+            "type": "Pass",
+            "resource": "utility://pass",
+            "next": "Read Row",
+            "parameters": {},
+            "inputs": [
+              "input_data"
+            ],
+            "outputs": [
+              "output_data"
+            ]
+          },
+          "Read Row": {
+            "type": "Task",
+            "resource": "eav://<your-entity-type>",
+            "next": "Generate Text",
+            "parameters": {
+              "operation": "read",
+              "entityType": "<your-entity-type>"
+            },
+            "inputs": [
+              "input_entity",
+              "input_attributes"
+            ],
+            "outputs": [
+              "output_result",
+              "output_metadata"
+            ]
+          },
+          "Generate Text": {
+            "type": "Task",
+            "resource": "ai://azureOpenAI",
+            "next": "Decide",
+            "parameters": {
+              "systemPrompt": "Summarize the current source row into a concise text description. Use only fields available on $input.row."
+            },
+            "inputs": [
+              "input_topic",
+              "input_style",
+              "input_constraints"
+            ],
+            "outputs": [
+              "output_text",
+              "output_metadata"
+            ]
+          },
+          "Decide": {
+            "type": "Task",
+            "resource": "ai://azureOpenAI",
+            "next": "Iteration End",
+            "parameters": {
+              "prompt": "Evaluate the generated summary for the current row and decide whether it is approved or needs manual review. Return a single-word decision."
+            },
+            "inputs": [
+              "input_data",
+              "input_context"
+            ],
+            "outputs": [
+              "output_result",
+              "output_decision"
+            ]
+          },
+          "Iteration End": {
+            "type": "Pass",
+            "end": true,
+            "inputs": [
+              "end_input"
+            ],
+            "outputs": []
+          }
+        }
+      },
+      "next": "029de976-d7a5-4a3f-9dfb-94198e9d785f"
+    },
+    "029de976-d7a5-4a3f-9dfb-94198e9d785f": {
+      "type": "Task",
+      "resource": "rule://first_match",
+      "next": "9bf32688-811e-4288-8de3-ca97d3d8c753",
+      "parameters": {
+        "ruleSet": "[\n  {\n    \"name\": \"approved\",\n    \"expression\": \"$.score >= 90 || $.decision == \\\"ok\\\"\",\n    \"outcome\": \"approved\"\n  },\n  {\n    \"name\": \"fallback\",\n    \"expression\": \"true\",\n    \"outcome\": \"manual_review\"\n  }\n]",
+        "evaluationMode": "first_match",
+        "defaultOutcome": "pass",
+        "timeout": 5000,
+        "enableLogging": false
+      },
+      "comment": "Evaluate business rules against input data to determine outcomes.",
+      "inputs": [
+        "input_data",
+        "input_context"
+      ],
+      "outputs": [
+        "output_result",
+        "output_matched"
+      ]
+    },
+    "9bf32688-811e-4288-8de3-ca97d3d8c753": {
+      "type": "Task",
+      "resource": "transform://javascript",
+      "next": "9259dace-9568-443a-b253-9bb7a9d2caf2",
+      "parameters": {
+        "language": "javascript",
+        "script": "// Write the classified rows to an output file (placeholder — adjust path/format).\nconst fs = require(\"fs\");\nfs.writeFileSync(\"output_rows.json\", JSON.stringify(context.input.rows ?? context.input, null, 2));\nreturn context.input;",
+        "timeout": 10000,
+        "enableSandbox": true,
+        "maxMemory": 256
+      },
+      "comment": "Execute custom scripts (JavaScript/Python) to transform data.",
+      "inputs": [
+        "input_data",
+        "input_env"
+      ],
+      "outputs": [
+        "output_result",
+        "output_logs",
+        "output_error"
+      ]
+    },
+    "9259dace-9568-443a-b253-9bb7a9d2caf2": {
+      "type": "Pass",
+      "end": true,
+      "comment": "Marks the end of the workflow. Place one or more END states to define flow completion.",
+      "inputs": [
+        "end_input"
+      ],
+      "outputs": []
+    }
+  }
+}

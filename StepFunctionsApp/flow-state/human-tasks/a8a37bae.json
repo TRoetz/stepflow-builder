@@ -1,0 +1,139 @@
+{
+  "TaskId": "a8a37bae",
+  "ExecutionId": "02dc6398",
+  "StateMachineName": "",
+  "StateName": "CaptureOrder",
+  "NextState": "Done",
+  "IsEnd": false,
+  "ResultPath": "$.capturedOrder",
+  "FormVersion": "1",
+  "Title": "Approve imported order batch",
+  "Assignee": "finance",
+  "Payload": {
+    "task": {
+      "formId": "order-approval",
+      "title": "Approve imported order batch",
+      "assignee": "finance"
+    },
+    "input": {
+      "rows": [
+        {
+          "rowKeyId": "2d0fd78632a342f88ab24f2faa2f0a53",
+          "entityId": null,
+          "entityType": null,
+          "sourceTaskId": "e92ca50b",
+          "capturedAtUtc": "2026-08-26T01:42:39.4872734Z",
+          "values": {
+            "orderId": "ORD-482913",
+            "customerName": "Acme Ltd",
+            "amount": 2500.5,
+            "orderDate": "2026-08-26T00:00:00",
+            "priority": "High",
+            "notes": "smoke test"
+          }
+        },
+        {
+          "rowKeyId": "19e8ce0b95bc4d67b03daccf3c692069",
+          "entityId": null,
+          "entityType": null,
+          "sourceTaskId": "550545ec",
+          "capturedAtUtc": "2026-08-26T01:59:47.6080225Z",
+          "values": {
+            "orderId": "ORD-771234",
+            "customerName": "Smoke SQLite Co",
+            "amount": 9876.5,
+            "orderDate": "2026-08-26T00:00:00",
+            "priority": "High"
+          }
+        },
+        {
+          "rowKeyId": "6c22f23b7ffa4e2bbb9ecd80f1e0bd74",
+          "entityId": null,
+          "entityType": null,
+          "sourceTaskId": "215ae821",
+          "capturedAtUtc": "2026-08-26T02:48:03.033939Z",
+          "values": {
+            "orderId": "ORD-42424",
+            "customerName": "smoke-customerName",
+            "amount": 42.0,
+            "orderDate": "2026-08-26T12:00:00",
+            "priority": "smoke-priority",
+            "notes": "smoke-notes"
+          }
+        },
+        {
+          "rowKeyId": "2efaa7ebb7484521a4a614fc67154c84",
+          "entityId": null,
+          "entityType": null,
+          "sourceTaskId": "2c58dde7",
+          "capturedAtUtc": "2026-08-26T02:51:17.9219626Z",
+          "values": {
+            "orderId": "ORD-42424",
+            "customerName": "smoke-customerName",
+            "amount": 42.0,
+            "orderDate": "2026-08-26T12:00:00",
+            "priority": "smoke-priority",
+            "notes": "smoke-notes"
+          }
+        },
+        {
+          "rowKeyId": "862ae1466c024c15980b5a0140d14932",
+          "entityId": null,
+          "entityType": null,
+          "sourceTaskId": null,
+          "capturedAtUtc": "2026-08-31T08:19:12.1651985Z",
+          "values": {
+            "orderId": "ORD-1001",
+            "customerName": "CUST-A",
+            "amount": 100.0,
+            "priority": "CSV-Import",
+            "notes": "North"
+          }
+        },
+        {
+          "rowKeyId": "9c565038aff2498f835c40b4575f14f2",
+          "entityId": null,
+          "entityType": null,
+          "sourceTaskId": null,
+          "capturedAtUtc": "2026-08-31T08:19:12.1703274Z",
+          "values": {
+            "orderId": "ORD-1002",
+            "customerName": "CUST-B",
+            "amount": 50.0,
+            "priority": "CSV-Import",
+            "notes": "South"
+          }
+        },
+        {
+          "rowKeyId": "527cac5f87704777adfaf5e18ca41417",
+          "entityId": null,
+          "entityType": null,
+          "sourceTaskId": null,
+          "capturedAtUtc": "2026-08-31T08:19:12.1711854Z",
+          "values": {
+            "orderId": "ORD-1003",
+            "customerName": "CUST-C",
+            "amount": 25.5,
+            "priority": "CSV-Import",
+            "notes": "North"
+          }
+        }
+      ],
+      "count": 7
+    }
+  },
+  "CompletionType": "form",
+  "CompletionConfig": {
+    "Type": "form"
+  },
+  "Status": "Completed",
+  "CreatedAtUtc": "2026-08-31T08:19:12.220488Z",
+  "CompletedAtUtc": "2026-08-31T08:57:00.325007Z",
+  "Result": {
+    "orderId": "ORD-123456",
+    "customerName": "Acme Ltd",
+    "amount": 2500.0,
+    "priority": "High",
+    "notes": "E2E test submission - imported from cust_orders.csv"
+  }
+}

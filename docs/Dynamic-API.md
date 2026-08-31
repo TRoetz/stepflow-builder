@@ -1,5 +1,7 @@
 # Dynamic API Builder — Plan
 
+**How-to guide:** see [`Dynamic-API-Building-Guide.md`](Dynamic-API-Building-Guide.md) for the complete end-to-end builder's reference — manual + AI-wizard creation, REST contracts per handler, testing, publishing to DynamicApiHost, and NGINX multi-port hosting.
+
 ## Context
 
 StepFunctionsApp (ASP.NET Core 10, `C:/Source/stepflow-builder/StepFunctionsApp`) needs a **Dynamic API** subsystem: user-defined REST endpoints that are attached to AttributeDomains and workspace nodes (OU = org / Project / Sub-project), stored in SQLite, where each request is dispatched to one of four handlers — execute a FLOW, read/write an AttributeDomain definition (SQLite or JSON provider), read/write EAV rows captured by flows (`eav-data/`), or run a DataExchange profile. The subsystem must be Bearer-token protected per API and expose a generated OpenAPI 3 spec so consumers can interrogate what the APIs allow. A builder UI panel — in the same style as the existing React flow builder (StepFlow-UI) — creates and tests these APIs.
@@ -318,3 +320,17 @@ Working directory: `C:/Source/stepflow-builder/StepFunctionsApp`.
 - **Flow input merge precedence**: path params > query string > JSON body; response is `execution.Output` verbatim (transformation happens inside the flow / DataExchange pipeline, per the request).
 - If a flow handler's id matches neither the in-memory registry nor any workspace sub-project flow file → 404 with the flow id in the message (no auto-creation of flows).
 - If `FormData.Provider` is "json" at runtime, `stepflow_data.db` may not pre-exist; `StepFlowDataDb.Open` creates it on first use — no special handling needed.
+
+## AI-Assisted Wizard (implemented)
+
+The Dynamic API panel has an **AI Wizard** button (Sparkles icon, header bar) that opens a four-phase guided creation flow (`StepFlow-UI/src/components/DynamicApi/AiDynamicApiWizard.tsx`):
+
+1. **Shell** — name, workspace node (any depth 1–3), basePath, api-level attributeDomain (pre-filled from the node's first domain), bearer token (generate/copy).
+2. **Operations** — pick a REST method + one-line intent; the local model (saved AI config) generates ONE operation draft grounded in real context: attribute domains + attributes, up to 3 sample EAV rows per domain, workspace flows, data-exchange profiles (`StepFlow-UI/src/services/aiDynamicApiBuilder.ts` builds prompt + user message). The draft is validated client-side against the same rules as `DynamicApisController.Save` (method/path/template-param/handler requirements, eav GET ≤1 `{param}`, reserved `/apis` prefix, in-API route conflicts) and is **always editable** — AI output never bypasses validation.
+3. **Review & Save** — full definition table; save via the standard `POST /api/dynamic/apis`; server errors (e.g. cross-API 409 route conflict) are shown verbatim with a regenerate shortcut.
+4. **Test & Deploy** — test any operation against the in-process engine (`/api/dynamic/…`, same-origin) or a user-supplied `DynamicApiHost` base URL (cross-origin; the host is CORS-enabled for this), plus publish + curl-command copy for UAT/Docker targets.
+
+Supporting changes:
+- `dynamicApiService.ts`: context fetch helpers used by the wizard — `domains()`, `flows()`, `profiles()`, `eavSampleRows(domain, limit)`.
+- `DynamicApiHost/Program.cs`: permissive CORS policy (`AllowAnyOrigin` + any header/method) so the wizard's Phase 4 can call a remote host; Bearer auth still gates every dynamic route and the backend engine stays same-origin only. Covered by two facts in `StepFunctionsApp.Tests/DynamicApiHostTests.cs`.
+- `smoke/mock-lmstudio.cjs`: canned eav op-draft response for the wizard's prompt (method taken from the user message), so the browser smoke test exercises generation without a real model.

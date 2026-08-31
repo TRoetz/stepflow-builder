@@ -57,5 +57,61 @@
       "priority": "smoke-priority",
       "notes": "smoke-notes"
     }
+  },
+  {
+    "RowKeyId": "862ae1466c024c15980b5a0140d14932",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": null,
+    "CapturedAtUtc": "2026-08-31T08:19:12.1651985Z",
+    "Values": {
+      "orderId": "ORD-1001",
+      "customerName": "CUST-A",
+      "amount": 100.0,
+      "priority": "CSV-Import",
+      "notes": "North"
+    }
+  },
+  {
+    "RowKeyId": "9c565038aff2498f835c40b4575f14f2",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": null,
+    "CapturedAtUtc": "2026-08-31T08:19:12.1703274Z",
+    "Values": {
+      "orderId": "ORD-1002",
+      "customerName": "CUST-B",
+      "amount": 50.0,
+      "priority": "CSV-Import",
+      "notes": "South"
+    }
+  },
+  {
+    "RowKeyId": "527cac5f87704777adfaf5e18ca41417",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": null,
+    "CapturedAtUtc": "2026-08-31T08:19:12.1711854Z",
+    "Values": {
+      "orderId": "ORD-1003",
+      "customerName": "CUST-C",
+      "amount": 25.5,
+      "priority": "CSV-Import",
+      "notes": "North"
+    }
+  },
+  {
+    "RowKeyId": "f3f8633bb3bc4b468f80bed999031df9",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "a8a37bae",
+    "CapturedAtUtc": "2026-08-31T08:57:00.3226183Z",
+    "Values": {
+      "orderId": "ORD-123456",
+      "customerName": "Acme Ltd",
+      "amount": 2500.0,
+      "priority": "High",
+      "notes": "E2E test submission - imported from cust_orders.csv"
+    }
   }
 ]

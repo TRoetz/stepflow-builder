@@ -1,0 +1,13 @@
+[
+  {
+    "RowKeyId": "117c7e340b274e6185f3b58fc0a71633",
+    "EntityId": "rec-demo-1",
+    "EntityType": "DemoRecord",
+    "SourceTaskId": null,
+    "CapturedAtUtc": "2026-08-31T09:38:09.9033563Z",
+    "Values": {
+      "note": "saved via flow template",
+      "amount": 42
+    }
+  }
+]

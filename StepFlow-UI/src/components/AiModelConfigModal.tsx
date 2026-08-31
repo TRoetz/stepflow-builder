@@ -1,10 +1,10 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X, Save, RotateCcw, Globe, Key, Cpu, Thermometer, Hash, SlidersHorizontal, Plug, CheckCircle, AlertCircle } from 'lucide-react';
 import {
   useAiModelConfigStore,
   type AiProvider,
 } from '@stores/useAiModelConfigStore';
-import { testAiConnection } from '@stores/useAiAssistantStore';
+import { testAiConnection, stripV1Suffix } from '@stores/useAiAssistantStore';
 
 const PROVIDER_OPTIONS: { value: AiProvider; label: string; defaultUrl: string }[] = [
   { value: 'openai', label: 'OpenAI', defaultUrl: 'https://api.openai.com' },
@@ -63,6 +63,17 @@ const MODEL_OPTIONS: Record<AiProvider, { label: string; value: string }[]> = {
     { label: 'Custom...', value: 'custom' },
   ],
 };
+const CUSTOM_MODEL_VALUE = 'custom';
+
+// Providers that expose a model listing endpoint we can query directly.
+const LISTABLE_PROVIDERS: AiProvider[] = ['ollama', 'lmStudio', 'llamaCpp', 'openaiCompatible'];
+
+const CUSTOM_PLACEHOLDERS: Partial<Record<AiProvider, string>> = {
+  ollama: 'e.g. llama3.1:8b or qwen2.5-coder:7b',
+  lmStudio: 'e.g. qwen/qwen3-8b',
+  llamaCpp: 'e.g. mistral-7b-instruct',
+  openaiCompatible: 'e.g. my-model-id',
+};
 
 export function AiModelConfigModal() {
   const {
@@ -85,8 +96,15 @@ export function AiModelConfigModal() {
   } = useAiModelConfigStore();
 
   const [testStatus, setTestStatus] = useState<{ loading: boolean; result?: { success: boolean; message: string } }>({ loading: false });
+  const [fetchedModels, setFetchedModels] = useState<string[]>([]);
+  const [fetchingModels, setFetchingModels] = useState(false);
+  const [modelFetchError, setModelFetchError] = useState('');
 
   const handleTestConnection = useCallback(async () => {
+    if (!defaultModel.trim()) {
+      setTestStatus({ loading: false, result: { success: false, message: 'Please select or type a model name.' } });
+      return;
+    }
     setTestStatus({ loading: true, result: undefined });
     const config = {
       provider,
@@ -101,10 +119,73 @@ export function AiModelConfigModal() {
     setTestStatus({ loading: false, result });
   }, [provider, baseUrl, apiKey, defaultModel, temperature, maxTokens, topP]);
 
-  const availableModels = useMemo(
-    () => MODEL_OPTIONS[provider] ?? MODEL_OPTIONS.openai,
-    [provider]
-  );
+  // Fetch models installed on the server so users can pick their own model.
+  useEffect(() => {
+    setFetchedModels([]);
+    setModelFetchError('');
+    if (!isConfigModalOpen || !LISTABLE_PROVIDERS.includes(provider) || !baseUrl.trim()) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setFetchingModels(true);
+      try {
+        const base = stripV1Suffix(baseUrl.trim());
+        const url = provider === 'ollama' ? `${base}/api/tags` : `${base}/v1/models`;
+        const response = await fetch(url, { method: 'GET' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = (await response.json()) as { models?: Array<{ name?: string }>; data?: Array<{ id?: string }> };
+        const names = provider === 'ollama'
+          ? (data.models ?? []).map((m) => m.name ?? '').filter(Boolean)
+          : (data.data ?? []).map((m) => m.id ?? '').filter(Boolean);
+        if (cancelled) return;
+        setFetchedModels(names);
+        // If the saved model is a preset that does not exist on this server, switch to an installed one.
+        const presets = new Set((MODEL_OPTIONS[provider] ?? []).map((m) => m.value.toLowerCase()));
+        const current = useAiModelConfigStore.getState().defaultModel;
+        const notUserChosen = !current || current === CUSTOM_MODEL_VALUE || presets.has(current.toLowerCase());
+        if (names.length > 0 && notUserChosen && !names.some((n) => n.toLowerCase() === current.toLowerCase())) {
+          setDefaultModel(names[0]);
+        }
+      } catch {
+        if (!cancelled) {
+          setFetchedModels([]);
+          setModelFetchError('Could not list models from this server — type the model name below.');
+        }
+      } finally {
+        if (!cancelled) setFetchingModels(false);
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isConfigModalOpen, provider, baseUrl, setDefaultModel]);
+
+  // Normalize legacy saved value 'custom' (the old dropdown had no text input).
+  useEffect(() => {
+    if (isConfigModalOpen && useAiModelConfigStore.getState().defaultModel === CUSTOM_MODEL_VALUE) {
+      setDefaultModel('');
+    }
+  }, [isConfigModalOpen, setDefaultModel]);
+
+  const availableModels = useMemo(() => {
+    const presets = MODEL_OPTIONS[provider] ?? [];
+    const options: { label: string; value: string }[] = [];
+    const seen = new Set<string>();
+    for (const name of fetchedModels) {
+      if (!name || seen.has(name.toLowerCase())) continue;
+      seen.add(name.toLowerCase());
+      options.push({ label: name, value: name });
+    }
+    for (const preset of presets) {
+      if (preset.value === CUSTOM_MODEL_VALUE || seen.has(preset.value.toLowerCase())) continue;
+      seen.add(preset.value.toLowerCase());
+      options.push(preset);
+    }
+    options.push({ label: 'Custom...', value: CUSTOM_MODEL_VALUE });
+    return options;
+  }, [provider, fetchedModels]);
+
+  const modelSelectValue = availableModels.some((o) => o.value === defaultModel) ? defaultModel : CUSTOM_MODEL_VALUE;
 
   const handleProviderChange = useCallback(
     (newProvider: AiProvider) => {
@@ -233,8 +314,8 @@ export function AiModelConfigModal() {
               </span>
             </label>
             <select
-              value={defaultModel}
-              onChange={(e) => setDefaultModel(e.target.value)}
+              value={modelSelectValue}
+              onChange={(e) => setDefaultModel(e.target.value === CUSTOM_MODEL_VALUE ? '' : e.target.value)}
               className="w-full px-3 py-2 text-sm rounded-lg bg-gray-800 border border-gray-700 text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             >
               {availableModels.map((opt) => (
@@ -243,6 +324,21 @@ export function AiModelConfigModal() {
                 </option>
               ))}
             </select>
+            {modelSelectValue === CUSTOM_MODEL_VALUE && (
+              <input
+                type="text"
+                value={defaultModel === CUSTOM_MODEL_VALUE ? '' : defaultModel}
+                onChange={(e) => setDefaultModel(e.target.value)}
+                placeholder={CUSTOM_PLACEHOLDERS[provider] ?? 'Enter the exact model name'}
+                className="mt-2 w-full px-3 py-2 text-sm rounded-lg bg-gray-800 border border-gray-700 text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono"
+              />
+            )}
+            {fetchingModels && (
+              <p className="mt-1.5 text-[11px] text-gray-500">Loading models from server…</p>
+            )}
+            {!fetchingModels && modelFetchError && (
+              <p className="mt-1.5 text-[11px] text-amber-400/80">{modelFetchError}</p>
+            )}
           </div>
 
           {/* Divider */}

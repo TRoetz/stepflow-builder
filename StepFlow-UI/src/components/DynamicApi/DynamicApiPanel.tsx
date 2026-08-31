@@ -1,12 +1,13 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
-  Globe, X, Maximize2, Minimize2, Plus, Trash2, Save, Lock, Copy, Play, FileJson, AlertCircle, RefreshCw, KeyRound, ChevronRight, ChevronDown,
+  Globe, X, Maximize2, Minimize2, Plus, Trash2, Save, Lock, Copy, Play, FileJson, AlertCircle, RefreshCw, KeyRound, ChevronRight, ChevronDown, Sparkles,
 } from 'lucide-react';
 import {
   DynamicApiService, type DynamicApiDefinition, type DynamicApiOperation, type HandlerType,
 } from '@services/dynamicApiService';
 import { useWorkspaceStore } from '@stores/useWorkspaceStore';
 import { showToast } from '@stores/useToastStore';
+import { AiDynamicApiWizard } from './AiDynamicApiWizard';
 
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 const HANDLER_TYPES: HandlerType[] = ['flow', 'attributeDomain', 'eav', 'dataExchange'];
@@ -100,6 +101,7 @@ export function DynamicApiPanel({ onClose }: DynamicApiPanelProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [selectedNodePath, setSelectedNodePath] = useState<string | null>(null);
   const [apis, setApis] = useState<DynamicApiDefinition[]>([]);
+ const [wizardOpen, setWizardOpen] = useState(false);
 
   // Option sources for the editor selects.
   const [domainNames, setDomainNames] = useState<string[]>([]);
@@ -154,11 +156,14 @@ export function DynamicApiPanel({ onClose }: DynamicApiPanelProps) {
     })();
   }, [loadTree]);
 
-  const refreshApis = useCallback(async () => {
+  const refreshApis = useCallback(async (): Promise<DynamicApiDefinition[]> => {
     try {
-      setApis(await DynamicApiService.list(selectedNodePath ?? undefined));
+      const list = await DynamicApiService.list(selectedNodePath ?? undefined);
+      setApis(list);
+      return list;
     } catch (err) {
       showToast({ type: 'error', message: errorMessage(err) });
+      return [];
     }
   }, [selectedNodePath]);
 
@@ -187,6 +192,13 @@ export function DynamicApiPanel({ onClose }: DynamicApiPanelProps) {
     setDraft(d);
     prefillTest(d);
   }, [prefillTest]);
+
+  /** Wizard finished saving — refresh the list and load the new API into the editor. */
+  const handleWizardSaved = useCallback(async (id: string) => {
+    const list = await refreshApis();
+    const def = list.find((a) => a.id === id);
+    if (def) handleLoadApi(def);
+  }, [refreshApis, handleLoadApi]);
 
   const handleNewApi = () => {
     if (!selectedNodePath) {
@@ -348,6 +360,9 @@ export function DynamicApiPanel({ onClose }: DynamicApiPanelProps) {
           Dynamic API
         </h2>
         <div className="flex items-center gap-1">
+          <button className="btn-icon" title="AI Wizard — guided dynamic API creation" onClick={() => setWizardOpen(true)}>
+            <Sparkles className="w-4 h-4 text-indigo-400" />
+          </button>
           <button className="btn-icon" title={isMaximized ? 'Restore' : 'Expand'} onClick={() => setIsMaximized(!isMaximized)}>
             {isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
@@ -624,6 +639,13 @@ export function DynamicApiPanel({ onClose }: DynamicApiPanelProps) {
           </div>
         </div>
       </div>
+      <AiDynamicApiWizard
+        open={wizardOpen}
+        initialNodePath={selectedNodePath}
+        initialDomain={domainNames[0] ?? ''}
+        onClose={() => setWizardOpen(false)}
+        onSaved={(id) => { void handleWizardSaved(id); }}
+      />
     </div>
   );
 }

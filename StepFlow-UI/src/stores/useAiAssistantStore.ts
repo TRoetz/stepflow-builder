@@ -7,7 +7,7 @@ import { stepSchemas, schemaById } from '@schemas/index';
 import { collectInScopeVariables } from '@utils/variables';
 import { categoryPromptTemplates, summarizeConfigFields } from './aiAssistantPrompts';
 // Strip trailing /v1 (or /v1/) so callers can append their own path segment
-function stripV1Suffix(url: string): string {
+export function stripV1Suffix(url: string): string {
   return url.replace(/\/v1\/?$/, '');
 }
 
@@ -416,9 +416,15 @@ export async function testAiConnection(config: AiModelConfig): Promise<{ success
     return { success: false, message: errorData.error?.message ?? `API error: ${response.status}` };
   } catch (error) {
     if (error instanceof TypeError && error.message.includes('fetch')) {
+      const hint =
+        config.provider === 'lmStudio'
+          ? ' In LM Studio, open Developer → Server settings and enable "Allow cross-origin requests" (CORS), then restart the server.'
+          : config.provider === 'ollama'
+            ? ' Ollama normally allows browser access; make sure it is running on this machine with default CORS enabled.'
+            : ' Add --host 0.0.0.0 and CORS headers to your server config.';
       return {
         success: false,
-        message: `CORS error: Your AI server at ${config.baseUrl} is blocking browser requests. Add --host 0.0.0.0 and CORS headers to your server config.`,
+        message: `CORS error: Your AI server at ${config.baseUrl} is blocking browser requests.${hint}`,
       };
     }
     return { success: false, message: `Connection failed: ${error instanceof Error ? error.message : String(error)}` };
