@@ -1,10 +1,10 @@
 {
-  "startAt": "bbd7ae02-de4b-4a24-bb19-9e4b2044216e",
+  "startAt": "e069172c-baeb-4496-b180-6e7f138e4c27",
   "states": {
-    "bbd7ae02-de4b-4a24-bb19-9e4b2044216e": {
+    "e069172c-baeb-4496-b180-6e7f138e4c27": {
       "type": "Pass",
       "resource": "utility://default",
-      "next": "e3081dff-df85-4f3d-b706-9f3e2acc4554",
+      "next": "0177478c-e1e6-454f-9df5-18df16073da8",
       "parameters": {
         "description": ""
       },
@@ -14,10 +14,10 @@
         "start_output"
       ]
     },
-    "e3081dff-df85-4f3d-b706-9f3e2acc4554": {
+    "0177478c-e1e6-454f-9df5-18df16073da8": {
       "type": "Task",
       "resource": "sql://<your-connection-string>",
-      "next": "f48ac848-11da-47d3-bd6b-8b9f86718771",
+      "next": "9230bf85-0bde-45fe-9da0-b518bebc66ae",
       "parameters": {
         "query": "SELECT * FROM your_table",
         "outputColumns": "",
@@ -36,7 +36,7 @@
         "output_count"
       ]
     },
-    "f48ac848-11da-47d3-bd6b-8b9f86718771": {
+    "9230bf85-0bde-45fe-9da0-b518bebc66ae": {
       "type": "Map",
       "itemsPath": "$.rows",
       "maxConcurrency": 1,
@@ -116,12 +116,12 @@
           }
         }
       },
-      "next": "029de976-d7a5-4a3f-9dfb-94198e9d785f"
+      "next": "28d6eace-51a5-4844-9c1e-0baef5c68198"
     },
-    "029de976-d7a5-4a3f-9dfb-94198e9d785f": {
+    "28d6eace-51a5-4844-9c1e-0baef5c68198": {
       "type": "Task",
       "resource": "rule://first_match",
-      "next": "9bf32688-811e-4288-8de3-ca97d3d8c753",
+      "next": "dd8673b2-a1e7-4aee-b6e6-12fbeb34dadb",
       "parameters": {
         "ruleSet": "[\n  {\n    \"name\": \"approved\",\n    \"expression\": \"$.score >= 90 || $.decision == \\\"ok\\\"\",\n    \"outcome\": \"approved\"\n  },\n  {\n    \"name\": \"fallback\",\n    \"expression\": \"true\",\n    \"outcome\": \"manual_review\"\n  }\n]",
         "evaluationMode": "first_match",
@@ -139,10 +139,10 @@
         "output_matched"
       ]
     },
-    "9bf32688-811e-4288-8de3-ca97d3d8c753": {
+    "dd8673b2-a1e7-4aee-b6e6-12fbeb34dadb": {
       "type": "Task",
       "resource": "transform://javascript",
-      "next": "9259dace-9568-443a-b253-9bb7a9d2caf2",
+      "next": "779e22df-a7c9-4454-8c56-dcc1a1bcad6c",
       "parameters": {
         "language": "javascript",
         "script": "// Write the classified rows to an output file (placeholder — adjust path/format).\nconst fs = require(\"fs\");\nfs.writeFileSync(\"output_rows.json\", JSON.stringify(context.input.rows ?? context.input, null, 2));\nreturn context.input;",
@@ -161,7 +161,7 @@
         "output_error"
       ]
     },
-    "9259dace-9568-443a-b253-9bb7a9d2caf2": {
+    "779e22df-a7c9-4454-8c56-dcc1a1bcad6c": {
       "type": "Pass",
       "end": true,
       "comment": "Marks the end of the workflow. Place one or more END states to define flow completion.",

@@ -44,6 +44,9 @@ public class Startup
         services.AddRazorPages();
 
         services.AddHttpClient();
+        // AI proxy (AiProxyController): relays local LLM calls server-side so the browser never hits CORS on remote LAN endpoints.
+        // 4-minute cap sits under docker-example nginx's proxy_read_timeout (300s) so we fail with a clean 502 before nginx cuts the connection.
+        services.AddHttpClient("ai-proxy", client => client.Timeout = TimeSpan.FromMinutes(4));
 
         // Register EAV Registry Service
         var eavRegistry = new EavRegistryService();

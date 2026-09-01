@@ -4,7 +4,7 @@ import {
   useAiModelConfigStore,
   type AiProvider,
 } from '@stores/useAiModelConfigStore';
-import { testAiConnection, stripV1Suffix } from '@stores/useAiAssistantStore';
+import { testAiConnection, listLocalModels } from '@stores/useAiAssistantStore';
 
 const PROVIDER_OPTIONS: { value: AiProvider; label: string; defaultUrl: string }[] = [
   { value: 'openai', label: 'OpenAI', defaultUrl: 'https://api.openai.com' },
@@ -128,14 +128,7 @@ export function AiModelConfigModal() {
     const timer = setTimeout(async () => {
       setFetchingModels(true);
       try {
-        const base = stripV1Suffix(baseUrl.trim());
-        const url = provider === 'ollama' ? `${base}/api/tags` : `${base}/v1/models`;
-        const response = await fetch(url, { method: 'GET' });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = (await response.json()) as { models?: Array<{ name?: string }>; data?: Array<{ id?: string }> };
-        const names = provider === 'ollama'
-          ? (data.models ?? []).map((m) => m.name ?? '').filter(Boolean)
-          : (data.data ?? []).map((m) => m.id ?? '').filter(Boolean);
+        const names = await listLocalModels(provider, baseUrl);
         if (cancelled) return;
         setFetchedModels(names);
         // If the saved model is a preset that does not exist on this server, switch to an installed one.

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { useAiModelConfigStore, type AiModelConfig } from '@stores/useAiModelConfigStore';
+import { useAiModelConfigStore, type AiModelConfig, type AiProvider } from '@stores/useAiModelConfigStore';
 import { useNodeStore } from '@stores/useNodeStore';
 import { useEdgeStore } from '@stores/useEdgeStore';
 
@@ -246,6 +246,94 @@ interface AiApiResponse {
     message?: string;
   };
 }
+// ── Local-endpoint proxy routing ──
+// The browser cannot call a remote LAN LLM server directly (LM Studio does not send CORS headers by default),
+// so local-provider traffic is relayed through our own backend (/api/ai/chat, /api/ai/models). When no backend
+// is available (404 from an older build, or vite's 500 passthrough when it is down) we fall back to calling the
+// server directly — that path works with LM Studio "Allow cross-origin requests" enabled.
+
+/** Local providers routed through the backend relay. Cloud providers send CORS headers themselves and call directly. */
+const PROXY_PROVIDERS = ['ollama', 'lmStudio', 'llamaCpp', 'openaiCompatible'] as const;
+/** Thrown when our own /api/ai/* relay is unavailable — callers fall back to a direct call. */
+class ProxyUnavailableError extends Error {
+  constructor() {
+    super('AI proxy endpoint unavailable');
+    this.name = 'ProxyUnavailableError';
+  }
+}
+
+function isProxyResponse(response: Response): boolean {
+  // 404: older backend without the relay. 500: vite dev server passthrough when the backend is down.
+  return response.status !== 404 && response.status !== 500;
+}
+
+/** POST one chat completion through our own /api/ai/chat relay. Throws ProxyUnavailableError when no backend is present; Error (upstream message) on real failures. */
+async function postViaProxy(config: AiModelConfig, messages: AiApiMessage[]): Promise<Record<string, unknown>> {
+  let response: Response;
+  try {
+    response = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: config.provider,
+        baseUrl: config.baseUrl,
+        apiKey: config.apiKey || undefined,
+        model: config.defaultModel,
+        messages,
+        maxTokens: config.maxTokens,
+        temperature: config.temperature,
+        topP: config.topP,
+      }),
+    });
+  } catch {
+    throw new ProxyUnavailableError();
+  }
+  if (!isProxyResponse(response)) throw new ProxyUnavailableError();
+  const json = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error((json as AiApiResponse | null)?.error?.message ?? `API error: ${response.status}`);
+  }
+  return json as Record<string, unknown>;
+}
+
+/** Direct browser call to the LLM server (legacy path / cloud providers). */
+async function directFetchJson(url: string, headers: Record<string, string>, body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+  if (!response.ok) {
+    const errorData = (await response.json()) as AiApiResponse;
+    throw new Error(errorData.error?.message ?? `API error: ${response.status}`);
+  }
+  return (await response.json()) as Record<string, unknown>;
+}
+
+/**
+ * List models installed on a local endpoint. Prefers the backend relay (/api/ai/models) so remote LAN servers
+ * work without CORS; falls back to calling the server directly when no backend is available.
+ */
+export async function listLocalModels(provider: AiProvider, baseUrl: string): Promise<string[]> {
+  let response: Response | null = null;
+  try {
+    const query = `provider=${encodeURIComponent(provider)}&baseUrl=${encodeURIComponent(baseUrl.trim())}`;
+    response = await fetch(`/api/ai/models?${query}`, { method: 'GET' });
+  } catch {
+    // No backend — fall through to the direct call below.
+  }
+  if (response && isProxyResponse(response)) {
+    const json = await response.json().catch(() => null);
+    if (!response.ok) throw new Error((json as AiApiResponse | null)?.error?.message ?? `HTTP ${response.status}`);
+    return ((json as { models?: string[] } | null)?.models ?? []).filter(Boolean);
+  }
+
+  // Direct fallback (legacy behavior — works with LM Studio "Allow cross-origin requests" enabled).
+  const base = stripV1Suffix(baseUrl.trim());
+  const url = provider === 'ollama' ? `${base}/api/tags` : `${base}/v1/models`;
+  const direct = await fetch(url, { method: 'GET' });
+  if (!direct.ok) throw new Error(`HTTP ${direct.status}`);
+  const data = (await direct.json()) as { models?: Array<{ name?: string }>; data?: Array<{ id?: string }> };
+  return provider === 'ollama'
+    ? (data.models ?? []).map((m) => m.name ?? '').filter(Boolean)
+    : (data.data ?? []).map((m) => m.id ?? '').filter(Boolean);
+}
 
 export async function callAiApi(
   config: AiModelConfig,
@@ -303,18 +391,19 @@ export async function callAiApi(
     url = `${basePath}/chat/completions`;
   }
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const errorData = (await response.json()) as AiApiResponse;
-    throw new Error(errorData.error?.message ?? `API error: ${response.status}`);
+  // Local endpoints go through our own backend relay so remote LAN servers work without CORS;
+  // fall back to a direct browser call when no backend is available.
+  let data: Record<string, unknown>;
+  if ((PROXY_PROVIDERS as readonly string[]).includes(config.provider)) {
+    try {
+      data = await postViaProxy(config, messages);
+    } catch (error) {
+      if (!(error instanceof ProxyUnavailableError)) throw error;
+      data = await directFetchJson(url, headers, body);
+    }
+  } else {
+    data = await directFetchJson(url, headers, body);
   }
-
-  const data = (await response.json()) as Record<string, unknown>;
   console.log('AI API response keys:', Object.keys(data));
 
   // Extract response based on provider
@@ -381,6 +470,33 @@ export async function testAiConnection(config: AiModelConfig): Promise<{ success
   }
   if (!isLocalProvider && !config.apiKey) {
     return { success: false, message: 'Please enter an API key for this provider.' };
+  }
+  // Local endpoints go through our own backend relay so remote LAN servers work without CORS;
+  // fall back to a direct browser call when no backend is available.
+  if ((PROXY_PROVIDERS as readonly string[]).includes(config.provider)) {
+    let proxyResponse: Response | null = null;
+    try {
+      proxyResponse = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: config.provider,
+          baseUrl: config.baseUrl,
+          apiKey: config.apiKey || undefined,
+          model: config.defaultModel,
+          messages: [{ role: 'user', content: 'Hi' }],
+          maxTokens: 1,
+        }),
+      });
+    } catch {
+      // No backend — fall through to the direct call below.
+    }
+    if (proxyResponse && isProxyResponse(proxyResponse)) {
+      const json = await proxyResponse.json().catch(() => null);
+      return proxyResponse.ok
+        ? { success: true, message: 'Connection successful!' }
+        : { success: false, message: (json as AiApiResponse | null)?.error?.message ?? `API error: ${proxyResponse.status}` };
+    }
   }
 
   try {

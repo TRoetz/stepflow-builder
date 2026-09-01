@@ -4,21 +4,31 @@ import userEvent from '@testing-library/user-event';
 import { AiModelConfigModal } from '@components/AiModelConfigModal';
 import { useAiModelConfigStore } from '@stores/useAiModelConfigStore';
 
-// Minimal fetch response shape — the modal only reads .ok and .json()
+// Minimal fetch response shape — the modal only reads .ok/.status and .json()
 const jsonResponse = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
+const httpError = (status: number, body: unknown) => ({ ok: false, status, json: async () => body });
 
-function mockOllamaFetch(names: string[]) {
+/** Serves both the backend relay (/api/ai/models) and the direct endpoints. proxyAvailable=false simulates an older backend without the relay. */
+function mockOllamaFetch(names: string[], proxyAvailable = true) {
   return vi.fn(async (url: string | URL) => {
-    if (String(url).endsWith('/api/tags')) {
+    const u = String(url);
+    if (u.includes('/api/ai/models')) {
+      return proxyAvailable ? jsonResponse({ models: names }) : httpError(404, {});
+    }
+    if (u.endsWith('/api/tags')) {
       return jsonResponse({ models: names.map((name) => ({ name })) });
     }
     return jsonResponse({});
   });
 }
 
-function mockOpenAiCompatibleFetch(ids: string[]) {
+function mockOpenAiCompatibleFetch(ids: string[], proxyAvailable = true) {
   return vi.fn(async (url: string | URL) => {
-    if (String(url).endsWith('/v1/models')) {
+    const u = String(url);
+    if (u.includes('/api/ai/models')) {
+      return proxyAvailable ? jsonResponse({ models: ids }) : httpError(404, {});
+    }
+    if (u.endsWith('/v1/models')) {
       return jsonResponse({ data: ids.map((id) => ({ id })) });
     }
     return jsonResponse({});
@@ -104,6 +114,18 @@ describe('AiModelConfigModal', () => {
     );
     await waitFor(
       () => expect(useAiModelConfigStore.getState().defaultModel).toBe('qwen/qwen3-8b'),
+      { timeout: 3000 }
+    );
+  });
+
+  it('falls back to listing models directly when the backend relay is unavailable', async () => {
+    useAiModelConfigStore.setState({ provider: 'lmStudio', baseUrl: 'http://192.168.10.34:1234', defaultModel: '' });
+    vi.stubGlobal('fetch', mockOpenAiCompatibleFetch(['qwen/qwen3-8b'], false));
+
+    render(<AiModelConfigModal />);
+
+    await waitFor(
+      () => expect(screen.getByRole('option', { name: 'qwen/qwen3-8b' })).toBeInTheDocument(),
       { timeout: 3000 }
     );
   });
