@@ -232,10 +232,26 @@ namespace StepFunctionsApp.StepFunctions
             }
 
             var response = await client.SendAsync(request, ct);
-            response.EnsureSuccessStatusCode();
-            
-            var content = await response.Content.ReadAsStringAsync(ct);
-            try { return JToken.Parse(content); } catch { return new JObject { ["body"] = content }; }
+
+            // Opt-in envelope ({status, ok, body}): non-2xx responses become data for downstream Choice states instead of failing the run. Mirrors the UI simulated-runner contract.
+            var includeStatus = input is JObject incObj && incObj["includeStatus"]?.Value<bool>() == true;
+
+            if (!includeStatus)
+            {
+                response.EnsureSuccessStatusCode();
+                var content = await response.Content.ReadAsStringAsync(ct);
+                try { return JToken.Parse(content); } catch { return new JObject { ["body"] = content }; }
+            }
+
+            var text = await response.Content.ReadAsStringAsync(ct);
+            JToken parsedBody;
+            try { parsedBody = JToken.Parse(text); } catch { parsedBody = new JValue(text); }
+            return new JObject
+            {
+                ["status"] = (int)response.StatusCode,
+                ["ok"] = response.IsSuccessStatusCode,
+                ["body"] = parsedBody
+            };
         }
 
         private async Task<JToken> HandleRuleAsync(string resource, JToken input, CancellationToken ct)

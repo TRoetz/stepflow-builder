@@ -216,7 +216,7 @@ export const flowTemplates: FlowTemplate[] = [
         {
           schemaId: 'stepflow:api:http',
           label: 'Check Endpoint',
-          config: { method: 'GET', url: 'https://example.com/health', timeout: 5000 },
+          config: { method: 'GET', url: 'https://example.com/health', timeout: 5000, includeStatus: true },
         },
         {
           schemaId: 'stepflow:flow:choice',

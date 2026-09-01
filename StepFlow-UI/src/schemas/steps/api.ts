@@ -75,6 +75,13 @@ export const httpRequestSchema: StepSchema = {
       description: 'Request timeout',
     },
     {
+      id: 'includeStatus',
+      label: 'Include Status Envelope',
+      type: 'toggle',
+      default: false,
+      description: 'Wrap the response as {status, ok, body} and do not fail on non-2xx — for health checks that branch on the status code.',
+    },
+    {
       id: 'retryCount',
       label: 'Retry Count',
       type: 'number',

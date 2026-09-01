@@ -392,6 +392,8 @@ namespace StepFunctionsApp.StepFunctions
 
         private bool EvaluateChoiceRule(ChoiceRule rule, JToken input, string queryLanguage)
         {
+            if (!string.IsNullOrWhiteSpace(rule.Expression)) return IsTruthy(JsonataProcessor.Evaluate(rule.Expression, input));
+
             if (rule.And != null) return rule.And.All(r => EvaluateChoiceRule(r, input, queryLanguage));
             if (rule.Or != null) return rule.Or.Any(r => EvaluateChoiceRule(r, input, queryLanguage));
             if (rule.Not != null) return !EvaluateChoiceRule(rule.Not, input, queryLanguage);
@@ -427,6 +429,21 @@ namespace StepFunctionsApp.StepFunctions
             if (rule.StringEqualsPath != null) return value.ToString() == ResolvePath(input, rule.StringEqualsPath, queryLanguage)?.ToString();
 
             return false;
+        }
+
+        /// <summary>JSONata-style truthiness for choice expressions: booleans as-is, numbers non-zero, strings parsed when boolean-like else non-empty, objects/arrays by value presence.</summary>
+        private static bool IsTruthy(JToken? token)
+        {
+            if (token == null || token.Type is JTokenType.Null or JTokenType.Undefined) return false;
+            switch (token.Type)
+            {
+                case JTokenType.Boolean: return token.Value<bool>();
+                case JTokenType.Integer or JTokenType.Float: return token.Value<double>() != 0d;
+                case JTokenType.String:
+                    var s = token.Value<string>();
+                    return bool.TryParse(s, out var parsed) ? parsed : !string.IsNullOrEmpty(s);
+                default: return token.HasValues;
+            }
         }
 
         private async Task<JToken> ExecuteWaitState(StateDefinition state, JToken input, string queryLanguage, CancellationToken ct)

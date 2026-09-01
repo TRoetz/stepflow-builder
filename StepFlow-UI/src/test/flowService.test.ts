@@ -179,6 +179,32 @@ describe('FlowService', () => {
         states: { PassThrough: { type: 'Pass', comment: 'Placeholder iterator flow. Please select a valid target flow.' } },
       });
     });
+    it('exports a choice node as an ASL Choice state with expression, next and default', () => {
+      useNodeStore.getState().addNode('stepflow:terminal:start', { x: 0, y: 0 });
+      useNodeStore.getState().addNode('stepflow:api:http', { x: 0, y: 150 });
+      useNodeStore.getState().addNode('stepflow:flow:choice', { x: 0, y: 300 });
+      useNodeStore.getState().addNode('stepflow:transform:jsonata', { x: -200, y: 450 });
+      useNodeStore.getState().addNode('stepflow:transform:jsonata', { x: 200, y: 450 });
+      const [start, http, choice, ok, issue] = useNodeStore.getState().nodes;
+      http.data.configuration = { method: 'GET', url: 'https://example.com/health', includeStatus: true };
+      choice.data.configuration = { condition: '$.status < 400' };
+
+      const addEdge = useEdgeStore.getState().addEdge;
+      addEdge({ id: 'e1', source: start.id, target: http.id });
+      addEdge({ id: 'e2', source: http.id, target: choice.id });
+      addEdge({ id: 'e3', source: choice.id, target: ok.id, sourceHandle: 'output_true' });
+      addEdge({ id: 'e4', source: choice.id, target: issue.id, sourceHandle: 'output_false' });
+
+      const result = FlowService.exportFlow();
+      expect(result.states[choice.id]).toMatchObject({
+        type: 'Choice',
+        choices: [{ expression: '$.status < 400', next: ok.id }],
+        default: issue.id,
+      });
+      // includeStatus must reach the engine so live mode wraps {status, ok, body}.
+      expect(result.states[http.id]).toMatchObject({ resource: 'https://example.com/health' });
+      expect(result.states[http.id].parameters).toMatchObject({ __handler: 'http', method: 'GET', includeStatus: true });
+    });
   });
 
   describe('saveFlow / listFlows', () => {
@@ -326,6 +352,46 @@ describe('FlowService', () => {
       const nodes = useNodeStore.getState().nodes;
       // Start maps back to a plain pass (pre-existing limitation); end must be exact.
       expect(nodes.map((n) => n.data?.schemaId)).toEqual(['stepflow:utility:pass', 'stepflow:terminal:end']);
+    });
+    it('imports an ASL Choice state into a choice node with branch handles and condition', () => {
+      FlowService.importFlow({
+        startAt: 'Check',
+        states: {
+          Check: { type: 'Task', resource: 'https://example.com/health', parameters: { __handler: 'http', method: 'GET', includeStatus: true }, next: 'Healthy?' },
+          'Healthy?': { type: 'Choice', choices: [{ expression: '$.status < 400', next: 'ReportOK' }], default: 'ReportIssue' },
+          ReportOK: { type: 'Task', resource: 'transform://jsonata', parameters: { expression: '{ healthy: true, status: $.status }' } },
+          ReportIssue: { type: 'Task', resource: 'transform://jsonata', parameters: { expression: '{ healthy: false, status: $.status }' } },
+        },
+      });
+
+      const nodes = useNodeStore.getState().nodes;
+      expect(nodes).toHaveLength(4);
+      const choiceNode = nodes.find((n) => n.data?.schemaId === 'stepflow:flow:choice');
+      expect(choiceNode).toBeDefined();
+      expect(choiceNode!.data?.configuration).toMatchObject({ condition: '$.status < 400' });
+
+      const httpNode = nodes.find((n) => n.data?.schemaId === 'stepflow:api:http')!;
+      expect(httpNode.data?.configuration).toMatchObject({ method: 'GET', url: 'https://example.com/health', includeStatus: true });
+
+      const okNode = nodes.find((n) => n.data?.label === 'ReportOK')!;
+      const issueNode = nodes.find((n) => n.data?.label === 'ReportIssue')!;
+      const edges = useEdgeStore.getState().edges;
+      expect(edges.find((e) => e.source === choiceNode!.id && e.target === okNode.id)?.sourceHandle).toBe('output_true');
+      expect(edges.find((e) => e.source === choiceNode!.id && e.target === issueNode.id)?.sourceHandle).toBe('output_false');
+    });
+
+    it('synthesizes a JSONata condition for structured ASL choice rules on import', () => {
+      FlowService.importFlow({
+        startAt: 'Branch',
+        states: {
+          Branch: { type: 'Choice', choices: [{ Variable: '$.city', StringEquals: 'Wellington', next: 'A' }], default: 'B' },
+          A: { type: 'Succeed' },
+          B: { type: 'Succeed' },
+        },
+      });
+
+      const choiceNode = useNodeStore.getState().nodes.find((n) => n.data?.schemaId === 'stepflow:flow:choice');
+      expect(choiceNode!.data?.configuration).toMatchObject({ condition: '$.city = "Wellington"' });
     });
   });
 });

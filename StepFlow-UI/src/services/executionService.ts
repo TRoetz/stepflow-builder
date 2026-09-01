@@ -328,6 +328,11 @@ export const ExecutionService = {
         if (output && typeof output === 'object' && output.status === 'error') {
           throw new Error(output.message || 'AI step failed');
         }
+      } else if (node.type === 'stepflow:flow:choice' || node.type === 'stepflow:utility:choice') {
+        const config = node.data?.configuration || {};
+        const condition = String(config.condition ?? '');
+        if (!condition.trim()) throw new Error('Choice condition is required');
+        output = { matched: isTruthy(await jsonata(condition).evaluate(inputData ?? {})), input: inputData };
       } else {
         output = { status: 'success', message: 'Step tested successfully' };
       }
@@ -369,6 +374,8 @@ async function traverseNode(
   });
 
   let output: any = {};
+  // Choice nodes pick exactly one outgoing branch; undefined for non-choice nodes.
+  let choiceBranch: boolean | undefined;
 
   // Resolve {{variables}} in string configuration values using upstream outputs.
   const step = interpolateStepConfig(node, nodes, context);
@@ -400,7 +407,8 @@ async function traverseNode(
       }
       executionStore.setNodeLog(node.id, { nodeName: step.data?.label || 'Step', status: 'running', input: { url, method } });
       const response = await fetch(url, { method, headers, body });
-      // Mirror the C# engine: read text first, then try JSON; non-JSON bodies are wrapped.
+      // Mirror the C# engine exactly: opt-in envelope ({status, ok, body}) via includeStatus;
+      // otherwise non-2xx fails the run and the raw parsed body is the output.
       const text = await response.text();
       let parsed: unknown;
       try {
@@ -408,7 +416,13 @@ async function traverseNode(
       } catch {
         parsed = { body: text };
       }
-      output = { status: response.status, ok: response.ok, body: parsed };
+      if (config.includeStatus === true) {
+        output = { status: response.status, ok: response.ok, body: parsed };
+      } else if (!response.ok) {
+        throw new Error(`HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''} for ${method} ${url}`);
+      } else {
+        output = parsed;
+      }
     } else if (node.type === 'stepflow:data:exchange') {
       const config = step.data?.configuration || {};
       const profileId = String(config.profileId ?? '');
@@ -496,6 +510,14 @@ async function traverseNode(
       if (output && typeof output === 'object' && output.status === 'error') {
         throw new Error(output.message || 'AI step failed');
       }
+    } else if (node.type === 'stepflow:flow:choice' || node.type === 'stepflow:utility:choice') {
+      const config = step.data?.configuration || {};
+      const condition = String(config.condition ?? '');
+      if (!condition.trim()) throw new Error('Choice condition is required');
+      // Local evaluation via the jsonata npm package - mirrors the C# JsonataEngine.
+      choiceBranch = isTruthy(await jsonata(condition).evaluate(context.lastOutput ?? {}));
+      // ASL Choice states pass data through unchanged; only the branch changes.
+      output = context.lastOutput;
     } else {
       // Simulate processing delay for other nodes
       await sleep(delay);
@@ -519,7 +541,14 @@ async function traverseNode(
 
   // Find next nodes (outgoing edges)
   const nextEdges = edges.filter((e) => e.source === node.id);
-  for (const edge of nextEdges) {
+  // Choice states take exactly one branch: true handle/first edge when matched, else false handle/second.
+  let branchEdges = nextEdges;
+  if (choiceBranch !== undefined && nextEdges.length > 1) {
+    const wantedHandle = choiceBranch ? 'output_true' : 'output_false';
+    const fallbackIndex = choiceBranch ? 0 : 1;
+    branchEdges = [nextEdges.find((e) => e.sourceHandle === wantedHandle) ?? nextEdges[fallbackIndex]];
+  }
+  for (const edge of branchEdges) {
     const nextNode = nodes.find((n) => n.id === edge.target);
     if (nextNode) {
       await traverseNode(nextNode, nodes, edges, executionStore, visited, context, delay);
@@ -529,4 +558,18 @@ async function traverseNode(
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+/** JSONata-style truthiness mirroring the C# engine's IsTruthy for choice conditions. */
+function isTruthy(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const t = value.trim().toLowerCase();
+    if (t === 'true' || t === 'false') return t === 'true';
+    return value.length > 0;
+  }
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object') return Object.keys(value).length > 0;
+  return Boolean(value);
 }

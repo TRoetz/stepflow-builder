@@ -1,10 +1,10 @@
 {
-  "startAt": "e36f1a0d-194f-4e2f-b918-661079fd807c",
+  "startAt": "e8b41b74-699c-48a8-8d95-2ad520269533",
   "states": {
-    "e36f1a0d-194f-4e2f-b918-661079fd807c": {
+    "e8b41b74-699c-48a8-8d95-2ad520269533": {
       "type": "Pass",
       "resource": "utility://default",
-      "next": "9e30c2d8-15d6-4bb6-8f04-03b73a0323d7",
+      "next": "a8d71053-d2c7-4d09-b023-018d9c58c3d5",
       "parameters": {
         "description": ""
       },
@@ -14,10 +14,10 @@
         "start_output"
       ]
     },
-    "9e30c2d8-15d6-4bb6-8f04-03b73a0323d7": {
+    "a8d71053-d2c7-4d09-b023-018d9c58c3d5": {
       "type": "Task",
       "resource": "eav://customer_refund_request",
-      "next": "2b2edcf5-2b64-44e0-8728-4a9a61e22ece",
+      "next": "516c1a3a-d598-471a-83a3-2224b65c19ef",
       "parameters": {
         "operation": "read",
         "attributeFilter": "",
@@ -37,10 +37,10 @@
         "output_metadata"
       ]
     },
-    "2b2edcf5-2b64-44e0-8728-4a9a61e22ece": {
+    "516c1a3a-d598-471a-83a3-2224b65c19ef": {
       "type": "Task",
       "resource": "transform://jsonata",
-      "next": "4d4ad9f4-5185-432b-92bf-26c9894af331",
+      "next": "f540cb0e-1fda-4719-8ad5-7e21c6992027",
       "parameters": {
         "expression": "$map($, function($v) { return { \"amount\": $v.amount, \"reason\": $v.reason, \"customer_id\": $v.customer_id } })",
         "enableDebug": false,
@@ -57,7 +57,7 @@
         "output_error"
       ]
     },
-    "4d4ad9f4-5185-432b-92bf-26c9894af331": {
+    "f540cb0e-1fda-4719-8ad5-7e21c6992027": {
       "type": "Map",
       "itemsPath": "$",
       "maxConcurrency": 1,
@@ -121,12 +121,12 @@
           }
         }
       },
-      "next": "05725902-0043-4116-90d0-2d579345fbb4"
+      "next": "839f3ec0-1159-471d-9f3d-1870d973e5ad"
     },
-    "05725902-0043-4116-90d0-2d579345fbb4": {
+    "839f3ec0-1159-471d-9f3d-1870d973e5ad": {
       "type": "Task",
       "resource": "eav://refund_decision",
-      "next": "072a2a4f-ddce-46b5-80a6-b88ba6446739",
+      "next": "239fae4f-93bd-482e-b9bf-4ed6991356f4",
       "parameters": {
         "operation": "write",
         "attributeFilter": "",
@@ -147,7 +147,7 @@
         "output_metadata"
       ]
     },
-    "072a2a4f-ddce-46b5-80a6-b88ba6446739": {
+    "239fae4f-93bd-482e-b9bf-4ed6991356f4": {
       "type": "Pass",
       "end": true,
       "comment": "Marks the end of the workflow. Place one or more END states to define flow completion.",

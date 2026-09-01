@@ -26,6 +26,10 @@ export interface StateDefinition {
   maxConcurrency?: number;
   resultPath?: string;
   iterator?: StateMachineDefinition;
+  /** Choice state branches (ASL): either a JSONata `expression` or structured rule fields (Variable + operator). */
+  choices?: Array<Record<string, unknown> & { next?: string }>;
+  /** Fallback target for a Choice state. */
+  default?: string;
 }
 
 /**
@@ -108,6 +112,19 @@ export const FlowService = {
           resultPath: (config.resultPath as string) || undefined,
           comment: node.data?.description || undefined,
         };
+      } else if (aslType === 'Choice') {
+        const config = (node.data?.configuration || {}) as Record<string, unknown>;
+        // Branch edges by source handle; fall back to positional order (first edge = true branch).
+        const trueEdge = connectedEdges.find((e) => e.sourceHandle === 'output_true') ?? connectedEdges[0];
+        const falseEdge = connectedEdges.find((e) => e.sourceHandle === 'output_false') ?? connectedEdges[1];
+        states[node.id] = {
+          type: 'Choice',
+          choices: [{ expression: String(config.condition || ''), next: trueEdge?.target }],
+          default: falseEdge?.target,
+          comment: node.data?.description || undefined,
+          inputs: schema?.inputs.map((i) => i.id),
+          outputs: schema?.outputs.map((o) => o.id),
+        };
       } else {
         const config = (node.data?.configuration || {}) as Record<string, unknown>;
         const schemaId = node.data?.schemaId as string;
@@ -136,6 +153,7 @@ export const FlowService = {
           if (config.authentication === 'bearer' && config.authToken) {
             parameters.auth = { type: 'Bearer', token: String(config.authToken) };
           }
+          if (config.includeStatus === true) parameters.includeStatus = true;
         } else if (schemaId.startsWith('stepflow:ssh:')) {
           // Static command wins; otherwise pass through the upstream input text.
           const hasStaticCommand = typeof config.command === 'string' && config.command.trim().length > 0;
@@ -224,6 +242,7 @@ export const FlowService = {
 
       let startY = offset.y;
       const labelToId = new Map<string, string>();
+      const labelToSchema = new Map<string, string>();
 
       for (const nodeDef of data.nodes as Array<{ schemaId: string; label: string; config?: Record<string, unknown>; position?: { x: number; y: number } }>) {
         const position = nodeDef.position ?? { x: offset.x, y: startY };
@@ -233,6 +252,7 @@ export const FlowService = {
         const newNode = newNodes[newNodes.length - 1];
         if (newNode) {
           labelToId.set(nodeDef.label, newNode.id);
+          labelToSchema.set(nodeDef.label, nodeDef.schemaId);
 
           const updates: Record<string, unknown> = { label: nodeDef.label };
           if (nodeDef.config) {
@@ -244,16 +264,25 @@ export const FlowService = {
         startY += 150;
       }
 
+      // Choice nodes branch by handle: first outgoing edge = true, second = false (template edges are ordered).
+      const choiceEdgeIndex = new Map<string, number>();
       for (const edgeDef of data.edges as Array<{ source: string; target: string }>) {
         const sourceId = labelToId.get(edgeDef.source);
         const targetId = labelToId.get(edgeDef.target);
 
         if (sourceId && targetId) {
+          let sourceHandle: string | undefined;
+          if (labelToSchema.get(edgeDef.source) === 'stepflow:flow:choice') {
+            const idx = choiceEdgeIndex.get(sourceId) ?? 0;
+            choiceEdgeIndex.set(sourceId, idx + 1);
+            sourceHandle = idx === 0 ? 'output_true' : 'output_false';
+          }
           addEdge({
             id: `edge-${sourceId}-${targetId}`,
             source: sourceId,
             target: targetId,
             type: 'step-edge',
+            ...(sourceHandle ? { sourceHandle } : {}),
           });
         }
       }
@@ -312,20 +341,36 @@ export const FlowService = {
           }
         }
 
-        // 2. Handle Choice state choices
-        if (Array.isArray((state as any).choices)) {
-          for (const choice of (state as any).choices as any[]) {
-            if (choice.next && typeof choice.next === 'string') {
-              const targetUuid = stateKeyToNodeId.get(choice.next);
+        // 2. Handle Choice state choices (+ default fallback) with branch handles
+        if (Array.isArray(state.choices)) {
+          let choiceIdx = 0;
+          for (const choice of state.choices) {
+            const next = typeof choice.next === 'string' ? choice.next : undefined;
+            if (next) {
+              const targetUuid = stateKeyToNodeId.get(next);
               if (targetUuid) {
                 addEdge({
                   id: `edge-${sourceUuid}-${targetUuid}`,
                   source: sourceUuid,
                   target: targetUuid,
                   type: 'step-edge',
+                  ...(choiceIdx === 0 ? { sourceHandle: 'output_true' } : {}),
                 });
               }
             }
+            choiceIdx++;
+          }
+        }
+        if (typeof state.default === 'string') {
+          const targetUuid = stateKeyToNodeId.get(state.default);
+          if (targetUuid) {
+            addEdge({
+              id: `edge-${sourceUuid}-${targetUuid}`,
+              source: sourceUuid,
+              target: targetUuid,
+              type: 'step-edge',
+              sourceHandle: 'output_false',
+            });
           }
         }
       }
@@ -590,6 +635,7 @@ function resolveSchemaId(state: StateDefinition): string {
   const resource = state.resource || '';
   if (state.type === 'HumanTask' || resource.startsWith('human://')) return 'stepflow:human:task';
   if (state.type === 'FormCapture' || resource.startsWith('form://')) return 'stepflow:formcapture:capture';
+  if (state.type === 'Choice') return 'stepflow:flow:choice';
   if (resource.startsWith('ai://')) return 'stepflow:ai:decision';
   if (resource.startsWith('rule://')) return 'stepflow:rule:rule_engine';
   if (resource.startsWith('sql://')) return 'stepflow:data:sql';
@@ -646,6 +692,20 @@ function reconstructConfiguration(state: StateDefinition): Record<string, unknow
       resultPath: state.resultPath ?? '',
     };
   }
+  // Choice — restore the condition expression; synthesize JSONata for structured ASL rules.
+  if (state.type === 'Choice') {
+    const first = state.choices?.[0];
+    let condition = '';
+    if (first) {
+      if (typeof first.expression === 'string' && first.expression.trim()) {
+        condition = first.expression;
+      } else {
+        const { next: _next, ...ruleFields } = first as Record<string, unknown>;
+        condition = choiceRuleToJsonata(ruleFields) ?? '';
+      }
+    }
+    return { condition };
+  }
   // Data Exchange — profile id lives in the resource URI.
   if ((state.resource || '').startsWith('dataexchange://')) {
     const profileId = (state.resource as string).slice('dataexchange://'.length).replace(/\/+$/, '');
@@ -664,12 +724,47 @@ function reconstructConfiguration(state: StateDefinition): Record<string, unknow
       ...(body !== undefined ? { body } : {}),
       ...(headers ? { headers: JSON.stringify(headers, null, 2) } : {}),
       ...(auth?.token ? { authentication: auth.type === 'Basic' ? 'basic' : 'bearer', authToken: String(auth.token) } : {}),
+      ...(p.includeStatus === true ? { includeStatus: true } : {}),
     };
   }
   const params: Record<string, unknown> = { ...(state.parameters || {}) };
   // Template-resolution markers (e.g. "input_data.$") are engine-side wiring, not node config.
   for (const key of Object.keys(params)) if (key.endsWith('.$')) delete params[key];
   return params;
+}
+
+/** Synthesize an equivalent JSONata expression for a structured ASL choice rule (best-effort; null when the operator is unsupported). */
+function choiceRuleToJsonata(rule: Record<string, unknown>): string | null {
+  if (Array.isArray(rule.And)) {
+    const parts = rule.And.map((r) => choiceRuleToJsonata(r as Record<string, unknown>)).filter(Boolean);
+    return parts.length ? parts.map((p) => `(${p})`).join(' and ') : null;
+  }
+  if (Array.isArray(rule.Or)) {
+    const parts = rule.Or.map((r) => choiceRuleToJsonata(r as Record<string, unknown>)).filter(Boolean);
+    return parts.length ? parts.map((p) => `(${p})`).join(' or ') : null;
+  }
+  if (rule.Not && typeof rule.Not === 'object') {
+    const inner = choiceRuleToJsonata(rule.Not as Record<string, unknown>);
+    return inner ? `not (${inner})` : null;
+  }
+
+  const v = typeof rule.Variable === 'string' ? rule.Variable : '';
+  if (!v) return null;
+  switch (true) {
+    case rule.StringEquals != null: return `${v} = ${JSON.stringify(String(rule.StringEquals))}`;
+    case typeof rule.NumericEquals === 'number': return `${v} = ${rule.NumericEquals}`;
+    case typeof rule.BooleanEquals === 'boolean': return `${v} = ${rule.BooleanEquals}`;
+    case typeof rule.NumericGreaterThan === 'number': return `${v} > ${rule.NumericGreaterThan}`;
+    case typeof rule.NumericGreaterThanEquals === 'number': return `${v} >= ${rule.NumericGreaterThanEquals}`;
+    case typeof rule.NumericLessThan === 'number': return `${v} < ${rule.NumericLessThan}`;
+    case typeof rule.NumericLessThanEquals === 'number': return `${v} <= ${rule.NumericLessThanEquals}`;
+    case rule.IsPresent != null: return rule.IsPresent ? `exists(${v})` : `not exists(${v})`;
+    case rule.IsNull != null: return rule.IsNull ? `${v} = $null` : `${v} != $null`;
+    case rule.IsString != null: return `${rule.IsString ? '' : 'not '}type(${v}) = 'string'`;
+    case rule.IsNumeric != null: return `${rule.IsNumeric ? '' : 'not '}type(${v}) = 'number'`;
+    case rule.IsBoolean != null: return `${rule.IsBoolean ? '' : 'not '}type(${v}) = 'boolean'`;
+    default: return null; // timestamps, StringMatches regex, etc. — no JSONata equivalent generated
+  }
 }
 
 function loadSavedFlows(): Array<{ id: string; name: string; description?: string; createdAt: string; definition: StateMachineDefinition }> {

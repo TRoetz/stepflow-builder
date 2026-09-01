@@ -146,6 +146,10 @@ namespace StepFunctionsApp.StepFunctions
         [JsonProperty("Variable")]
         public string? Variable { get; set; }
 
+        /// <summary>Optional JSONata expression evaluated against the state input; a truthy result matches this choice. Takes precedence over the structured rules below.</summary>
+        [JsonProperty("Expression")]
+        public string? Expression { get; set; }
+
         [JsonProperty("Next")]
         public string? Next { get; set; }
 

@@ -1,10 +1,10 @@
 {
-  "startAt": "68a6b1ec-f3af-4bf6-9776-456678e9a986",
+  "startAt": "4551ab2d-ca18-4cdf-a54e-c7a7a9cbaa1d",
   "states": {
-    "68a6b1ec-f3af-4bf6-9776-456678e9a986": {
+    "4551ab2d-ca18-4cdf-a54e-c7a7a9cbaa1d": {
       "type": "Pass",
       "resource": "utility://default",
-      "next": "67372192-1b46-460a-bb77-5298ce875abd",
+      "next": "275e9e8a-8b08-4b6d-8a8f-db13d54b2edf",
       "parameters": {
         "description": ""
       },
@@ -14,10 +14,10 @@
         "start_output"
       ]
     },
-    "67372192-1b46-460a-bb77-5298ce875abd": {
+    "275e9e8a-8b08-4b6d-8a8f-db13d54b2edf": {
       "type": "Task",
       "resource": "transform://jsonata",
-      "next": "608f8cf6-a560-435a-87bc-8511eb14a02f",
+      "next": "b9feb75a-f130-499b-a1b2-f482e0656bc4",
       "parameters": {
         "expression": "{ \"rows\": [ { \"OrderId\": 'ORD-001', \"CustomerCode\": 'CUST-A', \"Amount\": 250 }, { \"OrderId\": 'ORD-002', \"CustomerCode\": 'CUST-B', \"Amount\": 80.5 }, { \"OrderId\": 'ORD-003', \"CustomerCode\": 'CUST-C', \"Amount\": -15 }, { \"OrderId\": 'ORD-004', \"CustomerCode\": 'CUST-A', \"Amount\": 120 } ] }",
         "enableDebug": false,
@@ -34,10 +34,10 @@
         "output_error"
       ]
     },
-    "608f8cf6-a560-435a-87bc-8511eb14a02f": {
+    "b9feb75a-f130-499b-a1b2-f482e0656bc4": {
       "type": "Task",
       "resource": "dataexchange://demo-order-validation",
-      "next": "c64a092f-5dc9-4a27-9db0-5e9be7cd73ab",
+      "next": "be3b05c5-690c-45d1-b5c6-ac152261f475",
       "comment": "Run a registered Data Exchange profile pipeline (validation, calculation, mapping) over the upstream rows.",
       "inputs": [
         "input_data"
@@ -46,10 +46,10 @@
         "result"
       ]
     },
-    "c64a092f-5dc9-4a27-9db0-5e9be7cd73ab": {
+    "be3b05c5-690c-45d1-b5c6-ac152261f475": {
       "type": "Task",
       "resource": "transform://jsonata",
-      "next": "79aa9276-2d77-4cbf-9ccf-124c678139c5",
+      "next": "86d56660-f95d-4bc9-ac3c-856f09201d3d",
       "parameters": {
         "expression": "{ \"processed\": $.rowsOut, \"rejected\": $.rejectedCount, \"firstRowTotalWithTax\": $.enrichedRows[0].TotalWithTax }",
         "enableDebug": false,
@@ -66,7 +66,7 @@
         "output_error"
       ]
     },
-    "79aa9276-2d77-4cbf-9ccf-124c678139c5": {
+    "86d56660-f95d-4bc9-ac3c-856f09201d3d": {
       "type": "Pass",
       "end": true,
       "comment": "Marks the end of the workflow. Place one or more END states to define flow completion.",
