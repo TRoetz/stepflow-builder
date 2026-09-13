@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Xunit;
 using Newtonsoft.Json.Linq;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using StepFunctionsApp.StepFunctions;
 using StepFunctionsApp.DataExchange;
@@ -67,6 +68,7 @@ namespace StepFunctionsApp.Tests
                 new SshCommandService(new SshHostStore(), _aiDecision), // blank inventory; AI mocked via factory
                 new FetchRemoteFilesService(new SshHostStore()), // blank inventory — fetch:// validation only
                 eavRows,
+                new ConfigurationBuilder().Build(), // no Callback section → default localhost:5001
                 invokerLogger
             );
 

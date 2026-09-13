@@ -22,6 +22,8 @@ namespace StepFunctionsApp.StepFunctions
         private readonly ConcurrentDictionary<string, StoredStateMachine> _stateMachines = new();
         private readonly ConcurrentDictionary<string, Execution> _executions = new();
         private readonly ConcurrentQueue<PendingExecution> _pendingQueue = new();
+        // Per-execution cancellation: DELETE/STOP cancels the in-flight run; host shutdown links into every token.
+        private readonly ConcurrentDictionary<string, CancellationTokenSource> _executionCts = new();
         private readonly StepFunctionInterpreter _interpreter;
         private readonly BpmnConverter _bpmnConverter;
         private readonly ILogger<StepFunctionService> _logger;
@@ -86,6 +88,14 @@ namespace StepFunctionsApp.StepFunctions
 
         public List<StoredStateMachine> ListStateMachines() =>
             _stateMachines.Values.DistinctBy(s => s.Id).ToList();
+        public bool UnregisterStateMachine(string idOrName)
+        {
+            if (!_stateMachines.TryGetValue(idOrName, out var sm)) return false;
+            _stateMachines.TryRemove(sm.Id, out _);
+            _stateMachines.TryRemove(sm.Name, out _);
+            _logger.LogInformation("Unregistered state machine: {Name} (Id: {Id})", sm.Name, sm.Id);
+            return true;
+        }
 
         public Execution StartExecution(string idOrName, JToken? input)
         {
@@ -129,14 +139,23 @@ namespace StepFunctionsApp.StepFunctions
             {
                 if (_pendingQueue.TryDequeue(out var pending))
                 {
+                    // Deleted while queued: drop the work and its cancellation slot.
+                    if (!_executions.ContainsKey(pending.Execution.ExecutionId))
+                    {
+                        _executionCts.TryRemove(pending.Execution.ExecutionId, out _);
+                        continue;
+                    }
+                    var cts = _executionCts.GetOrAdd(pending.Execution.ExecutionId, _ => CancellationTokenSource.CreateLinkedTokenSource(stoppingToken));
                     _ = Task.Run(async () =>
                     {
                         try
                         {
+                            // The per-execution token (linked to host shutdown) reaches the interpreter; on caller
+                            // cancellation RunCoreAsync returns with Status unchanged and no terminal checkpoint.
                             var result = pending.Resume
-                                ? await _interpreter.ResumeAsync(pending.Definition, pending.Execution, stoppingToken, SaveCheckpointAsync)
-                                : await _interpreter.ExecuteAsync(pending.Definition, pending.Execution.Input, pending.Execution.ExecutionId, pending.Execution.StateMachineId, stoppingToken, SaveCheckpointAsync);
-                            var tracked = _executions[pending.Execution.ExecutionId];
+                                ? await _interpreter.ResumeAsync(pending.Definition, pending.Execution, cts.Token, SaveCheckpointAsync)
+                                : await _interpreter.ExecuteAsync(pending.Definition, pending.Execution.Input, pending.Execution.ExecutionId, pending.Execution.StateMachineId, cts.Token, SaveCheckpointAsync);
+                            if (!_executions.TryGetValue(pending.Execution.ExecutionId, out var tracked)) return; // deleted while running
                             tracked.Status = result.Status;
                             tracked.Output = result.Output;
                             tracked.CompletedAt = result.CompletedAt;
@@ -145,16 +164,36 @@ namespace StepFunctionsApp.StepFunctions
                             tracked.History = result.History;
                             tracked.CurrentState = result.CurrentState;
                             tracked.PendingInput = result.PendingInput;
+                            // User-initiated stop (not host shutdown): persist a terminal Aborted so recovery
+                            // won't resurrect the run after a restart.
+                            if (!stoppingToken.IsCancellationRequested && cts.IsCancellationRequested && tracked.Status == ExecutionStatus.Running)
+                            {
+                                tracked.Status = ExecutionStatus.Aborted;
+                                tracked.ErrorMessage = "Stopped by user";
+                                await SaveCheckpointAsync(tracked);
+                            }
                         }
                         catch (Exception ex)
                         {
                             _logger.LogError(ex, "Background execution failed");
+                        }
+                        finally
+                        {
+                            // Release the cancellation slot once the run is terminal or gone.
+                            var stillTracked = _executions.TryGetValue(pending.Execution.ExecutionId, out var e);
+                            if (!stillTracked ||
+                                e.Status is ExecutionStatus.Succeeded or ExecutionStatus.Failed or ExecutionStatus.TimedOut or ExecutionStatus.Aborted)
+                                _executionCts.TryRemove(pending.Execution.ExecutionId, out _);
+                            // DELETE raced with the post-cancel Aborted save above: remove any checkpoint it resurrected.
+                            if (cts.IsCancellationRequested && !stoppingToken.IsCancellationRequested && !stillTracked && _stateStore != null)
+                                await _stateStore.DeleteAsync(pending.Execution.ExecutionId, CancellationToken.None);
                         }
                     }, stoppingToken);
                 }
                 else await Task.Delay(100, stoppingToken);
             }
         }
+
 
         public void ReloadFromDirectory(string directory)
         {
@@ -299,12 +338,38 @@ namespace StepFunctionsApp.StepFunctions
         public async Task<IReadOnlyList<FlowStateSummary>> ListStoredExecutionsAsync(CancellationToken ct = default) =>
             _stateStore == null ? Array.Empty<FlowStateSummary>() : await _stateStore.ListAsync(ct);
 
-        /// <summary>Drop a stored execution's checkpoint (e.g. after the user discards it).</summary>
+        /// <summary>Cancel any in-flight run, then drop the stored checkpoint (e.g. after the user discards it).</summary>
         public async Task DeleteStoredExecutionAsync(string executionId, CancellationToken ct = default)
         {
             if (_stateStore == null) return;
+            _executionCts.TryRemove(executionId, out var cts);
+            cts?.Cancel();
             await _stateStore.DeleteAsync(executionId, ct);
             _executions.TryRemove(executionId, out _);
+        }
+
+        /// <summary>
+        /// Cancel running executions by execution id or state machine id/name. Returns the number of runs canceled.
+        /// Canceled runs finish as Aborted and are persisted so recovery won't resurrect them after a restart.
+        /// </summary>
+        public int StopExecution(string idOrName)
+        {
+            if (_executionCts.TryGetValue(idOrName, out var direct))
+            {
+                direct.Cancel();
+                return 1;
+            }
+            var count = 0;
+            foreach (var kv in _executionCts)
+            {
+                if (!_executions.TryGetValue(kv.Key, out var e)) continue;
+                if (e.StateMachineId == idOrName || string.Equals(e.StateMachineName, idOrName, StringComparison.OrdinalIgnoreCase))
+                {
+                    kv.Value.Cancel();
+                    count++;
+                }
+            }
+            return count;
         }
 
         /// <summary>

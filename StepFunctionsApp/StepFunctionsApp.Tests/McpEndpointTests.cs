@@ -121,15 +121,31 @@ namespace StepFunctionsApp.Tests
         }
 
         [Fact]
-        public async Task ToolsList_ExposesFourFlowToolsWithSchemas()
+        public async Task ToolsList_ExposesAllToolGroupsWithSchemas()
         {
             var rpc = await RpcAsync("tools/list");
             var tools = (JArray)rpc["result"]!["tools"]!;
 
+            // Six tool groups: flows, data-exchange profiles, metadata (attribute domains + schema definitions),
+            // EAV rows/registry, dynamic APIs, solution packages. Names are snake_case of the method names.
+            var expected = new[]
+            {
+                "delete_attribute_domain", "delete_data_exchange_profile", "delete_dynamic_api",
+                "delete_eav_entity", "delete_eav_row", "delete_schema_definition",
+                "export_solution",
+                "get_attribute_domain", "get_data_exchange_profile", "get_dynamic_api",
+                "get_flow", "get_schema_definition",
+                "import_solution",
+                "list_attribute_domains", "list_data_exchange_profiles", "list_dynamic_apis",
+                "list_eav_domains", "list_eav_entities", "list_flows", "list_schema_definitions",
+                "patch_eav_row", "read_eav_rows", "register_eav_entity",
+                "run_data_exchange_profile", "run_flow",
+                "save_attribute_domain", "save_data_exchange_profile", "save_dynamic_api",
+                "save_flow", "save_schema_definition",
+                "update_eav_row", "write_eav_row"
+            };
             var names = tools.Select(t => (string)t["name"]!).ToList();
-            Assert.Equal(
-                new[] { "get_flow", "list_flows", "run_flow", "save_flow" },
-                names.OrderBy(n => n));
+            Assert.Equal(expected, names.OrderBy(n => n));
 
             foreach (var tool in tools)
             {

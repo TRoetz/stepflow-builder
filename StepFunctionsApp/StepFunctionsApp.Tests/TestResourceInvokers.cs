@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using StepFunctionsApp.DataExchange;
@@ -50,6 +51,7 @@ namespace StepFunctionsApp.Tests
                 new SshCommandService(new SshHostStore(), aiDecision), // blank inventory; AI mocked via factory
                 new FetchRemoteFilesService(new SshHostStore()), // blank inventory — fetch:// validation only
                 eavRows,
+                new ConfigurationBuilder().Build(), // no Callback section → default localhost:5001
                 NullLogger<CompositeResourceInvoker>.Instance);
 
             return (invoker, eavRows, eavDir);

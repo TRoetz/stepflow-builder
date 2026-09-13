@@ -1,0 +1,408 @@
+{
+ "startAt": "fa18ca66-c876-45a6-83e8-141ed041ad5a",
+ "states": {
+  "fa18ca66-c876-45a6-83e8-141ed041ad5a": {
+   "type": "FormCapture",
+   "next": "c4cb690b-a06d-40b8-9352-2f7c8fcbb600",
+   "task": {
+    "formId": "council-fees",
+    "title": "",
+    "assignee": ""
+   },
+   "completion": {
+    "Type": "form"
+   },
+   "resultPath": "$.capturedFee"
+  },
+  "c4cb690b-a06d-40b8-9352-2f7c8fcbb600": {
+   "type": "Choice",
+   "choices": [
+    {
+     "expression": "($.capturedFee.feeType = 'dog-license') or ($.capturedFee.feeType = 'liquor-license') or ($.capturedFee.feeType = 'food-premises-license')",
+     "next": "1efbc67b-1bec-4ff2-9cd3-5af312a6f0e1"
+    }
+   ],
+   "default": "c95880ad-8c78-4c51-854a-dae527b54fa3",
+   "inputs": [
+    "input_data"
+   ],
+   "outputs": [
+    "output_true",
+    "output_false"
+   ]
+  },
+  "1efbc67b-1bec-4ff2-9cd3-5af312a6f0e1": {
+   "type": "Task",
+   "resource": "transform://jsonata",
+   "next": "fc32f8e0-27b6-466e-9e54-4a16b5bd0224",
+   "parameters": {
+    "expression": "{ 'capturedFee': $.capturedFee, 'query': \"INSERT INTO fees (fee_type, year, amount, status, submitted_by, created_at_utc) VALUES ('\" & $.capturedFee.feeType & \"', \" & $.capturedFee.year & \", \" & $.capturedFee.amount & \", 'pending', 'council-office-3', strftime('%Y-%m-%d %H:%M:%S','now'))\" }",
+    "input_data.$": "$"
+   },
+   "inputs": [
+    "input_data",
+    "input_context"
+   ],
+   "outputs": [
+    "output_result",
+    "output_error"
+   ]
+  },
+  "fc32f8e0-27b6-466e-9e54-4a16b5bd0224": {
+   "type": "Task",
+   "resource": "sql://fees",
+   "next": "877e540e-8cab-4a41-b90a-3cb6357f60fe",
+   "parameters": {
+    "query.$": "$.query"
+   },
+   "inputs": [
+    "input_parameters",
+    "input_dataset"
+   ],
+   "outputs": [
+    "output_rows",
+    "output_count"
+   ],
+   "resultPath": "$.insertResult"
+  },
+  "877e540e-8cab-4a41-b90a-3cb6357f60fe": {
+   "type": "Task",
+   "resource": "transform://jsonata",
+   "next": "b92d99a5-6594-477e-8895-abc402571833",
+   "parameters": {
+    "expression": "{ 'capturedFee': $.capturedFee, 'query': \"SELECT fee_type, display_name, department FROM fee_types WHERE fee_type = '\" & $.capturedFee.feeType & \"'\" }",
+    "input_data.$": "$"
+   },
+   "inputs": [
+    "input_data",
+    "input_context"
+   ],
+   "outputs": [
+    "output_result",
+    "output_error"
+   ]
+  },
+  "b92d99a5-6594-477e-8895-abc402571833": {
+   "type": "Task",
+   "resource": "sql://fees",
+   "next": "25bd8077-867a-48eb-ac4e-f45cf8656119",
+   "parameters": {
+    "query.$": "$.query"
+   },
+   "inputs": [
+    "input_parameters",
+    "input_dataset"
+   ],
+   "outputs": [
+    "output_rows",
+    "output_count"
+   ],
+   "resultPath": "$.departmentLookup"
+  },
+  "25bd8077-867a-48eb-ac4e-f45cf8656119": {
+   "type": "Choice",
+   "choices": [
+    {
+     "expression": "$.capturedFee.feeType = 'dog-license'",
+     "next": "e690eaa5-31f0-4cb0-bb8e-bf815fdc147e"
+    },
+    {
+     "expression": "$.capturedFee.feeType = 'liquor-license'",
+     "next": "0b2bcd8a-5c3f-42c3-b68e-82b757a7c6f1"
+    },
+    {
+     "expression": "$.capturedFee.feeType = 'food-premises-license'",
+     "next": "8ae38f7c-af84-4458-8380-febf7d9cc2b1"
+    }
+   ],
+   "default": "c95880ad-8c78-4c51-854a-dae527b54fa3",
+   "inputs": [
+    "input_data"
+   ],
+   "outputs": [
+    "output_true",
+    "output_false"
+   ]
+  },
+  "e690eaa5-31f0-4cb0-bb8e-bf815fdc147e": {
+   "type": "HumanTask",
+   "next": "e0f85864-d202-48a1-a67e-c1f48238b546",
+   "task": {
+    "title": "Council approval: Dog License Fee",
+    "assignee": "Animal Control"
+   },
+   "completion": {
+    "Type": "api"
+   },
+   "resultPath": "$.approval"
+  },
+  "0b2bcd8a-5c3f-42c3-b68e-82b757a7c6f1": {
+   "type": "HumanTask",
+   "next": "e0f85864-d202-48a1-a67e-c1f48238b546",
+   "task": {
+    "title": "Council approval: Liquor License Fee",
+    "assignee": "Liquor Licensing Board"
+   },
+   "completion": {
+    "Type": "api"
+   },
+   "resultPath": "$.approval"
+  },
+  "8ae38f7c-af84-4458-8380-febf7d9cc2b1": {
+   "type": "HumanTask",
+   "next": "e0f85864-d202-48a1-a67e-c1f48238b546",
+   "task": {
+    "title": "Council approval: Food Premises License Fee",
+    "assignee": "Food Safety Department"
+   },
+   "completion": {
+    "Type": "api"
+   },
+   "resultPath": "$.approval"
+  },
+  "e0f85864-d202-48a1-a67e-c1f48238b546": {
+   "type": "Choice",
+   "choices": [
+    {
+     "expression": "$.approval.approved = true and $.approval.completedBy = $.departmentLookup.rows[0].department",
+     "next": "411b13ed-29d2-48cc-a55f-c6983b81a44f"
+    }
+   ],
+   "default": "389c9ae7-8d74-4ffd-8ea3-9619fb22bec9",
+   "inputs": [
+    "input_data"
+   ],
+   "outputs": [
+    "output_true",
+    "output_false"
+   ]
+  },
+  "411b13ed-29d2-48cc-a55f-c6983b81a44f": {
+   "type": "Task",
+   "resource": "transform://jsonata",
+   "next": "3b12167b-a335-4ede-91b8-32302ea0475d",
+   "parameters": {
+    "expression": "{ 'capturedFee': $.capturedFee, 'query': \"UPDATE fees SET status = 'approved', approved_by = '\" & ($.approval.completedBy ? $.approval.completedBy : 'unknown') & \"', approved_at_utc = strftime('%Y-%m-%d %H:%M:%S','now') WHERE fee_type = '\" & $.capturedFee.feeType & \"' AND year = \" & $.capturedFee.year }",
+    "input_data.$": "$"
+   },
+   "inputs": [
+    "input_data",
+    "input_context"
+   ],
+   "outputs": [
+    "output_result",
+    "output_error"
+   ]
+  },
+  "389c9ae7-8d74-4ffd-8ea3-9619fb22bec9": {
+   "type": "Task",
+   "resource": "transform://jsonata",
+   "next": "e3bddfb5-e790-41d5-97c2-395a1268a167",
+   "parameters": {
+    "expression": "{ 'capturedFee': $.capturedFee, 'query': \"UPDATE fees SET status = 'rejected', approved_by = '\" & ($.approval.completedBy ? $.approval.completedBy : 'unknown') & \"', approved_at_utc = strftime('%Y-%m-%d %H:%M:%S','now') WHERE fee_type = '\" & $.capturedFee.feeType & \"' AND year = \" & $.capturedFee.year }",
+    "input_data.$": "$"
+   },
+   "inputs": [
+    "input_data",
+    "input_context"
+   ],
+   "outputs": [
+    "output_result",
+    "output_error"
+   ]
+  },
+  "3b12167b-a335-4ede-91b8-32302ea0475d": {
+   "type": "Task",
+   "resource": "sql://fees",
+   "next": "44842847-8c47-4633-9cbb-d465aaf81dae",
+   "parameters": {
+    "query.$": "$.query"
+   },
+   "inputs": [
+    "input_parameters",
+    "input_dataset"
+   ],
+   "outputs": [
+    "output_rows",
+    "output_count"
+   ],
+   "resultPath": "$.updateResult"
+  },
+  "e3bddfb5-e790-41d5-97c2-395a1268a167": {
+   "type": "Task",
+   "resource": "sql://fees",
+   "next": "9b63eb40-5800-4b74-ae29-6be6cf4607cf",
+   "parameters": {
+    "query.$": "$.query"
+   },
+   "inputs": [
+    "input_parameters",
+    "input_dataset"
+   ],
+   "outputs": [
+    "output_rows",
+    "output_count"
+   ],
+   "resultPath": "$.updateResult"
+  },
+  "9b63eb40-5800-4b74-ae29-6be6cf4607cf": {
+   "type": "Pass",
+   "resource": "utility://pass",
+   "parameters": {},
+   "inputs": [
+    "input_data"
+   ],
+   "outputs": [
+    "output_data"
+   ],
+   "end": true
+  },
+  "c95880ad-8c78-4c51-854a-dae527b54fa3": {
+   "type": "Fail",
+   "error": "UnknownFeeType",
+   "cause": "feeType must be one of: dog-license, liquor-license, food-premises-license"
+  },
+  "44842847-8c47-4633-9cbb-d465aaf81dae": {
+   "type": "Pass",
+   "resource": "utility://pass",
+   "parameters": {},
+   "inputs": [
+    "input_data"
+   ],
+   "outputs": [
+    "output_data"
+   ],
+   "end": true
+  }
+ },
+ "canvas": {
+  "nodes": {
+   "fa18ca66-c876-45a6-83e8-141ed041ad5a": {
+    "label": "CaptureFee",
+    "position": {
+     "x": -800,
+     "y": -672
+    }
+   },
+   "c4cb690b-a06d-40b8-9352-2f7c8fcbb600": {
+    "label": "ValidateFeeType",
+    "position": {
+     "x": 64,
+     "y": -576
+    }
+   },
+   "1efbc67b-1bec-4ff2-9cd3-5af312a6f0e1": {
+    "label": "BuildInsert",
+    "position": {
+     "x": 384,
+     "y": -304
+    }
+   },
+   "fc32f8e0-27b6-466e-9e54-4a16b5bd0224": {
+    "label": "StoreFeePending",
+    "position": {
+     "x": 1392,
+     "y": 112
+    }
+   },
+   "877e540e-8cab-4a41-b90a-3cb6357f60fe": {
+    "label": "BuildLookup",
+    "position": {
+     "x": 2240,
+     "y": 416
+    }
+   },
+   "b92d99a5-6594-477e-8895-abc402571833": {
+    "label": "LookupDepartment",
+    "position": {
+     "x": 3104,
+     "y": 752
+    }
+   },
+   "25bd8077-867a-48eb-ac4e-f45cf8656119": {
+    "label": "RouteByType",
+    "position": {
+     "x": 3696,
+     "y": 192
+    }
+   },
+   "e690eaa5-31f0-4cb0-bb8e-bf815fdc147e": {
+    "label": "ApproveDogLicense",
+    "position": {
+     "x": 4368,
+     "y": 736
+    }
+   },
+   "0b2bcd8a-5c3f-42c3-b68e-82b757a7c6f1": {
+    "label": "ApproveLiquorLicense",
+    "position": {
+     "x": 4368,
+     "y": 64
+    }
+   },
+   "8ae38f7c-af84-4458-8380-febf7d9cc2b1": {
+    "label": "ApproveFoodPremises",
+    "position": {
+     "x": 4336,
+     "y": -192
+    }
+   },
+   "e0f85864-d202-48a1-a67e-c1f48238b546": {
+    "label": "ValidateApprover",
+    "position": {
+     "x": 5248,
+     "y": 192
+    }
+   },
+   "411b13ed-29d2-48cc-a55f-c6983b81a44f": {
+    "label": "BuildUpdateApproved",
+    "position": {
+     "x": 5648,
+     "y": -32
+    }
+   },
+   "389c9ae7-8d74-4ffd-8ea3-9619fb22bec9": {
+    "label": "BuildUpdateRejected",
+    "position": {
+     "x": 5632,
+     "y": 288
+    }
+   },
+   "3b12167b-a335-4ede-91b8-32302ea0475d": {
+    "label": "MarkApproved",
+    "position": {
+     "x": 8544,
+     "y": 336
+    }
+   },
+   "e3bddfb5-e790-41d5-97c2-395a1268a167": {
+    "label": "MarkRejected",
+    "position": {
+     "x": 8544,
+     "y": 768
+    }
+   },
+   "9b63eb40-5800-4b74-ae29-6be6cf4607cf": {
+    "label": "RejectFee",
+    "position": {
+     "x": 9632,
+     "y": 736
+    }
+   },
+   "c95880ad-8c78-4c51-854a-dae527b54fa3": {
+    "label": "UnknownFeeType",
+    "position": {
+     "x": 4000,
+     "y": -448
+    }
+   },
+   "44842847-8c47-4633-9cbb-d465aaf81dae": {
+    "label": "Done",
+    "position": {
+     "x": 9632,
+     "y": 576
+    }
+   }
+  }
+ }
+}

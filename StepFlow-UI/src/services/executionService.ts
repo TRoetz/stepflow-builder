@@ -161,6 +161,11 @@ async function executeAiStep(node: StepNode, nodeConfig: Record<string, unknown>
     : { GeneratedText: 'Simulated AI text output for testing. In production this would be actual AI-generated content.', metadata: { provider: 'simulated', service: service || 'unknown', timestamp: new Date().toISOString() } };
 }
 
+// ── Stop support ──
+// Controller for the in-flight live-backend request. Abort propagates to Kestrel
+// (HttpContext.RequestAborted) and onward into the engine's linked CancellationToken.
+let liveAbort: AbortController | null = null;
+
 export const ExecutionService = {
   /**
    * Start flow execution.
@@ -178,15 +183,16 @@ export const ExecutionService = {
     }
 
     if (executionStore.executionMode === 'backend') {
+      const controller = new AbortController();
+      liveAbort = controller;
       try {
-        console.log('[Backend Execution] Exporting and compiling flow...');
         const definition = FlowService.exportFlow();
         const currentFlowName = (window as any).__flowName || 'Current Flow';
 
-        console.log('[Backend Execution] Registering flow with backend...', currentFlowName);
         const registerRes = await fetch('/api/state-machines', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
           body: JSON.stringify({
             name: currentFlowName,
             description: 'Dynamically registered from stepflow builder',
@@ -202,12 +208,11 @@ export const ExecutionService = {
 
         const registeredFlow = await registerRes.json();
         const flowId = registeredFlow.id;
-        console.log('[Backend Execution] Flow registered successfully. ID:', flowId);
 
-        console.log('[Backend Execution] Initiating live synchronous execution on .NET engine...');
         const executeRes = await fetch(`/api/flows/execute-sync/${flowId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
           body: JSON.stringify({}),
         });
 
@@ -217,7 +222,6 @@ export const ExecutionService = {
         }
 
         const result = await executeRes.json();
-        console.log('[Backend Execution] Live execution result:', result);
 
         if (result.status === 'Failed') {
           throw new Error(result.errorMessage || 'Execution failed on .NET engine');
@@ -227,6 +231,13 @@ export const ExecutionService = {
 
         useExecutionStore.setState({ status: 'completed', endTime: Date.now() });
       } catch (error) {
+        liveAbort = null;
+        if (controller.signal.aborted) {
+          // Stop button aborted the request; the .NET engine observed the linked
+          // CancellationToken and halted the run. Not a failure.
+          showToast({ type: 'info', message: 'Backend execution stopped.' });
+          return;
+        }
         console.error('[Backend Execution] Error during live backend execution:', error);
         executionStore.setNodeFailed('canvas', String(error));
         
@@ -243,8 +254,14 @@ export const ExecutionService = {
       const visited = new Set<string>();
       const context: ExecutionContext = { lastOutput: {}, nodeOutputs: {} };
       await traverseNode(startNode, nodes, edges, executionStore, visited, context);
-      useExecutionStore.setState({ status: 'completed', endTime: Date.now() });
+      if (!useExecutionStore.getState().stopRequested) {
+        useExecutionStore.setState({ status: 'completed', endTime: Date.now() });
+      }
     } catch (error) {
+      if (useExecutionStore.getState().stopRequested) {
+        showToast({ type: 'info', message: 'Execution stopped.' });
+        return;
+      }
       executionStore.setNodeFailed(startNode.id, String(error));
     }
   },
@@ -253,7 +270,19 @@ export const ExecutionService = {
    * Stop execution.
    */
   async stopExecution(): Promise<void> {
+    // Live run: abort the in-flight request, which cancels the .NET engine's
+    // linked CancellationToken. Simulation: the stopRequested flag makes
+    // traverseNode halt before the next step.
+    if (liveAbort) {
+      const controller = liveAbort;
+      liveAbort = null;
+      controller.abort();
+    }
+    const wasRunning = useExecutionStore.getState().status === 'running';
     useExecutionStore.getState().stopExecution();
+    if (wasRunning && useExecutionStore.getState().executionMode === 'simulated') {
+      showToast({ type: 'info', message: 'Stopping after current step…' });
+    }
   },
 
   /**
@@ -364,6 +393,7 @@ async function traverseNode(
   delay: number = 300
 ): Promise<void> {
   if (visited.has(node.id)) return;
+  if (useExecutionStore.getState().stopRequested) throw new Error('Execution stopped.');
   visited.add(node.id);
 
   executionStore.setNodeRunning(node.id);
@@ -549,6 +579,7 @@ async function traverseNode(
     branchEdges = [nextEdges.find((e) => e.sourceHandle === wantedHandle) ?? nextEdges[fallbackIndex]];
   }
   for (const edge of branchEdges) {
+    if (useExecutionStore.getState().stopRequested) throw new Error('Execution stopped.');
     const nextNode = nodes.find((n) => n.id === edge.target);
     if (nextNode) {
       await traverseNode(nextNode, nodes, edges, executionStore, visited, context, delay);

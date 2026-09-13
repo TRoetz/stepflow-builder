@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import ELK from 'elkjs';
 import { useNodeStore, StepNode } from '@stores/useNodeStore';
+import { useUndoRedoStore } from '@stores/useUndoRedoStore';
 
 /**
  * Hook for auto-layout using ELKJS (same as chaiNNer).
@@ -62,6 +63,8 @@ export function useAutoLayout() {
         return node;
       });
 
+      // Snapshot the old arrangement so Undo brings it back.
+      useUndoRedoStore.getState().pushSnapshot();
       useNodeStore.setState({ nodes: updatedNodes });
     } catch (error) {
       console.error('Auto-layout failed:', error);

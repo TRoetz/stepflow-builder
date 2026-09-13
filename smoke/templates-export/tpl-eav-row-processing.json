@@ -1,10 +1,10 @@
 {
-  "startAt": "ecd3e548-379e-4e5c-be53-10a95ee84ef4",
+  "startAt": "11098422-a219-4b6d-b388-73a1eb3a4407",
   "states": {
-    "ecd3e548-379e-4e5c-be53-10a95ee84ef4": {
+    "11098422-a219-4b6d-b388-73a1eb3a4407": {
       "type": "Pass",
       "resource": "utility://default",
-      "next": "5585d210-99f8-4be8-a026-92db16a5e838",
+      "next": "bab1af7f-bbf5-4254-a462-6b1569e6b07a",
       "parameters": {
         "description": ""
       },
@@ -14,10 +14,10 @@
         "start_output"
       ]
     },
-    "5585d210-99f8-4be8-a026-92db16a5e838": {
+    "bab1af7f-bbf5-4254-a462-6b1569e6b07a": {
       "type": "Task",
       "resource": "sql://<your-connection-string>",
-      "next": "d55446d5-a9e6-4a03-9e86-a3c8d4ae3d55",
+      "next": "7023d822-cd51-4d30-89e2-fd1bab50a673",
       "parameters": {
         "query": "SELECT * FROM your_table",
         "outputColumns": "",
@@ -36,7 +36,7 @@
         "output_count"
       ]
     },
-    "d55446d5-a9e6-4a03-9e86-a3c8d4ae3d55": {
+    "7023d822-cd51-4d30-89e2-fd1bab50a673": {
       "type": "Map",
       "itemsPath": "$.rows",
       "maxConcurrency": 1,
@@ -114,14 +114,53 @@
             ],
             "outputs": []
           }
+        },
+        "canvas": {
+          "nodes": {
+            "Iteration Start": {
+              "label": "Iteration Start",
+              "position": {
+                "x": 0,
+                "y": 180
+              }
+            },
+            "Read Row": {
+              "label": "Read Row",
+              "position": {
+                "x": 280,
+                "y": 180
+              }
+            },
+            "Generate Text": {
+              "label": "Generate Text",
+              "position": {
+                "x": 560,
+                "y": 180
+              }
+            },
+            "Decide": {
+              "label": "Decide",
+              "position": {
+                "x": 840,
+                "y": 180
+              }
+            },
+            "Iteration End": {
+              "label": "Iteration End",
+              "position": {
+                "x": 1120,
+                "y": 180
+              }
+            }
+          }
         }
       },
-      "next": "7f0dd42b-a1b8-4082-b35f-f81b163ef707"
+      "next": "54cc7fb0-dc29-416d-b575-03ec15677a6f"
     },
-    "7f0dd42b-a1b8-4082-b35f-f81b163ef707": {
+    "54cc7fb0-dc29-416d-b575-03ec15677a6f": {
       "type": "Task",
       "resource": "rule://first_match",
-      "next": "8e8e6bd4-b6b8-40d0-a138-9135f61e3aa3",
+      "next": "19f9a9a0-036a-45f5-8f5a-69dd825ad6ff",
       "parameters": {
         "ruleSet": "[\n  {\n    \"name\": \"approved\",\n    \"expression\": \"$.score >= 90 || $.decision == \\\"ok\\\"\",\n    \"outcome\": \"approved\"\n  },\n  {\n    \"name\": \"fallback\",\n    \"expression\": \"true\",\n    \"outcome\": \"manual_review\"\n  }\n]",
         "evaluationMode": "first_match",
@@ -139,10 +178,10 @@
         "output_matched"
       ]
     },
-    "8e8e6bd4-b6b8-40d0-a138-9135f61e3aa3": {
+    "19f9a9a0-036a-45f5-8f5a-69dd825ad6ff": {
       "type": "Task",
       "resource": "transform://javascript",
-      "next": "f04fb4ad-2f31-4528-9298-751715c00c5f",
+      "next": "d9494866-a03f-4232-8240-21156e0a9ef2",
       "parameters": {
         "language": "javascript",
         "script": "// Write the classified rows to an output file (placeholder — adjust path/format).\nconst fs = require(\"fs\");\nfs.writeFileSync(\"output_rows.json\", JSON.stringify(context.input.rows ?? context.input, null, 2));\nreturn context.input;",
@@ -161,7 +200,7 @@
         "output_error"
       ]
     },
-    "f04fb4ad-2f31-4528-9298-751715c00c5f": {
+    "d9494866-a03f-4232-8240-21156e0a9ef2": {
       "type": "Pass",
       "end": true,
       "comment": "Marks the end of the workflow. Place one or more END states to define flow completion.",
@@ -169,6 +208,52 @@
         "end_input"
       ],
       "outputs": []
+    }
+  },
+  "canvas": {
+    "nodes": {
+      "11098422-a219-4b6d-b388-73a1eb3a4407": {
+        "label": "Start",
+        "position": {
+          "x": 0,
+          "y": 180
+        }
+      },
+      "bab1af7f-bbf5-4254-a462-6b1569e6b07a": {
+        "label": "Query Rows",
+        "position": {
+          "x": 280,
+          "y": 180
+        }
+      },
+      "7023d822-cd51-4d30-89e2-fd1bab50a673": {
+        "label": "Process Each Row",
+        "position": {
+          "x": 560,
+          "y": 180
+        }
+      },
+      "54cc7fb0-dc29-416d-b575-03ec15677a6f": {
+        "label": "Classify Result",
+        "position": {
+          "x": 840,
+          "y": 180
+        }
+      },
+      "19f9a9a0-036a-45f5-8f5a-69dd825ad6ff": {
+        "label": "Write Output File",
+        "position": {
+          "x": 1120,
+          "y": 180
+        }
+      },
+      "d9494866-a03f-4232-8240-21156e0a9ef2": {
+        "label": "End",
+        "position": {
+          "x": 1400,
+          "y": 180
+        }
+      }
     }
   }
 }

@@ -82,8 +82,9 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
         }
         const selectedId = useNodeStore.getState().selectedNodeId;
         if (selectedId) {
-          // Remove connected edges
-          useEdgeStore.getState().removeEdgesByNodeId(selectedId);
+          // removeNode snapshots for undo and already cascades removal of
+          // every edge touching the node — deleting edges beforehand here
+          // would make them unrecoverable.
           useNodeStore.getState().removeNode(selectedId);
         }
         return;

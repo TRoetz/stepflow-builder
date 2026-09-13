@@ -1,4 +1,4 @@
-import { CheckCircle2, AlertCircle, X } from 'lucide-react';
+import { CheckCircle2, AlertCircle, X, Info } from 'lucide-react';
 import { useToastStore } from '@stores/useToastStore';
 
 /** Renders the global toast queue (bottom-right). Pair with `showToast()`. */
@@ -15,13 +15,17 @@ export function ToastStack() {
           key={t.id}
           role="status"
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-xl border text-xs font-medium backdrop-blur-md transition-all duration-300 ${
-            t.type === 'success'
-              ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-200'
-              : 'bg-red-950/90 border-red-500/40 text-red-200'
+              t.type === 'success'
+                ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-200'
+                : t.type === 'info'
+                  ? 'bg-sky-950/90 border-sky-500/40 text-sky-200'
+                  : 'bg-red-950/90 border-red-500/40 text-red-200'
           }`}
         >
           {t.type === 'success' ? (
             <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+          ) : t.type === 'info' ? (
+            <Info className="w-4 h-4 shrink-0 text-sky-400" />
           ) : (
             <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
           )}

@@ -5,6 +5,8 @@
 // Node paths are "org/project/sub" (forward slashes) — identical to the on-disk layout.
 // ============================================================================
 
+import type { CanvasMetadata } from './flowService';
+
 export interface AccessEntry {
   principal: string;
   role: string; // viewer | editor | admin | owner
@@ -148,7 +150,7 @@ export class WorkspaceService {
   /** Saves a flow to a sub-project. Payload mirrors POST /api/flows. Returns { id, created }. */
   static async saveFlow(
     subProjectPath: string,
-    payload: { name: string; description?: string; id?: string; startAt?: string; states: Record<string, unknown> }
+    payload: { name: string; description?: string; id?: string; startAt?: string; states: Record<string, unknown>; canvas?: CanvasMetadata }
   ): Promise<{ id: string; created: boolean }> {
     const res = await fetch(WorkspaceService.flowsUrl(subProjectPath), {
       method: 'POST',

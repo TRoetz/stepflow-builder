@@ -1,0 +1,6 @@
+{
+  "name": "Council Fees Read",
+  "description": "Read all council fees from SQLite, optionally filtered by fee type.",
+  "createdAt": "2026-09-12T00:00:00Z",
+  "updatedAt": "2026-09-12T00:00:00Z"
+}

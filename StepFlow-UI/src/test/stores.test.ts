@@ -213,6 +213,8 @@ describe('Execution Store', () => {
 describe('Undo/Redo Store', () => {
   beforeEach(() => {
     useUndoRedoStore.getState().clearHistory();
+    useNodeStore.setState({ nodes: [], selectedNodeId: null });
+    useEdgeStore.setState({ edges: [], selectedEdgeId: null });
   });
 
   it('should start with empty history', () => {
@@ -220,33 +222,86 @@ describe('Undo/Redo Store', () => {
     expect(useUndoRedoStore.getState().canRedo).toBe(false);
   });
 
-  it('should push state', () => {
-    useUndoRedoStore.getState().pushState([], []);
-    useUndoRedoStore.getState().pushState([], []);
-    expect(useUndoRedoStore.getState().canUndo).toBe(true);
+  it('undo() does nothing when history is empty', () => {
+    useUndoRedoStore.getState().undo();
+    expect(useUndoRedoStore.getState().canUndo).toBe(false);
+    expect(useUndoRedoStore.getState().canRedo).toBe(false);
   });
 
-  it('should undo', () => {
-    useUndoRedoStore.getState().pushState([], []);
-    useUndoRedoStore.getState().pushState([], []);
+  it('undo() restores the canvas from before a node was added', () => {
+    useNodeStore.getState().addNode('stepflow:utility:pass', { x: 0, y: 0 });
+    expect(useNodeStore.getState().nodes).toHaveLength(1);
+    expect(useUndoRedoStore.getState().canUndo).toBe(true);
+
     useUndoRedoStore.getState().undo();
+    expect(useNodeStore.getState().nodes).toHaveLength(0);
     expect(useUndoRedoStore.getState().canRedo).toBe(true);
   });
 
-  it('should redo', () => {
-    useUndoRedoStore.getState().pushState([], []);
-    useUndoRedoStore.getState().pushState([], []);
+  it('undo() brings back a removed node together with its cascaded edges', () => {
+    const a = useNodeStore.getState().addNode('stepflow:utility:pass', { x: 0, y: 0 })!;
+    const b = useNodeStore.getState().addNode('stepflow:utility:pass', { x: 100, y: 0 })!;
+    useEdgeStore.getState().addEdge({ id: 'e-ab', source: a.id, target: b.id });
+    useUndoRedoStore.getState().clearHistory();
+
+    useNodeStore.getState().removeNode(a.id);
+    expect(useNodeStore.getState().nodes).toHaveLength(1);
+    expect(useEdgeStore.getState().edges).toHaveLength(0);
+
     useUndoRedoStore.getState().undo();
+    expect(useNodeStore.getState().nodes).toHaveLength(2);
+    expect(useEdgeStore.getState().edges).toHaveLength(1);
+  });
+
+  it('redo() re-applies an undone removal', () => {
+    const a = useNodeStore.getState().addNode('stepflow:utility:pass', { x: 0, y: 0 })!;
+    useUndoRedoStore.getState().clearHistory();
+
+    useNodeStore.getState().removeNode(a.id);
+    useUndoRedoStore.getState().undo();
+    expect(useNodeStore.getState().nodes).toHaveLength(1);
+
     useUndoRedoStore.getState().redo();
+    expect(useNodeStore.getState().nodes).toHaveLength(0);
     expect(useUndoRedoStore.getState().canUndo).toBe(true);
   });
 
-  it('should clear history', () => {
-    useUndoRedoStore.getState().pushState([], []);
-    useUndoRedoStore.getState().pushState([], []);
+  it('a new action clears the redo branch', () => {
+    const a = useNodeStore.getState().addNode('stepflow:utility:pass', { x: 0, y: 0 })!;
     useUndoRedoStore.getState().clearHistory();
-    expect(useUndoRedoStore.getState().canUndo).toBe(false);
+    useNodeStore.getState().removeNode(a.id);
+    useUndoRedoStore.getState().undo();
+    expect(useUndoRedoStore.getState().canRedo).toBe(true);
+
+    useEdgeStore.getState().addEdge({ id: 'e-x', source: 'a', target: 'b' });
     expect(useUndoRedoStore.getState().canRedo).toBe(false);
+  });
+
+  it('snapshots are deep copies: mutating a live node cannot rewrite history', () => {
+    const node = useNodeStore.getState().addNode('stepflow:utility:pass', { x: 0, y: 0 })!;
+    useUndoRedoStore.getState().clearHistory();
+    useUndoRedoStore.getState().pushSnapshot();
+    const serialized = JSON.stringify(useUndoRedoStore.getState().undoStack);
+    expect(useUndoRedoStore.getState().undoStack[0].nodes).toHaveLength(1);
+
+    // Write straight through to the live node object — history must not see it.
+    node.data.description = 'aliasing attempt';
+    expect(JSON.stringify(useUndoRedoStore.getState().undoStack)).toBe(serialized);
+  });
+
+  it('consecutive edits to one field undo as a single step', () => {
+    const node = useNodeStore.getState().addNode('stepflow:utility:pass', { x: 0, y: 0 })!;
+    const originalDescription = node.data.description;
+    useUndoRedoStore.getState().clearHistory();
+
+    // Three rapid keystrokes into the same field — should collapse.
+    useNodeStore.getState().updateNodeData(node.id, { description: 'a' });
+    useNodeStore.getState().updateNodeData(node.id, { description: 'ab' });
+    useNodeStore.getState().updateNodeData(node.id, { description: 'abc' });
+    expect(useUndoRedoStore.getState().undoStack).toHaveLength(1);
+
+    useUndoRedoStore.getState().undo();
+    expect(useNodeStore.getState().nodes[0].data.description).toBe(originalDescription);
   });
 });
 

@@ -51,12 +51,39 @@ Client configuration (Claude Desktop / VS Code Copilot / any MCP client):
 | `get_flow` | `idOrName` (string) | `{ id, name, description, createdAt, updatedAt, definition }`; `definition` is the full camelCase ASL (`startAt`, `states`) — re-importable into the React canvas unchanged |
 | `save_flow` | `name` (string), `statesJson` (JSON **string** of the states object), `startAt?` (defaults to first key), `description?` | `{ id, name, updatedAt }`. **Upsert by name**: saving again with the same name replaces the definition. Validates that `statesJson` parses, is non-empty, and that `startAt` names an existing state; dangling `next`/choice targets surface as errors at run time |
 | `run_flow` | `idOrName` (string), `inputJson?` (JSON object string, default `{}`) | Synchronous execution: `{ executionId, status, output, errorCode, errorMessage, history: [{ type, state, data }] }` |
+| `list_data_exchange_profiles` | — | Array of `{ id, name, subProjectPath, stageCount }` for every profile on disk (§6) |
+| `get_data_exchange_profile` | `idOrName` (string) | Full profile JSON in camelCase; fetch before modifying an existing profile |
+| `save_data_exchange_profile` | `profileJson` (JSON **string** of the full profile), `subProjectPath?` (e.g. `'org/project/sub'`) | Upsert by the name inside the JSON; returns `{ id }`. Omitting `subProjectPath` leaves it unassigned at the workspace root |
+| `delete_data_exchange_profile` | `idOrName` (string) | `{ deleted: true\|false }` |
+| `run_data_exchange_profile` | `idOrName` (string), `inputJson?` (JSON object string with inline rows, e.g. `'{"rows":[{...}]}'`) | Synchronous execution result (`success`, `rowsIn`, `rowsOut`, …); omitting input uses the profile's configured data source |
+| `list_attribute_domains` | — | Array of `{ name, version, description, attributeCount, schemaDefinition }` for every entity contract |
+| `get_attribute_domain` | `name` (string) | Full domain JSON in camelCase including attributes and linked schema definition |
+| `save_attribute_domain` | `domainJson` (JSON **string** of the full domain), `schemaName?`, `schemaVersion?` (defaults to latest saved version of `schemaName`) | Upsert by the name inside the JSON; returns `{ name }`. Links the domain to a saved schema definition |
+| `delete_attribute_domain` | `name` (string) | `{ deleted: true\|false }` |
+| `list_schema_definitions` | — | One row per saved version: `{ name, version, description }` |
+| `get_schema_definition` | `name` (string), `version?` (omit for the latest saved version) | Full schema JSON in camelCase including its Definition body |
+| `save_schema_definition` | `schemaJson` (JSON **string** of the full definition, name + version inside) | Upsert by name+version; returns `{ name, version }` |
+| `delete_schema_definition` | `name` (string), `version` (string — both required) | Deletes one saved version: `{ deleted: true\|false }` |
+| `list_eav_domains` | — | Array of domains with row counts and flags for registry entity contract / attribute domain |
+| `read_eav_rows` | `domain` (string), `limit?` (default 100) | Rows in append order: `{ rowKeyId, entityId, entityType, sourceTaskId, capturedAtUtc, values }` — the flow-side read of persisted EAV data (§4 scheme 14) |
+| `write_eav_row` | `domain`, `valuesJson` (JSON object string), `entityId?`, `entityType?`, `sourceTaskId?` | Appends a row; returns `{ rowKeyId }` |
+| `update_eav_row` | `domain`, `rowKeyId`, `valuesJson` | Whole-object replacement of the row's values: `{ updated: true\|false }` |
+| `patch_eav_row` | `domain`, `rowKeyId`, `patchJson` (only the keys to add/overwrite) | Partial merge into an existing row: `{ patched: true\|false }` |
+| `delete_eav_row` | `domain`, `rowKeyId` | `{ deleted: true\|false }` |
+| `list_eav_entities` | — | Every registry entity contract with full attribute definitions (`attributeName`, `dataType`, `isRequired`, `defaultValue`, `jsonPathMapping`) |
+| `register_eav_entity` | `entityJson` (JSON **string** of the full entity contract) | Upsert by name inside the JSON; returns `{ name }` |
+| `delete_eav_entity` | `name` (string) | Removes an entity contract from the registry: `{ deleted: true\|false }` |
+| `list_dynamic_apis` | `nodePathPrefix?` (e.g. `'org/project'`) | Array of `{ id, name, nodePath, basePath, handler summary, published/active flags }`; omit prefix for all APIs |
+| `get_dynamic_api` | `id` (string) | Full definition JSON in camelCase including all operations; fetch before modifying an existing API |
+| `save_dynamic_api` | `definitionJson` (JSON **string** of the full definition, name inside) | Upsert by name inside the JSON; returns `{ id, created }` |
+| `delete_dynamic_api` | `id` (string) | `{ deleted: true\|false }` |
 
 Conventions that matter when calling these tools:
 
 - **Errors are JSON, not exceptions**: every tool returns `{ "error": "…" }` on failure (unknown flow, bad JSON, unknown `startAt`). Read the message and fix the input.
 - All ten state types (§3) — including `HumanTask` and `FormCapture` — work in MCP-saved definitions. A `run_flow` that hits a pending one returns **status `Suspended`**; complete it via §5 (or the form-capture routes, §8) to resume it (the engine auto-resumes suspended executions on app restart).
 - Definitions round-trip with the React UI: camelCase keys, dictionary keys (state names) keep their original casing.
+- **Registry flows are in-memory only** — `save_flow` and `POST /api/flows` register into memory and vanish on restart; seeded `Flows/*.json` load at startup, and workspace sub-project saves (§7) persist to disk under `<sub>/flows/{flowId}/`. To make a flow durable across restarts, save it via the sub-project route.
 
 Manual call without an MCP client:
 
@@ -135,8 +162,8 @@ Built-in error codes and semantics: UserManual §7.
 | 10 | `dataexchange://` | `dataexchange://<profileId>` | Runs a DataExchange profile pipeline end-to-end (§6) |
 | 11 | `ssh://` | `ssh://<hostName>` | Curated host inventory (`ssh_hosts.json`) + AI safety check on the command (`"override": true` in input bypasses it); output `{ host, command, exitCode, stdout, stderr, durationMs }`; `timeoutSeconds` default 30 (values below 1 are reset to 30) |
 | 12 | `fetch://` | `fetch://<hostName>?proto=scp\|sftp\|ftp\|xcopy` | Remote file fetch with wildcards (SCP: none); input `sourcePath`, `destDir`, `timeoutSeconds` (default 120) |
-| 13 | `sql://` | `sql://<connectionString>` | Local SQLite file only (absolute/CWD-relative path, `file:` URI, or `Data Source=<path>`); remote connection strings fail with an explicit error. Input `{ query }` required; SELECT/WITH → `{ rows: [...], count }`, any other statement → `{ changes: n }`. No `@param` binding or `{{node.field}}` interpolation (UI-only) — wire dynamic values upstream via JSONata/`.$` |
-| 14 | `eav://` | `eav://<entityType>` | CRUD on the file-based EAV row store (`eav-data/{domain}.json`). Input `{ operation?, values?, rowKeyId? }`: `read` (default) → bare JArray of rows in append order; `write` (explicit `values`, or upstream output via `"values.$": "$"`) → `{ count: n }`; `update`/`patch` (need `rowKeyId`) → `{ updated|patched: true }`; `delete` → `{ removed: true }` |
+| 13 | `sql://` | `sql://<connectionString>` | Local SQLite file only (absolute/CWD-relative path, `file:` URI, or `Data Source=<path>`); remote connection strings fail with an explicit error. **Logical names**: if the argument is not an existing file it is looked up in appsettings `SqlDataSources` (`"fees": "fees.db"`) — env vars `%VAR%`/`${VAR}` expand, so each environment binds its own path while flows stay portable (see §12). Input `{ query }` required; SELECT/WITH → `{ rows: [...], count }`, any other statement → `{ changes: n }`. No `@param` binding or `{{node.field}}` interpolation (UI-only) — wire dynamic values upstream via JSONata/`.$` |
+| 14 | `eav://` | `eav://<entityType>` | CRUD on the file-based EAV row store (`eav-data/{domain}.json`). Input `{ operation?, values?, rowKeyId? }`: `read` (default) → bare JArray of rows in append order; `write` (explicit `values`, or upstream output via `"values.$": "$"`) → `{ count: n }`; `update`/`patch` (need `rowKeyId`) → `{ updated\|patched: true }`; `delete` → `{ removed: true }` |
 
 ## 5. Human tasks
 
@@ -184,7 +211,8 @@ Flows and DataExchange profiles are organized on disk in a three-level tree — 
 | GET | `/api/flows/executions` / `GET /api/flows/executions/{id}` (alias `/api/execution/{id}`) | List stored executions / get one execution's status+output |
 | POST | `/api/flows/executions/{id}/resume` | Resume a suspended/recovered execution |
 | DELETE | `/api/flows/executions/{id}` | Delete an execution checkpoint |
-| POST | `/api/state-machines/{id}/stop` | Stop an execution |
+| DELETE | `/api/flows/{id}` (alias `/api/state-machines/{id}`) | Unregister a flow from the in-memory registry; 404 when unknown. In-flight executions keep their captured definition and continue running; durable recovery re-registers the flow while execution records exist (§2 caveat) |
+| POST | `/api/flows/executions/{id}/stop` (alias `/api/state-machines/{id}/stop`) | Stop a running execution by id; it reaches Aborted ("Stopped by user") |
 | GET | `/api/human-tasks`, `GET /api/human-tasks/{id}`, `POST /api/human-tasks/{id}/complete` | Human task discovery & completion (§5) |
 | GET | `/api/form-captures/{taskId}` | FormCapture definition + bound attribute contract for a suspended form task (§5) |
 | POST | `/api/form-captures/{taskId}/submit` | Submit the filled form — validates/coerces values, persists an EAV row, resumes the execution (§5) |
@@ -216,3 +244,13 @@ Flows and DataExchange profiles are organized on disk in a three-level tree — 
 3. **Save flows by stable name**; re-saving replaces the definition (upsert). Keep a copy of the previous `get_flow` output before replacing anything in production use.
 4. **Scenario flows that call `/api/fake/*`** require the fake test host on port 5095 to be running alongside the main app (§1).
 5. **Never put credentials in flow JSON.** SSH hosts come from the curated `ssh_hosts.json` inventory; HTTP auth tokens are configured per-resource, not embedded in state names or comments.
+
+## 12. Solution packaging (export/import)
+
+Deploy a whole solution — flows + forms + attribute domains + schema definitions + dynamic APIs + SQLite migrations — between environments as one portable JSON package (`"format": "stepflow-solution"`, v1).
+
+- **Export**: MCP `export_solution(nodePath?, seedTables?, name?, version?)` or `GET /api/solutions/export?nodePath=...&seedTables=a,b`. Collects every flow in the node, the FormCapture forms they reference (with their attribute domains + pinned schema definitions), all dynamic APIs and data-exchange profiles filed under the node, and — for each distinct `sql://<name>` used by those flows — the live database's DDL (`CREATE TABLE`/`INDEX`, idempotent) plus optional seed-table row dumps as `INSERT OR IGNORE`. The package is a single JSON file — zip it (with docs/test data if you like) and ship it; import reads the JSON inside.
+- **Import**: MCP `import_solution(packageJson, targetNodePath?)` or `POST /api/solutions/import`. Upserts flows (by name), schema definitions, domains, forms and APIs in dependency order, then runs the datasource migrations against the path bound for that logical name. Re-import is idempotent.
+- **Environment binding**: each environment's appsettings maps logical names to local paths — `"SqlDataSources": { "fees": "C:/prod/data/fees.db" }` (env-var expansion supported). Flows reference `sql://fees`, never a machine-specific path. Literal file paths in flows still work and take precedence when the file exists.
+- **Test→prod procedure**: export from test → review/diff the package JSON → set prod's `SqlDataSources` binding → import on prod → re-run the smoke suite against prod URLs as the acceptance gate (see `smoke/prod_deploy_check.py`).
+- v1 limits: node-level flow selection only (all flows in the node are exported); same-named flows in different nodes collide (flow names are global); API bearer tokens travel inside the package — treat packages as sensitive.

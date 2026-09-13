@@ -11,6 +11,7 @@ using StepFunctionsApp.DynamicApi;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using StepFunctionsApp.DataExchange;
 using StepFunctionsApp.Workspace;
@@ -50,13 +51,13 @@ public class Startup
 
         // Register EAV Registry Service
         var eavRegistry = new EavRegistryService();
-        eavRegistry.Initialize("eav_registry.json");
+        eavRegistry.Initialize(_config["Eav:RegistryPath"] ?? "eav_registry.json");
         services.AddSingleton(eavRegistry);
         // Rule-addressable EAV entities = registry ∪ attribute domains (domain store wins on name collision).
         services.AddSingleton<IEavEntityProvider, CompositeEavEntityProvider>();
         // Register SSH host inventory (curated remote hosts for ssh:// resources)
         var sshHostStore = new SshHostStore();
-        sshHostStore.Initialize("ssh_hosts.json");
+        sshHostStore.Initialize(_config["Ssh:HostsFile"] ?? "ssh_hosts.json");
         services.AddSingleton(sshHostStore);
 
         // Data Exchange subsystem - customer file -> internal schema pipeline (profiles + executor)
@@ -88,6 +89,8 @@ public class Startup
         services.AddSingleton<SshCommandService>();
         services.AddSingleton<FetchRemoteFilesService>();
         services.AddSingleton<IResourceInvoker, CompositeResourceInvoker>();
+        // Solution packaging (export/import portable application packages — test -> prod deploy path).
+        services.AddSingleton<Solutions.SolutionService>();
         services.AddSingleton<StepFunctionInterpreter>();
         services.AddSingleton<BpmnConverter>();
 
@@ -170,13 +173,18 @@ public class Startup
         });
         // Captured form rows stay file-based (eav-data/) per the ask — mirrors the EAV registry registration above.
         var eavRowStore = new EavRowStore();
-        eavRowStore.Initialize("eav-data");
+        eavRowStore.Initialize(_config["Eav:DataDirectory"] ?? "eav-data");
         services.AddSingleton(eavRowStore);
 
         // MCP (Model Context Protocol) endpoint for AI harnesses — see Mcp/FlowTools.cs.
         services.AddMcpServer()
             .WithHttpTransport()
-            .WithTools<StepFunctionsApp.Mcp.FlowTools>();
+            .WithTools<StepFunctionsApp.Mcp.FlowTools>()
+            .WithTools<StepFunctionsApp.Mcp.DataExchangeTools>()
+            .WithTools<StepFunctionsApp.Mcp.MetaDataTools>()
+            .WithTools<StepFunctionsApp.Mcp.EavTools>()
+            .WithTools<StepFunctionsApp.Mcp.DynamicApiTools>()
+            .WithTools<StepFunctionsApp.Mcp.SolutionTools>();
     }
     public void Configure(IApplicationBuilder app, IHostEnvironment env)
     {
@@ -192,6 +200,29 @@ public class Startup
             (_config.GetSection(DataExchangeOptions.SectionName).Get<DataExchangeOptions>() ?? new DataExchangeOptions()).ProfilesDirectory,
             app.ApplicationServices.GetService<ILoggerFactory>()?.CreateLogger("StepFunctionsApp.Workspace"),
             _config.GetSection(WorkspaceOptions.SectionName).Get<WorkspaceOptions>()?.DefaultNodeName ?? "Default");
+
+        // Register every workspace-persisted flow into the in-memory registry at boot so GET /api/flows
+        // reflects disk truth across restarts (FlowResolver already covers on-demand execution; this covers listing).
+        var workspaceStore = app.ApplicationServices.GetRequiredService<WorkspaceStore>();
+        var stepFunctionService = app.ApplicationServices.GetRequiredService<StepFunctionService>();
+        var bootLogger = app.ApplicationServices.GetService<ILoggerFactory>()?.CreateLogger("StepFunctionsApp.Workspace");
+        foreach (var sub in workspaceStore.ListAllSubProjects())
+        {
+            foreach (var (flowId, meta) in workspaceStore.ListFlows(sub))
+            {
+                if (workspaceStore.LoadFlowDefinition(sub, flowId) is not { Length: > 0 } json) continue;
+                try
+                {
+                    var def = JObject.Parse(json).ToObject<StateMachineDefinition>();
+                    if (def == null || def.States.Count == 0) continue;
+                    stepFunctionService.RegisterStateMachine(meta.Name, def, meta.Description, id: flowId);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    bootLogger?.LogWarning(ex, "Skipping workspace flow '{Flow}' in sub-project '{Sub}' during boot registration", flowId, sub);
+                }
+            }
+        }
 
         // Serve static files (JS, CSS) from dist/ directory
         var distPath = Path.Combine(Directory.GetCurrentDirectory(), "dist");

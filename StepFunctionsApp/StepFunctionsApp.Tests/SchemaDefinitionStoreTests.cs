@@ -225,5 +225,42 @@ namespace StepFunctionsApp.Tests
 
             Assert.IsType<NotFoundObjectResult>(controller.Delete("Nope", "1"));
         }
+        [Fact]
+        public void SqliteStore_LegacySingleColumnPkTable_IsMigratedAndUpsertable()
+        {
+            // Legacy layout: single-column PK on name only. EnsureSchema must rebuild it to the composite
+            // (name, version) primary key — otherwise the store's ON CONFLICT upsert fails at runtime with
+            // "ON CONFLICT clause does not match any PRIMARY KEY".
+            var dbPath = Path.Combine(SubDir("legacy-sqlite"), "schemas.db");
+            using (var conn = StepFlowDataDb.Open(dbPath))
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = """
+                    CREATE TABLE schema_definitions (
+                      schema_definition_name TEXT PRIMARY KEY, version TEXT, description TEXT,
+                      definition TEXT, definition_from TEXT, is_attribute_domain INTEGER NOT NULL DEFAULT 0,
+                      created_by TEXT, created_on TEXT);
+                    INSERT INTO schema_definitions (schema_definition_name, version, description, definition)
+                      VALUES ('Legacy', NULL, 'legacy row', '{"type":"object"}');
+                    """;
+                cmd.ExecuteNonQuery();
+            }
+
+            // The constructor runs EnsureSchema → legacy migration.
+            var store = new SqliteSchemaDefinitionStore(dbPath, NullLogger<SqliteSchemaDefinitionStore>.Instance);
+
+            // The legacy row survives the rebuild with its version backfilled to '1'.
+            var migrated = store.Get("Legacy", "1");
+            Assert.NotNull(migrated);
+            Assert.Equal("{\"type\":\"object\"}", migrated!.Definition);
+
+            // Upsert on the rebuilt table (previously threw SqliteException).
+            store.Save(new SchemaDefinition { SchemaDefinitionName = "Legacy", Version = "1", Description = "updated", Definition = "{\"type\":\"object\"}" });
+            Assert.Equal("updated", store.Get("Legacy", "1")!.Description);
+
+            // A fresh (name, version) pair inserts cleanly too.
+            store.Save(SampleSchema("Fresh", "2"));
+            Assert.NotNull(store.Get("Fresh", "2"));
+        }
     }
 }

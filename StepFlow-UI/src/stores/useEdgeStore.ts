@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { Edge, EdgeChange } from '@xyflow/react';
+import { useUndoRedoStore } from '@stores/useUndoRedoStore';
 
 // ── Extended Edge type ──
 export type StepEdge = Edge;
@@ -20,6 +21,9 @@ export const useEdgeStore = create<EdgeState>((set, get) => ({
   selectedEdgeId: null,
   // ── Edge Change Handler (xyflow) ──
   onEdgesChange: (changes: EdgeChange[]) => {
+    if (changes.some((c) => c.type === 'remove')) {
+      useUndoRedoStore.getState().pushSnapshot();
+    }
     set({
       edges: applyEdgeChangesWithSchema(changes, get().edges),
     });
@@ -27,6 +31,8 @@ export const useEdgeStore = create<EdgeState>((set, get) => ({
 
   // ── Add Edge ──
   addEdge: (edge: StepEdge) => {
+    // Snapshot before mutation so undo() removes the connection.
+    useUndoRedoStore.getState().pushSnapshot();
     set({
       edges: [...get().edges, edge],
     });
@@ -34,6 +40,10 @@ export const useEdgeStore = create<EdgeState>((set, get) => ({
 
   // ── Remove Edge ──
   removeEdge: (edgeId: string) => {
+    // Snapshot before mutation so undo() restores the connection.
+    // NOTE: removeEdgesByNodeId stays snapshot-free on purpose — node
+    // removal already snapshots, and callers must not pay twice.
+    useUndoRedoStore.getState().pushSnapshot();
     set({
       edges: get().edges.filter((e) => e.id !== edgeId),
     });
@@ -50,6 +60,7 @@ export const useEdgeStore = create<EdgeState>((set, get) => ({
 
   // ── Clear All Edges ──
   clearEdges: () => {
+    useUndoRedoStore.getState().pushSnapshot();
     set({ edges: [] });
   },
 

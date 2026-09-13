@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Threading;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json.Linq;
 using StepFunctionsApp.DynamicApi;
@@ -115,12 +116,12 @@ namespace StepFunctionsApp.Controllers
 
         // Execute state machine synchronously
         [HttpPost("api/flows/execute-sync/{id}")]
-        public async Task<IActionResult> ExecuteFlowSync(string id, [FromBody] JToken? input)
+        public async Task<IActionResult> ExecuteFlowSync(string id, [FromBody] JToken? input, CancellationToken ct)
         {
             try
             {
                 if (_flowResolver.ResolveFlow(id) == null) return NotFound(new { error = $"Flow '{id}' not found" });
-                var execution = await _stepService.ExecuteSyncAsync(id, input);
+                var execution = await _stepService.ExecuteSyncAsync(id, input, ct);
                 return Ok(new
                 {
                     executionId = execution.ExecutionId,
@@ -129,6 +130,12 @@ namespace StepFunctionsApp.Controllers
                     errorCode = execution.ErrorCode,
                     errorMessage = execution.ErrorMessage
                 });
+            }
+            catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
+            {
+                // The caller hung up (browser Stop). The linked token already reached
+                // the interpreter, so the run is halted; nothing useful to write back.
+                return new EmptyResult();
             }
             catch (Exception ex)
             {
@@ -165,12 +172,13 @@ namespace StepFunctionsApp.Controllers
             });
         }
 
-        // Stop execution
+        // Stop execution(s) by execution id or state machine id/name — cancels the in-flight run.
         [HttpPost("api/state-machines/{id}/stop")]
+        [HttpPost("api/flows/executions/{id}/stop")]
         public IActionResult StopExecution(string id)
         {
-            // Just return success for mock stop, since background services handles it
-            return Ok(new { message = "Execution stop requested" });
+            var stopped = _stepService.StopExecution(id);
+            return Ok(new { message = "Stop requested", stopped });
         }
 
         // List all stored executions (survives restarts; includes terminal history)
@@ -206,6 +214,15 @@ namespace StepFunctionsApp.Controllers
         {
             await _stepService.DeleteStoredExecutionAsync(id);
             return Ok(new { message = $"Execution '{id}' removed from the flow-state store" });
+        }
+        // Delete a registered flow from the in-memory registry. In-flight executions keep their captured definition and continue running; durable recovery re-registers the flow while execution records exist.
+        [HttpDelete("api/flows/{id}")]
+        [HttpDelete("api/state-machines/{id}")]
+        public IActionResult DeleteFlow(string id)
+        {
+            return _stepService.UnregisterStateMachine(id)
+                ? Ok(new { deleted = true, id })
+                : NotFound(new { error = $"Flow '{id}' not found" });
         }
 
         // Save and compile as a multi-file Project Structure on local disk

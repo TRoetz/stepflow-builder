@@ -15,10 +15,12 @@ import {
   CheckCircle2,
   AlertCircle,
   Sparkles,
+  Wand2,
 } from 'lucide-react';
 import { DataExchangeService, type DataExchangeProfile, type ExecutionRecord, type ProfileListItem } from '@services/dataExchangeService';
 import { PipelineVisualizer } from './PipelineVisualizer';
 import { SchemaEditor } from './SchemaEditor';
+import { ProfileWizard } from './ProfileWizard';
 import { AiBuildModal } from './AiBuildModal';
 import { showToast } from '@stores/useToastStore';
 
@@ -59,6 +61,8 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
   // ── Visual editing (schema editor / AI build) ─────────────────────────────
   const [editorMode, setEditorMode] = useState<'json' | 'schema'>('json');
   const [aiBuildOpen, setAiBuildOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardInitial, setWizardInitial] = useState<DataExchangeProfile | null>(null);
 
   // ── Monitor state ─────────────────────────────────────────────────────────
   const [executions, setExecutions] = useState<ExecutionRecord[]>([]);
@@ -169,6 +173,37 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
     }
     return parsed;
   }, [jsonText]);
+  // ── Guided editing (wizard) ───────────────────────────────────────────────
+  const openNewWizard = useCallback(() => {
+    setSelectedId(null);
+    setWizardInitial(null);
+    setWizardOpen(true);
+  }, []);
+
+  const openWizardForSelected = useCallback(() => {
+    const profile = parseEditorJson();
+    if (!profile) return;
+    setWizardInitial(profile);
+    setWizardOpen(true);
+  }, [parseEditorJson]);
+
+  const handleWizardSave = useCallback(
+    async (doc: DataExchangeProfile) => {
+      try {
+        const saved = await DataExchangeService.saveProfile(doc);
+        showToast({ type: 'success', message: `Profile "${doc.dataExchangeProfileName}" saved` });
+        setSelectedId(typeof saved?.id === 'string' ? saved.id : null);
+        setJsonText(JSON.stringify(doc, null, 2));
+        setIsDirty(false);
+        setLastResult(null);
+        setWizardOpen(false);
+        void loadProfiles();
+      } catch (err) {
+        showToast({ type: 'error', message: `Save failed: ${errorMessage(err)}` });
+      }
+    },
+    [loadProfiles]
+  );
 
   const handleSave = useCallback(async () => {
     const profile = parseEditorJson();
@@ -271,7 +306,7 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
                 />
               </div>
               <button
-                onClick={handleNewProfile}
+                onClick={openNewWizard}
                 className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -356,6 +391,14 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
                         AI Build
                       </button>
                     )}
+                    <button
+                      onClick={openWizardForSelected}
+                      title="Edit this profile in the step-by-step wizard"
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-600/60 bg-gray-800/60 hover:bg-gray-700/60 text-gray-300 text-[10px] font-semibold transition-colors"
+                    >
+                      <Wand2 className="w-3 h-3" />
+                      Wizard
+                    </button>
                     <div className="flex rounded-lg border border-gray-700/60 overflow-hidden">
                       {(['json', 'schema'] as const).map((mode) => (
                         <button
@@ -519,6 +562,12 @@ export function DataExchangePanel({ onClose }: { onClose: () => void }) {
         <Activity className="w-3 h-3" />
         {view === 'monitor' ? 'Polling /api/data-exchange/executions every 5s' : `${profiles.length} profile(s) on file`}
       </div>
+          <ProfileWizard
+            open={wizardOpen}
+            initial={wizardInitial}
+            onClose={() => setWizardOpen(false)}
+            onSave={handleWizardSave}
+          />
       <AiBuildModal
         open={aiBuildOpen}
         baseProfile={selectedProfile?.profile ?? null}

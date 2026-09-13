@@ -69,7 +69,7 @@ export function PropertyPanel({ selectedNode }: PropertyPanelProps) {
     let cancelled = false;
     FlowService.listFlows()
       .then((flows) => { if (!cancelled) setSavedFlows(flows); })
-      .catch(() => {});
+      .catch(() => showToast({ type: 'info', message: 'Saved-flow list could not be loaded — the iterator picker may be incomplete.' }));
     return () => { cancelled = true; };
   }, [selectedNode?.id, selectedNode?.data.schemaId]);
 
@@ -79,7 +79,7 @@ export function PropertyPanel({ selectedNode }: PropertyPanelProps) {
     let cancelled = false;
     FormService.listForms()
       .then((forms) => { if (!cancelled) setFormOptions(forms); })
-      .catch(() => {});
+      .catch(() => showToast({ type: 'info', message: 'Published-form list could not be loaded — check the Form service.' }));
     return () => { cancelled = true; };
   }, [selectedNode?.id, selectedNode?.data.schemaId]);
 
@@ -122,11 +122,11 @@ export function PropertyPanel({ selectedNode }: PropertyPanelProps) {
       }
       const flows = await FlowService.listFlows();
       const name = flows.find((f) => f.id === flowId)?.name ?? 'Iterator';
-      FlowService.importFlow(definition);
+      const restored = FlowService.importFlow(definition);
       // Let App retarget Save at the sub-flow (otherwise saving would clobber the parent).
       window.dispatchEvent(new CustomEvent('stepflow:flow-loaded', { detail: { name } }));
       showToast({ type: 'success', message: `Opened "${name}" in the canvas — Save will write to it.` });
-      setTimeout(() => autoLayout(), 50);
+      if (!restored) setTimeout(() => autoLayout(), 50);
     } catch (err) {
       console.error('Failed to open iterator flow:', err);
       showToast({ type: 'error', message: 'Failed to open the linked iterator flow.' });

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react';
 import { FlowCanvas } from '@components/Canvas/FlowCanvas';
 import { NodePalette } from '@components/Palette/NodePalette';
 import { PropertyPanel } from '@components/Properties/PropertyPanel';
@@ -12,13 +12,7 @@ import { ExecutionService } from '@services/executionService';
 import { FlowService } from '@services/flowService';
 import { useAutoLayout } from '@hooks/useAutoLayout';
 import { useKeyboardShortcuts } from '@hooks/useKeyboardShortcuts';
-import { CanvasAssistant } from '@components/Canvas/CanvasAssistant';
 import { ToastStack } from '@components/ToastStack';
-import { AgentPanel } from '@components/Agents/AgentPanel';
-import { FormBuilderWindow } from '@components/Forms/FormBuilderWindow';
-import { DataExchangePanel } from '@components/DataExchange/DataExchangePanel';
-import { WorkspacePanel } from '@components/Workspace/WorkspacePanel';
-import { DynamicApiPanel } from '@components/DynamicApi/DynamicApiPanel';
 import { useWorkspaceStore } from '@stores/useWorkspaceStore';
 import { WorkspaceService, type WorkspaceFlow } from '@services/workspaceService';
 import { useAiAssistantStore } from '@stores/useAiAssistantStore';
@@ -27,6 +21,17 @@ import { showToast } from '@stores/useToastStore';
 import { AiModelConfigModal } from '@components/AiModelConfigModal';
 import { ErrorBoundary } from '@components/ErrorBoundary';
 import { Trash2, Terminal, Code, FolderOpen } from 'lucide-react';
+import { HelpModal } from '@components/Header/HelpModal';
+import { listMergedFlows, type CatalogEntry } from '@services/flowCatalog';
+
+// Secondary side-windows render only on toggle; lazy-loading them splits them out of the main chunk.
+const CanvasAssistant = lazy(() => import('@components/Canvas/CanvasAssistant').then((m) => ({ default: m.CanvasAssistant })));
+const AgentPanel = lazy(() => import('@components/Agents/AgentPanel').then((m) => ({ default: m.AgentPanel })));
+const FormBuilderWindow = lazy(() => import('@components/Forms/FormBuilderWindow').then((m) => ({ default: m.FormBuilderWindow })));
+const DataExchangePanel = lazy(() => import('@components/DataExchange/DataExchangePanel').then((m) => ({ default: m.DataExchangePanel })));
+const WorkspacePanel = lazy(() => import('@components/Workspace/WorkspacePanel').then((m) => ({ default: m.WorkspacePanel })));
+const DynamicApiPanel = lazy(() => import('@components/DynamicApi/DynamicApiPanel').then((m) => ({ default: m.DynamicApiPanel })));
+
 import './styles/globals.css';
 export default function App() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -45,6 +50,8 @@ export default function App() {
   const [expandedLogNodeId, setExpandedLogNodeId] = useState<string | null>(null);
   const [showSaveProjectDialog, setShowSaveProjectDialog] = useState(false);
   const [showLoadProjectDialog, setShowLoadProjectDialog] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+
   const [projectDirectoryPath, setProjectDirectoryPath] = useState('C:\\temp\\StepFlowProject');
   const executionLogs = useExecutionStore((s) => s.logs);
   const logsList = useMemo(() => {
@@ -116,10 +123,23 @@ export default function App() {
   }, []);
 
   // ── Handle Save ──
+  // A selected Workspace target wins: only the Workspace is server-persistent. Without one, fall
+  // back to browser-local storage and label it honestly — a browser-only save is invisible to
+  // other machines and users. (handleSaveToWorkspace below is closed over lazily.)
   const handleSave = useCallback(async () => {
+    if (useWorkspaceStore.getState().selectedSubProjectPath) {
+      await handleSaveToWorkspace();
+      return;
+    }
     const res = await FlowService.saveFlow(flowName);
-    showToast({ type: res.success ? 'success' : 'error', message: res.message });
+    showToast({
+      type: res.success ? 'success' : 'error',
+      message: res.success
+        ? 'Saved in this browser only — select a Workspace sub-project to store it on the server.'
+        : res.message,
+    });
   }, [flowName]);
+
 
   // ── Handle Save to Workspace ──
   const handleSaveToWorkspace = useCallback(async () => {
@@ -130,7 +150,7 @@ export default function App() {
     }
     try {
       const definition = FlowService.exportFlow();
-      const res = await WorkspaceService.saveFlow(target, { name: flowName, startAt: definition.startAt, states: definition.states });
+      const res = await WorkspaceService.saveFlow(target, { name: flowName, startAt: definition.startAt, states: definition.states, ...(definition.canvas ? { canvas: definition.canvas } : {}) });
       showToast({ type: 'success', message: `Saved "${flowName}" to ${target}${res.created ? '' : ' (updated)'}` });
       useWorkspaceStore.getState().loadTree();
     } catch (err) {
@@ -141,8 +161,8 @@ export default function App() {
 
   // ── Handle Open Workspace Flow (loads a stored flow into the canvas) ──
   const handleOpenWorkspaceFlow = useCallback((flow: WorkspaceFlow) => {
-    FlowService.importFlow(flow.definition);
-    setTimeout(() => autoLayout(), 50);
+    const restored = FlowService.importFlow(flow.definition);
+    if (!restored) setTimeout(() => autoLayout(), 50);
     setFlowName(flow.name);
     showToast({ type: 'success', message: `Loaded "${flow.name}" from workspace` });
   }, [autoLayout]);
@@ -339,10 +359,12 @@ export default function App() {
       reader.onload = (ev) => {
         try {
           const definition = JSON.parse(ev.target?.result as string);
-          FlowService.importFlow(definition);
-          setTimeout(() => {
-            autoLayout();
-          }, 50);
+          const restored = FlowService.importFlow(definition);
+          if (!restored) {
+            setTimeout(() => {
+              autoLayout();
+            }, 50);
+          }
           // Set flow name from imported file if available
           if (definition && typeof definition === 'object' && 'name' in definition) {
             setFlowName((definition as Record<string, unknown>).name as string);
@@ -369,51 +391,65 @@ export default function App() {
     a.download = `${flowName.replace(/\s+/g, '_')}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    console.log('Flow exported successfully');
   }, [flowName]);
 
   // ── Handle Load Flow ──
-  const [savedFlows, setSavedFlows] = useState<Array<{ id: string; name: string; description?: string; createdAt: string }>>([]);
+  const [savedFlows, setSavedFlows] = useState<CatalogEntry[]>([]);
   const [showLoadDialog, setShowLoadDialog] = useState(false);
 
   const handleLoad = useCallback(async () => {
-    const flows = await FlowService.listFlows();
-    setSavedFlows(flows);
+    const catalog = await listMergedFlows();
+    setSavedFlows(catalog.flows);
+    if (catalog.workspaceError) {
+      showToast({ type: 'info', message: 'Could not reach the Workspace server — showing browser-saved flows only.' });
+    }
     setShowLoadDialog(true);
   }, []);
 
-  const loadSelectedFlow = useCallback(async (flowId: string) => {
-    const definition = await FlowService.loadFlow(flowId);
-    if (definition) {
-      FlowService.importFlow(definition);
-      setTimeout(() => {
-        autoLayout();
-      }, 50);
-      const selected = savedFlows.find((f) => f.id === flowId);
-      if (selected) {
-        setFlowName(selected.name);
+  const loadSavedEntry = useCallback(async (entry: CatalogEntry) => {
+    try {
+      const definition = entry.source === 'workspace'
+        ? (await WorkspaceService.getFlow(entry.path ?? '', entry.id)).definition
+        : await FlowService.loadFlow(entry.id);
+      if (!definition) {
+        showToast({ type: 'error', message: `"${entry.name}" could not be read from storage.` });
+        return;
       }
+      const restored = FlowService.importFlow(definition);
+      if (!restored) {
+        setTimeout(() => autoLayout(), 50);
+      }
+      setFlowName(entry.name);
       setShowLoadDialog(false);
-      showToast({ type: 'success', message: 'Flow loaded successfully!' });
+      showToast({
+        type: 'success',
+        message: entry.source === 'workspace'
+          ? `Loaded "${entry.name}" from the Workspace.`
+          : `Loaded "${entry.name}" from this browser.`,
+      });
+    } catch (err) {
+      showToast({ type: 'error', message: `Load failed: ${err instanceof Error ? err.message : String(err)}` });
     }
-  }, [savedFlows]);
+  }, [autoLayout]);
 
-  const deleteSelectedFlow = useCallback(async (e: React.MouseEvent, flowId: string) => {
+  const deleteSelectedEntry = useCallback(async (e: React.MouseEvent, entry: CatalogEntry) => {
     e.stopPropagation();
     try {
-      const saved = localStorage.getItem('stepflow-flows');
-      const flows = saved ? JSON.parse(saved) : [];
-      const updated = flows.filter((f: { id: string }) => f.id !== flowId);
-      localStorage.setItem('stepflow-flows', JSON.stringify(updated));
-      setSavedFlows(updated.map((f: { id: string; name: string; description?: string; createdAt: string }) => ({
-        id: f.id,
-        name: f.name,
-        description: f.description,
-        createdAt: f.createdAt,
-      })));
-      showToast({ type: 'success', message: 'Flow deleted' });
+      if (entry.source === 'workspace') {
+        await WorkspaceService.deleteFlow(entry.path ?? '', entry.id);
+      } else {
+        const raw = localStorage.getItem('stepflow-flows');
+        const stored = raw ? JSON.parse(raw) : [];
+        localStorage.setItem('stepflow-flows', JSON.stringify(stored.filter((f: { id: string }) => f.id !== entry.id)));
+      }
+      const catalog = await listMergedFlows();
+      setSavedFlows(catalog.flows);
+      showToast({
+        type: 'success',
+        message: `Deleted "${entry.name}" from ${entry.source === 'workspace' ? 'the Workspace' : 'this browser'}.`,
+      });
     } catch {
-      showToast({ type: 'error', message: 'Failed to delete flow' });
+      showToast({ type: 'error', message: `Failed to delete "${entry.name}" — it may still be on the server.` });
     }
   }, []);
   // ── Selected Node Data ──
@@ -429,7 +465,6 @@ export default function App() {
         onSave={handleSave}
         onSaveProject={() => setShowSaveProjectDialog(true)}
         onLoadProject={() => setShowLoadProjectDialog(true)}
-        onSaveToWorkspace={handleSaveToWorkspace}
         onTogglePalette={() => setIsCollapsedPalette((p) => !p)}
         onToggleProperties={() => setIsCollapsedProperties((p) => !p)}
         onToggleAiAssistant={toggleAiAssistant}
@@ -439,6 +474,7 @@ export default function App() {
         onToggleDynamicApi={() => setShowDynamicApiPanel((p) => !p)}
         onToggleFormBuilder={() => setFormBuilderOpen((p) => !p)}
         onToggleAiConfig={toggleAiConfig}
+        onToggleHelp={() => setShowHelp(true)}
         onAutoLayout={handleAutoLayout}
         onResetFlow={handleResetFlow}
         onImport={handleImport}
@@ -450,7 +486,9 @@ export default function App() {
 
       <div className="relative flex-1 flex overflow-hidden">
         {formBuilderOpen && (
-          <FormBuilderWindow onClose={() => setFormBuilderOpen(false)} />
+          <Suspense fallback={null}>
+            <FormBuilderWindow onClose={() => setFormBuilderOpen(false)} />
+          </Suspense>
         )}
         {/* Left: Node Palette */}
         {!isCollapsedPalette && (
@@ -473,7 +511,11 @@ export default function App() {
                 onZoomChange={setZoom}
               />
             </ErrorBoundary>
-            {aiAssistantOpen && <CanvasAssistant />}
+            {aiAssistantOpen && (
+              <Suspense fallback={null}>
+                <CanvasAssistant />
+              </Suspense>
+            )}
           </div>
 
           {/* Bottom Execution Log Drawer */}
@@ -600,21 +642,29 @@ export default function App() {
         )}
         {showAgentPanel && (
           <div className="app-properties">
-            <AgentPanel />
+            <Suspense fallback={null}>
+              <AgentPanel />
+            </Suspense>
           </div>
         )}
         {showDataExchangePanel && (
-          <DataExchangePanel onClose={() => setShowDataExchangePanel(false)} />
+            <Suspense fallback={null}>
+              <DataExchangePanel onClose={() => setShowDataExchangePanel(false)} />
+            </Suspense>
         )}
         {showWorkspacePanel && (
-          <WorkspacePanel
-            onClose={() => setShowWorkspacePanel(false)}
-            onOpenFlow={handleOpenWorkspaceFlow}
-            onSaveCurrentFlow={handleSaveToWorkspace}
-          />
+            <Suspense fallback={null}>
+              <WorkspacePanel
+                onClose={() => setShowWorkspacePanel(false)}
+                onOpenFlow={handleOpenWorkspaceFlow}
+                onSaveCurrentFlow={handleSaveToWorkspace}
+              />
+            </Suspense>
         )}
         {showDynamicApiPanel && (
-          <DynamicApiPanel onClose={() => setShowDynamicApiPanel(false)} />
+            <Suspense fallback={null}>
+              <DynamicApiPanel onClose={() => setShowDynamicApiPanel(false)} />
+            </Suspense>
         )}
       </div>
 
@@ -629,6 +679,8 @@ export default function App() {
         logCount={logsList.length}
       />
       <AiModelConfigModal />
+
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
 
       {/* Load Flow Dialog */}
       {showLoadDialog && (
@@ -647,29 +699,41 @@ export default function App() {
             <div className="px-4 py-3 max-h-80 overflow-y-auto">
               {savedFlows.length === 0 ? (
                 <div className="text-sm text-gray-500 text-center py-6">
-                  No saved flows found. Save a flow first.
+                  No saved flows found — not in this browser, nor in the selected Workspace.
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {savedFlows.map((flow) => (
+                  {savedFlows.map((entry) => (
                     <div
-                      key={flow.id}
+                      key={`${entry.source}:${entry.id}`}
                       className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gray-800/50 hover:bg-gray-800 border border-gray-700/50 hover:border-gray-600 transition-all group cursor-pointer"
-                      onClick={() => loadSelectedFlow(flow.id)}
+                      onClick={() => loadSavedEntry(entry)}
                     >
                       <div className="flex-1 min-w-0 pr-2">
-                        <div className="text-sm font-medium text-gray-200 group-hover:text-white truncate">{flow.name}</div>
-                        {flow.description && (
-                          <div className="text-xs text-gray-500 mt-0.5 truncate">{flow.description}</div>
-                        )}
-                        <div className="text-[10px] text-gray-600 mt-1">
-                          {new Date(flow.createdAt).toLocaleString()}
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-medium text-gray-200 group-hover:text-white truncate">{entry.name}</span>
+                          <span
+                            className={`shrink-0 text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wide ${
+                              entry.source === 'workspace' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-gray-700/60 text-gray-400'
+                            }`}
+                            title={entry.source === 'workspace' ? `Stored on the server at ${entry.path}` : 'Stored in this browser only'}
+                          >
+                            {entry.source}
+                          </span>
                         </div>
+                        {entry.description && (
+                          <div className="text-xs text-gray-500 mt-0.5 truncate">{entry.description}</div>
+                        )}
+                        {entry.createdAt && (
+                          <div className="text-[10px] text-gray-600 mt-1">
+                            {new Date(entry.createdAt).toLocaleString()}
+                          </div>
+                        )}
                       </div>
                       <button
                         className="p-1.5 rounded-md text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                        title="Delete saved flow"
-                        onClick={(e) => deleteSelectedFlow(e, flow.id)}
+                        title={entry.source === 'workspace' ? 'Delete workspace flow' : 'Delete browser-saved flow'}
+                        onClick={(e) => deleteSelectedEntry(e, entry)}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

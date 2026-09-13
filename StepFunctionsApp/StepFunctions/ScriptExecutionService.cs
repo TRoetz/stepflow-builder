@@ -31,12 +31,17 @@ namespace StepFunctionsApp.StepFunctions
         {
             language = language.ToLowerInvariant();
 
-            // Auto-detect language from code content if it doesn't match the declared language
-            var detected = DetectScriptLanguage(script);
-            if (detected != null && detected != language)
+            // An explicitly declared language (transform://javascript|python|powershell|csharp|shell) always wins.
+            // Content-based detection is only a fallback for unrecognized declarations; its heuristics can
+            // false-positive on PowerShell comments ("import result") or strings ending in 'f' before a quote.
+            if (!IsKnownScriptLanguage(language))
             {
-                _logger.LogWarning("Language mismatch: declared '{Declared}', detected '{Detected}'. Using detected language.", language, detected);
-                language = detected;
+                var detected = DetectScriptLanguage(script);
+                if (detected != null)
+                {
+                    _logger.LogInformation("Declared language '{Declared}' not recognized; using detected language '{Detected}'.", language, detected);
+                    language = detected;
+                }
             }
 
             _logger.LogInformation("Executing scripting task. Language: {Language}", language);
@@ -55,17 +60,26 @@ namespace StepFunctionsApp.StepFunctions
 
                 return await ExecuteExternalScriptAsync(language, script, inputData, ct);
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // Cancellation and state timeouts must propagate: the interpreter maps them to States.Timeout or graceful shutdown.
+                throw;
+            }
+            catch (StepEngineException ex)
+            {
+                _logger.LogError(ex, "Script execution failed");
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Script execution failed");
-                return new JObject
-                {
-                    ["success"] = false,
-                    ["error"] = ex.Message,
-                    ["details"] = ex.ToString()
-                };
+                // Surface the failure as a standard task error so state catch/retry clauses can match it.
+                throw new StepEngineException("States.TaskFailed", $"{language} script failed: {ex.Message}");
             }
         }
+
+        private static bool IsKnownScriptLanguage(string language) =>
+            language is "javascript" or "python" or "powershell" or "ps1" or "csharp" or "shell";
 
         /// <summary>
         /// Auto-detect script language from code heuristics.

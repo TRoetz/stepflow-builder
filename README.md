@@ -517,8 +517,10 @@ The frontend communicates with the backend via these endpoints:
 | `/api/state-machines` | GET | List all flows |
 | `/api/state-machines/:id` | GET | Get flow definition |
 | `/api/state-machines/:id/execute` | POST | Execute flow |
-| `/api/state-machines/:id/stop` | POST | Stop execution |
+| `/api/state-machines/:id/stop` | POST | Stop execution (alias of the route below) |
+| `/api/flows/executions/:id/stop` | POST | Stop an execution by id; reaches Aborted ("Stopped by user") |
 | `/api/execution/:id` | GET | Get execution status |
+| `/api/flows/:id` | DELETE | Delete a registered flow from the in-memory registry (404 when unknown) |
 | `/api/api-registry` | GET | List registered APIs |
 
 ### Resource URI Scheme
@@ -539,7 +541,7 @@ The frontend communicates with the backend via these endpoints:
 
 ## MCP Server
 
-The backend exposes a **Model Context Protocol (MCP)** server at `/mcp`, letting AI agents (Claude Desktop, VS Code Copilot, or any MCP client) list, create, inspect and run flows through the same .NET engine as the UI. Transport: streamable HTTP — stateless, so no session handshake is required per request.
+The backend exposes a **Model Context Protocol (MCP)** server at `/mcp`, letting AI agents (Claude Desktop, VS Code Copilot, or any MCP client) manage flows **and** workspace configuration — data-exchange profiles, attribute domains, schema definitions, EAV rows and entity contracts, dynamic APIs — through the same .NET engine as the UI. Transport: streamable HTTP — stateless, so no session handshake is required per request. All 30 tools return errors as JSON (`{"error": "…"}`) rather than throwing; full parameter/return details live in **SKILL.md §2**.
 
 ### Tools
 
@@ -549,8 +551,34 @@ The backend exposes a **Model Context Protocol (MCP)** server at `/mcp`, letting
 | `get_flow` | Full flow definition as camelCase ASL + metadata | `idOrName` |
 | `save_flow` | Create or replace a flow by name; validates `startAt` and state references | `name`, `statesJson`, `description?`, `startAt?` (defaults to first key) |
 | `run_flow` | Run synchronously; returns status, final output and per-state history | `idOrName`, `inputJson?` |
+| `list_data_exchange_profiles` | List data-exchange pipeline profiles (id, name, subProjectPath, stage count) | — |
+| `get_data_exchange_profile` | Full profile JSON definition | `idOrName` |
+| `save_data_exchange_profile` | Create or replace a profile by the name in its JSON; optionally file it under a workspace sub-project | `profileJson`, `subProjectPath?` |
+| `delete_data_exchange_profile` | Delete a profile by id or name | `idOrName` |
+| `run_data_exchange_profile` | Run a profile synchronously (inline rows via input, or its configured data source) | `idOrName`, `inputJson?` |
+| `list_attribute_domains` | List attribute domains (entity contracts) with version and linked schema | — |
+| `get_attribute_domain` | Full domain JSON including attributes and linked schema definition | `name` |
+| `save_attribute_domain` | Create or replace a domain by the name in its JSON; links to a saved schema version | `domainJson`, `schemaName?`, `schemaVersion?` |
+| `delete_attribute_domain` | Delete an attribute domain by name | `name` |
+| `list_schema_definitions` | List all saved schema definition versions (one row per version) | — |
+| `get_schema_definition` | Full schema JSON; version optional, defaults to latest saved | `name`, `version?` |
+| `save_schema_definition` | Create or replace a schema definition by name + version in its JSON | `schemaJson` |
+| `delete_schema_definition` | Delete one saved version of a schema definition | `name`, `version` |
+| `list_eav_domains` | List EAV data domains with row counts and contract flags | — |
+| `read_eav_rows` | Read captured EAV rows for a domain in append order (flow-side read of persisted EAV data) | `domain`, `limit?` |
+| `write_eav_row` | Append an EAV row; returns its `rowKeyId` | `domain`, `valuesJson`, `entityId?`, `entityType?`, `sourceTaskId?` |
+| `update_eav_row` | Replace a row's values wholesale by `rowKeyId` | `domain`, `rowKeyId`, `valuesJson` |
+| `patch_eav_row` | Merge partial attribute values into an existing row | `domain`, `rowKeyId`, `patchJson` |
+| `delete_eav_row` | Delete a row by domain and `rowKeyId` | `domain`, `rowKeyId` |
+| `list_eav_entities` | List registry entity contracts with full attribute definitions | — |
+| `register_eav_entity` | Create or replace an entity contract by the name in its JSON | `entityJson` |
+| `delete_eav_entity` | Delete an entity contract from the EAV registry | `name` |
+| `list_dynamic_apis` | List dynamic API definitions, optionally filtered to a workspace node subtree | `nodePathPrefix?` |
+| `get_dynamic_api` | Full API definition JSON including all operations | `id` |
+| `save_dynamic_api` | Create or replace an API by the name in its JSON | `definitionJson` |
+| `delete_dynamic_api` | Delete a dynamic API by id | `id` |
 
-Definitions use the same camelCase Amazon States Language format the React UI exports (`startAt`, `states`, `type`, `next`, …), so a flow fetched via MCP can be re-imported into the canvas unchanged. State names keep their original casing. Supported state types: `Task`, `Pass`, `Choice`, `Wait`, `Parallel`, `Map`, `Succeed`, `Fail`. Errors are returned as JSON (`{"error": "…"}`) rather than thrown, so agents can read and react to them.
+Definitions use the same camelCase Amazon States Language format the React UI exports (`startAt`, `states`, `type`, `next`, …), so a flow fetched via MCP can be re-imported into the canvas unchanged. State names keep their original casing. Supported state types: `Task`, `Pass`, `Choice`, `Wait`, `Parallel`, `Map`, `Succeed`, `Fail`.
 
 ### Client Configuration
 

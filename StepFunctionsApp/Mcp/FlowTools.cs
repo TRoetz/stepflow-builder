@@ -1,8 +1,9 @@
 using System.ComponentModel;
 using ModelContextProtocol.Server;
+using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
+using StepFunctionsApp.Workspace;
 using StepFunctionsApp.StepFunctions;
 
 namespace StepFunctionsApp.Mcp
@@ -18,18 +19,17 @@ namespace StepFunctionsApp.Mcp
     public class FlowTools
     {
         private readonly StepFunctionService _service;
+        private readonly WorkspaceStore _workspace;
+        private readonly string _defaultSubProject;
 
-        // camelCase + no nulls: definitions round-trip with the React UI (importFlow)
-        // and stay compact for LLM context windows. Dictionary keys (state names)
-        // keep their original casing — the stock camelCase resolver would lowercase them.
-        private static readonly JsonSerializerSettings Json = new()
+        public FlowTools(StepFunctionService service, WorkspaceStore workspace, IConfiguration config)
         {
-            ContractResolver = new KeyPreservingCamelCaseResolver(),
-            NullValueHandling = NullValueHandling.Ignore,
-            Formatting = Formatting.None
-        };
+            _service = service;
+            _workspace = workspace;
+            var node = config.GetSection(WorkspaceOptions.SectionName).Get<WorkspaceOptions>()?.DefaultNodeName ?? "Default";
+            _defaultSubProject = WorkspaceStore.Join(node, node, node);
+        }
 
-        public FlowTools(StepFunctionService service) => _service = service;
 
         [McpServerTool]
         [Description("List all flows registered on the .NET Step Functions engine. Returns id, name, description and updatedAt for each flow.")]
@@ -42,7 +42,7 @@ namespace StepFunctionsApp.Mcp
                 sm.Description,
                 UpdatedAt = sm.UpdatedAt.ToString("o")
             });
-            return JsonConvert.SerializeObject(flows, Json);
+            return JsonConvert.SerializeObject(flows, McpJson.Settings);
         }
 
         [McpServerTool]
@@ -52,7 +52,7 @@ namespace StepFunctionsApp.Mcp
             var sm = _service.GetStateMachine(idOrName);
             if (sm == null) return Error($"Flow '{idOrName}' not found. Use list_flows to see registered flows.");
 
-            var definition = JToken.Parse(JsonConvert.SerializeObject(sm.Definition, Json));
+            var definition = JToken.Parse(JsonConvert.SerializeObject(sm.Definition, McpJson.Settings));
             return JsonConvert.SerializeObject(new
             {
                 sm.Id,
@@ -61,13 +61,13 @@ namespace StepFunctionsApp.Mcp
                 CreatedAt = sm.CreatedAt.ToString("o"),
                 UpdatedAt = sm.UpdatedAt.ToString("o"),
                 Definition = definition
-            }, Json);
+            }, McpJson.Settings);
         }
 
         [McpServerTool]
         [Description(
 """
-Create a new flow or replace an existing one with the same name (upsert). Returns the stored id and updatedAt.
+Create a new flow or replace an existing one with the same name (upsert). The flow is persisted to the workspace sub-project — visible in the UI flow catalog and still listed after backend restarts — and registered for immediate execution. Returns { id, name, created, updatedAt }.
 
 Definition format (Amazon States Language, camelCase JSON):
   startAt: name of the first state.
@@ -96,7 +96,7 @@ Task state resource schemes handled by this engine:
   - internal://echo          : returns the input unchanged (useful for testing); also engine/status, rules/status, transform/status.
 
 Parameter values may reference the state input with JSONPath ("$.field") and use States.* intrinsics such as States.Format("...").
-Note: "sql://" is a React-UI-only scheme and is NOT handled by this .NET engine — use transform://query for SQL here.
+Note: "sql://<local sqlite file>" executes a local SQLite query (input { "query": "SELECT ..." }); remote connection strings are rejected.
 
 Example statesJson:
 {"Start":{"type":"Pass","next":"Echo"},"Echo":{"type":"Task","resource":"internal://echo","parameters":{"note":"hello"}},"Done":{"type":"Succeed"}}
@@ -105,7 +105,8 @@ Example statesJson:
             [Description("Unique flow name; saving again with the same name replaces that flow's definition.")] string name,
             [Description("Amazon States Language states object as a JSON string: { \"<stateName>\": { \"type\": \"Task\", ... }, ... }")] string statesJson,
             [Description("Name of the first state. Defaults to the first key in states when omitted.")] string? startAt = null,
-            [Description("Optional human-readable description.")] string? description = null)
+            [Description("Optional human-readable description.")] string? description = null,
+            [Description("Optional workspace sub-project path (org/project/sub). Defaults to the configured default node.")] string? subProjectPath = null)
         {
             JObject statesObj;
             try
@@ -137,13 +138,32 @@ Example statesJson:
                 return Error($"Could not parse a state definition: {ex.Message}");
             }
 
-            var sm = _service.RegisterStateMachine(name, def, description);
+            // Persist to the workspace so the flow appears in the UI catalog and survives restarts.
+            string id;
+            bool created;
+            try
+            {
+                var subPath = string.IsNullOrWhiteSpace(subProjectPath) ? _defaultSubProject : subProjectPath.Trim();
+                if (!_workspace.NodeExists(subPath))
+                    _workspace.EnsureSubProject(subPath);
+
+                var definitionDoc = new JObject { ["startAt"] = effectiveStart, ["states"] = statesObj };
+                (id, created) = _workspace.SaveFlow(subPath, null, name, description, definitionDoc.ToString(Formatting.None));
+            }
+            catch (Exception ex)
+            {
+                return Error($"Could not persist flow to workspace: {ex.Message}");
+            }
+
+            // Register with the persisted id so in-memory and disk ids match everywhere.
+            _service.RegisterStateMachine(name, def, description, id);
             return JsonConvert.SerializeObject(new
             {
-                sm.Id,
-                name = sm.Name,
-                UpdatedAt = sm.UpdatedAt.ToString("o")
-            }, Json);
+                id,
+                name,
+                created,
+                updatedAt = DateTime.UtcNow.ToString("o")
+            }, McpJson.Settings);
         }
 
         [McpServerTool]
@@ -178,17 +198,9 @@ Accepts the flow id or name. input is an optional JSON object string (defaults t
                 errorCode = exec.ErrorCode,
                 errorMessage = exec.ErrorMessage,
                 history = exec.History.Select(h => new { type = h.Type, state = h.State, data = h.Data })
-            }, Json);
+            }, McpJson.Settings);
         }
 
         private static string Error(string message) => JsonConvert.SerializeObject(new { error = message });
-
-        /// <summary>
-        /// camelCase property names, but leaves dictionary keys (state names) untouched.
-        /// </summary>
-        private sealed class KeyPreservingCamelCaseResolver : CamelCasePropertyNamesContractResolver
-        {
-            protected override string ResolveDictionaryKey(string key) => key;
-        }
     }
 }

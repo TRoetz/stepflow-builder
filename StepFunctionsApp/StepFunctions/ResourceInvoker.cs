@@ -1,6 +1,7 @@
 using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Data.Sqlite;
@@ -37,7 +38,8 @@ namespace StepFunctionsApp.StepFunctions
         private readonly FetchRemoteFilesService _fetchFiles;
         private readonly EavRowStore _eavRows;
         private readonly ILogger<CompositeResourceInvoker> _logger;
-        private readonly string _callbackBaseUrl = "http://localhost:5000"; // Should come from config
+        private readonly string _callbackBaseUrl; // Base URL of this app's own REST API (tool:// + ai://ask callbacks)
+        private readonly IReadOnlyDictionary<string, string>? _sqlDataSources; // Logical sql:// datasource names -> file paths (appsettings SqlDataSources)
 
         public CompositeResourceInvoker(
             IHttpClientFactory httpClientFactory,
@@ -51,8 +53,12 @@ namespace StepFunctionsApp.StepFunctions
             SshCommandService sshCommands,
             FetchRemoteFilesService fetchFiles,
             EavRowStore eavRows,
+            IConfiguration configuration,
             ILogger<CompositeResourceInvoker> logger)
         {
+            _sqlDataSources = configuration.GetSection("SqlDataSources").GetChildren()
+                .Where(kv => !string.IsNullOrWhiteSpace(kv.Value))
+                .ToDictionary(kv => kv.Key, kv => kv.Value!, StringComparer.OrdinalIgnoreCase);
             _httpClientFactory = httpClientFactory;
             _ruleEngine = ruleEngine;
             _msRulesEngine = msRulesEngine;
@@ -65,6 +71,10 @@ namespace StepFunctionsApp.StepFunctions
             _fetchFiles = fetchFiles;
             _eavRows = eavRows;
             _logger = logger;
+            var explicitCallbackBase = configuration["Callback:BaseUrl"];
+            _callbackBaseUrl = !string.IsNullOrWhiteSpace(explicitCallbackBase)
+                ? explicitCallbackBase.TrimEnd('/')
+                : (int.TryParse(configuration["DynamicApi:ManagementPort"], out var port) ? $"http://localhost:{port}" : "http://localhost:5001");
         }
 
         public async Task<JToken> InvokeAsync(string resource, JToken input, CancellationToken ct)
@@ -396,7 +406,7 @@ namespace StepFunctionsApp.StepFunctions
             if (string.IsNullOrWhiteSpace(connectionString))
                 // URI fallback: preserve a leading slash (absolute path) — only trim trailing slashes/whitespace.
                 connectionString = resource["sql://".Length..].Trim().TrimEnd('/');
-            var dbPath = ResolveSqliteFilePath(connectionString);
+            var dbPath = SqlDataSourceResolver.Resolve(connectionString, _sqlDataSources);
 
             _logger.LogInformation("Executing SQL against {Db}: {Query}", dbPath, query);
 
@@ -431,41 +441,6 @@ namespace StepFunctionsApp.StepFunctions
             var start = i;
             while (i < query.Length && char.IsLetterOrDigit(query[i])) i++;
             return query[start..i].ToUpperInvariant() is "SELECT" or "WITH";
-        }
-
-        /// <summary>Resolves a sql:// connection string to an existing local SQLite file path.</summary>
-        private static string ResolveSqliteFilePath(string connectionString)
-        {
-            var cs = connectionString.Trim();
-
-            if (cs.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
-            {
-                // URI form: strip query/fragment; "file:///abs" and "file://host/abs" are absolute, anything else is relative.
-                var path = cs["file:".Length..];
-                var cut = path.IndexOfAny(new[] { '?', '#' });
-                if (cut >= 0) path = path[..cut];
-                if (path.StartsWith("//")) path = "/" + path[2..];
-                cs = path;
-            }
-            else if (cs.Contains('='))
-            {
-                // "Data Source=<path>" form — a connection string without that key is remote and unsupported.
-                string? dataSource = null;
-                foreach (var part in cs.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                {
-                    var eq = part.IndexOf('=');
-                    if (eq > 0 && part[..eq].Trim().Equals("Data Source", StringComparison.OrdinalIgnoreCase))
-                        dataSource = part[(eq + 1)..];
-                }
-                if (dataSource == null)
-                    throw new StepEngineException("States.TaskFailed", "sql:// supports local SQLite database files only (remote connection strings are not supported)");
-                cs = dataSource;
-            }
-
-            var fullPath = Path.GetFullPath(cs);
-            if (!File.Exists(fullPath))
-                throw new StepEngineException("States.TaskFailed", $"SQLite database file not found: {fullPath}");
-            return fullPath;
         }
 
         /// <summary>Converts a SQLite column value to JSON: DateTime → ISO-8601 string, blob → base64, everything else typed.</summary>

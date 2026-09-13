@@ -134,6 +134,22 @@ namespace StepFunctionsApp.StepFunctions
                 return LoadRows(path);
         }
 
+        /// <summary>All domain names that have a data file in the store directory (file-based, append order of the filesystem).</summary>
+        public IReadOnlyList<string> ListDomains()
+        {
+            if (_directory == null) throw new InvalidOperationException("EavRowStore.Initialize was not called");
+            lock (_lock)
+            {
+                return Directory.Exists(_directory)
+                    ? Directory.EnumerateFiles(_directory, "*.json")
+                        .Select(f => Path.GetFileNameWithoutExtension(f))
+                        .Where(n => SafeDomainRegex.IsMatch(n))
+                        .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                        .ToList()
+                    : new List<string>();
+            }
+        }
+
         private static List<EavRow> LoadRows(string path)
         {
             if (!File.Exists(path)) return new();

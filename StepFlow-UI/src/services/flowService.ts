@@ -2,13 +2,27 @@ import { useNodeStore, StepNode } from '@stores/useNodeStore';
 import { useEdgeStore, StepEdge } from '@stores/useEdgeStore';
 import { schemaById } from '@schemas/index';
 import { flowTemplates } from '@schemas/templates';
+import { useUndoRedoStore } from '@stores/useUndoRedoStore';
 
 /**
  * Flow data format (Amazon States Language compatible).
  */
+/** Per-node canvas metadata for round-trip fidelity (label + position). */
+export interface CanvasNodeMeta {
+  label: string;
+  position: { x: number; y: number };
+}
+
+/** Optional canvas layout stored alongside the ASL so save/load preserves node names and positions. Ignored by the engine. */
+export interface CanvasMetadata {
+  nodes: Record<string, CanvasNodeMeta>;
+}
+
 export interface StateMachineDefinition {
   startAt: string;
   states: Record<string, StateDefinition>;
+  /** Canvas metadata (positions + labels) keyed by state id — ignored by the engine. */
+  canvas?: CanvasMetadata;
 }
 
 export interface StateDefinition {
@@ -190,9 +204,18 @@ export const FlowService = {
       }
     }
 
+    const canvasNodes: Record<string, CanvasNodeMeta> = {};
+    for (const node of nodes) {
+      canvasNodes[node.id] = {
+        label: String(node.data?.label ?? node.id),
+        position: { x: node.position.x, y: node.position.y },
+      };
+    }
+
     return {
       startAt: startNode?.id || '',
       states,
+      canvas: { nodes: canvasNodes },
     };
   },
 
@@ -224,13 +247,17 @@ export const FlowService = {
 
   /**
    * Import a StateMachineDefinition to the canvas.
+   * Returns true when the definition carried full canvas layout (positions + labels restored verbatim), so callers can skip auto-layout.
    */
-  importFlow(definition: unknown, offset: { x: number; y: number } = { x: 100, y: 100 }): void {
+  importFlow(definition: unknown, offset: { x: number; y: number } = { x: 100, y: 100 }): boolean {
+    // Snapshot the canvas being replaced: importing over someone's work
+    // must stay recoverable via undo.
+    useUndoRedoStore.getState().pushSnapshot();
     // Clear existing
     useNodeStore.setState({ nodes: [] });
     useEdgeStore.setState({ edges: [] });
 
-    if (!definition || typeof definition !== 'object') return;
+    if (!definition || typeof definition !== 'object') return false;
 
     const data = definition as Record<string, unknown>;
 
@@ -286,11 +313,12 @@ export const FlowService = {
           });
         }
       }
-      return;
+      return (data.nodes as Array<{ position?: unknown }>).every((n) => n.position != null);
     }
 
     // Case 2: StateMachineDefinition / ASL format ({ startAt: "...", states: { ... } })
     const states = (data.states || {}) as Record<string, StateDefinition>;
+    const canvasNodes = data.canvas && typeof data.canvas === 'object' ? ((data.canvas as CanvasMetadata).nodes ?? undefined) : undefined;
     let y = offset.y;
     const nodeIds = Object.keys(states);
     const stateKeyToNodeId = new Map<string, string>();
@@ -299,11 +327,9 @@ export const FlowService = {
       const state = states[nodeId];
       const schemaId = resolveSchemaId(state);
 
-      // Add node
-      useNodeStore.getState().addNode(schemaId, {
-        x: offset.x,
-        y: y,
-      });
+      // Add node (saved canvas position when available, else stack at the offset)
+      const meta = canvasNodes?.[nodeId];
+      useNodeStore.getState().addNode(schemaId, meta ? meta.position : { x: offset.x, y });
 
       // Update node data
       const currentNodes = useNodeStore.getState().nodes;
@@ -312,7 +338,7 @@ export const FlowService = {
         stateKeyToNodeId.set(nodeId, newNode.id);
         
         useNodeStore.getState().updateNodeData(newNode.id, {
-          label: nodeId, // Set label to match the ASL state key (e.g. "ValidateOrder")
+          label: meta?.label ?? nodeId, // Saved canvas label when available, else the ASL state key (e.g. "ValidateOrder")
           configuration: reconstructConfiguration(state),
           description: state.comment,
         });
@@ -375,6 +401,9 @@ export const FlowService = {
         }
       }
     }
+
+    // Full layout restored only when every state had canvas metadata.
+    return canvasNodes ? nodeIds.every((id) => Boolean(canvasNodes[id])) : false;
   },
 
   /**
@@ -730,6 +759,16 @@ function reconstructConfiguration(state: StateDefinition): Record<string, unknow
   const params: Record<string, unknown> = { ...(state.parameters || {}) };
   // Template-resolution markers (e.g. "input_data.$") are engine-side wiring, not node config.
   for (const key of Object.keys(params)) if (key.endsWith('.$')) delete params[key];
+  // Resource-URI-encoded config: MCP-created flows carry it only in the URI — restore what the UI expects as node fields.
+  const resource = state.resource || '';
+  if (resource.startsWith('sql://') && !params.connectionString)
+    params.connectionString = resource.slice('sql://'.length).replace(/\/+$/, '');
+  else if (resource.startsWith('eav://') && !params.entityType)
+    params.entityType = resource.slice('eav://'.length).replace(/\/+$/, '');
+  else if (resource.startsWith('ai://') && !params.llmService)
+    params.llmService = resource.slice('ai://'.length).replace(/\/+$/, '');
+  else if (resource.startsWith('rule://') && !params.evaluationMode)
+    params.evaluationMode = resource.slice('rule://'.length).replace(/\/+$/, '');
   return params;
 }
 

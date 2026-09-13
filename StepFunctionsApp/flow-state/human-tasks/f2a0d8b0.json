@@ -1,0 +1,30 @@
+{
+  "TaskId": "f2a0d8b0",
+  "ExecutionId": "71e33c4f",
+  "StateMachineName": "",
+  "StateName": "CaptureFee",
+  "NextState": "BuildInsert",
+  "IsEnd": false,
+  "ResultPath": "$.capturedFee",
+  "FormVersion": "1",
+  "Title": "Council Fee Application",
+  "Assignee": null,
+  "Payload": {
+    "task": {
+      "formId": "council-fees"
+    },
+    "input": {}
+  },
+  "CompletionType": "form",
+  "CompletionConfig": {
+    "Type": "form"
+  },
+  "Status": "Completed",
+  "CreatedAtUtc": "2026-09-12T08:17:45.9194169Z",
+  "CompletedAtUtc": "2026-09-12T08:18:33.3698941Z",
+  "Result": {
+    "feeType": "liquor-license",
+    "year": 2026.0,
+    "amount": 500.0
+  }
+}

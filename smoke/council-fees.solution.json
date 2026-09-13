@@ -1,0 +1,708 @@
+{
+  "format": "stepflow-solution",
+  "formatVersion": 1,
+  "manifest": {
+    "name": "council-fees",
+    "version": "1",
+    "createdAtUtc": "2026-09-13T08:32:59.3657450Z",
+    "sourceNodePath": "Default/Default/Default"
+  },
+  "flows": [
+    {
+      "name": "Council Fee Capture",
+      "startAt": "fa18ca66-c876-45a6-83e8-141ed041ad5a",
+      "states": {
+        "fa18ca66-c876-45a6-83e8-141ed041ad5a": {
+          "type": "FormCapture",
+          "next": "c4cb690b-a06d-40b8-9352-2f7c8fcbb600",
+          "task": {
+            "formId": "council-fees",
+            "title": "",
+            "assignee": ""
+          },
+          "completion": {
+            "Type": "form"
+          },
+          "resultPath": "$.capturedFee"
+        },
+        "c4cb690b-a06d-40b8-9352-2f7c8fcbb600": {
+          "type": "Choice",
+          "choices": [
+            {
+              "expression": "($.capturedFee.feeType = 'dog-license') or ($.capturedFee.feeType = 'liquor-license') or ($.capturedFee.feeType = 'food-premises-license')",
+              "next": "1efbc67b-1bec-4ff2-9cd3-5af312a6f0e1"
+            }
+          ],
+          "default": "c95880ad-8c78-4c51-854a-dae527b54fa3",
+          "inputs": [
+            "input_data"
+          ],
+          "outputs": [
+            "output_true",
+            "output_false"
+          ]
+        },
+        "1efbc67b-1bec-4ff2-9cd3-5af312a6f0e1": {
+          "type": "Task",
+          "resource": "transform://jsonata",
+          "next": "fc32f8e0-27b6-466e-9e54-4a16b5bd0224",
+          "parameters": {
+            "expression": "{ 'capturedFee': $.capturedFee, 'query': \"INSERT INTO fees (fee_type, year, amount, status, submitted_by, created_at_utc) VALUES ('\" & $.capturedFee.feeType & \"', \" & $.capturedFee.year & \", \" & $.capturedFee.amount & \", 'pending', 'council-office-3', strftime('%Y-%m-%d %H:%M:%S','now'))\" }",
+            "input_data.$": "$"
+          },
+          "inputs": [
+            "input_data",
+            "input_context"
+          ],
+          "outputs": [
+            "output_result",
+            "output_error"
+          ]
+        },
+        "fc32f8e0-27b6-466e-9e54-4a16b5bd0224": {
+          "type": "Task",
+          "resource": "sql://fees",
+          "next": "877e540e-8cab-4a41-b90a-3cb6357f60fe",
+          "parameters": {
+            "query.$": "$.query"
+          },
+          "inputs": [
+            "input_parameters",
+            "input_dataset"
+          ],
+          "outputs": [
+            "output_rows",
+            "output_count"
+          ],
+          "resultPath": "$.insertResult"
+        },
+        "877e540e-8cab-4a41-b90a-3cb6357f60fe": {
+          "type": "Task",
+          "resource": "transform://jsonata",
+          "next": "b92d99a5-6594-477e-8895-abc402571833",
+          "parameters": {
+            "expression": "{ 'capturedFee': $.capturedFee, 'query': \"SELECT fee_type, display_name, department FROM fee_types WHERE fee_type = '\" & $.capturedFee.feeType & \"'\" }",
+            "input_data.$": "$"
+          },
+          "inputs": [
+            "input_data",
+            "input_context"
+          ],
+          "outputs": [
+            "output_result",
+            "output_error"
+          ]
+        },
+        "b92d99a5-6594-477e-8895-abc402571833": {
+          "type": "Task",
+          "resource": "sql://fees",
+          "next": "25bd8077-867a-48eb-ac4e-f45cf8656119",
+          "parameters": {
+            "query.$": "$.query"
+          },
+          "inputs": [
+            "input_parameters",
+            "input_dataset"
+          ],
+          "outputs": [
+            "output_rows",
+            "output_count"
+          ],
+          "resultPath": "$.departmentLookup"
+        },
+        "25bd8077-867a-48eb-ac4e-f45cf8656119": {
+          "type": "Choice",
+          "choices": [
+            {
+              "expression": "$.capturedFee.feeType = 'dog-license'",
+              "next": "e690eaa5-31f0-4cb0-bb8e-bf815fdc147e"
+            },
+            {
+              "expression": "$.capturedFee.feeType = 'liquor-license'",
+              "next": "0b2bcd8a-5c3f-42c3-b68e-82b757a7c6f1"
+            },
+            {
+              "expression": "$.capturedFee.feeType = 'food-premises-license'",
+              "next": "8ae38f7c-af84-4458-8380-febf7d9cc2b1"
+            }
+          ],
+          "default": "c95880ad-8c78-4c51-854a-dae527b54fa3",
+          "inputs": [
+            "input_data"
+          ],
+          "outputs": [
+            "output_true",
+            "output_false"
+          ]
+        },
+        "e690eaa5-31f0-4cb0-bb8e-bf815fdc147e": {
+          "type": "HumanTask",
+          "next": "e0f85864-d202-48a1-a67e-c1f48238b546",
+          "task": {
+            "title": "Council approval: Dog License Fee",
+            "assignee": "Animal Control"
+          },
+          "completion": {
+            "Type": "api"
+          },
+          "resultPath": "$.approval"
+        },
+        "0b2bcd8a-5c3f-42c3-b68e-82b757a7c6f1": {
+          "type": "HumanTask",
+          "next": "e0f85864-d202-48a1-a67e-c1f48238b546",
+          "task": {
+            "title": "Council approval: Liquor License Fee",
+            "assignee": "Liquor Licensing Board"
+          },
+          "completion": {
+            "Type": "api"
+          },
+          "resultPath": "$.approval"
+        },
+        "8ae38f7c-af84-4458-8380-febf7d9cc2b1": {
+          "type": "HumanTask",
+          "next": "e0f85864-d202-48a1-a67e-c1f48238b546",
+          "task": {
+            "title": "Council approval: Food Premises License Fee",
+            "assignee": "Food Safety Department"
+          },
+          "completion": {
+            "Type": "api"
+          },
+          "resultPath": "$.approval"
+        },
+        "e0f85864-d202-48a1-a67e-c1f48238b546": {
+          "type": "Choice",
+          "choices": [
+            {
+              "expression": "$.approval.approved = true and $.approval.completedBy = $.departmentLookup.rows[0].department",
+              "next": "411b13ed-29d2-48cc-a55f-c6983b81a44f"
+            }
+          ],
+          "default": "389c9ae7-8d74-4ffd-8ea3-9619fb22bec9",
+          "inputs": [
+            "input_data"
+          ],
+          "outputs": [
+            "output_true",
+            "output_false"
+          ]
+        },
+        "411b13ed-29d2-48cc-a55f-c6983b81a44f": {
+          "type": "Task",
+          "resource": "transform://jsonata",
+          "next": "3b12167b-a335-4ede-91b8-32302ea0475d",
+          "parameters": {
+            "expression": "{ 'capturedFee': $.capturedFee, 'query': \"UPDATE fees SET status = 'approved', approved_by = '\" & ($.approval.completedBy ? $.approval.completedBy : 'unknown') & \"', approved_at_utc = strftime('%Y-%m-%d %H:%M:%S','now') WHERE fee_type = '\" & $.capturedFee.feeType & \"' AND year = \" & $.capturedFee.year }",
+            "input_data.$": "$"
+          },
+          "inputs": [
+            "input_data",
+            "input_context"
+          ],
+          "outputs": [
+            "output_result",
+            "output_error"
+          ]
+        },
+        "389c9ae7-8d74-4ffd-8ea3-9619fb22bec9": {
+          "type": "Task",
+          "resource": "transform://jsonata",
+          "next": "e3bddfb5-e790-41d5-97c2-395a1268a167",
+          "parameters": {
+            "expression": "{ 'capturedFee': $.capturedFee, 'query': \"UPDATE fees SET status = 'rejected', approved_by = '\" & ($.approval.completedBy ? $.approval.completedBy : 'unknown') & \"', approved_at_utc = strftime('%Y-%m-%d %H:%M:%S','now') WHERE fee_type = '\" & $.capturedFee.feeType & \"' AND year = \" & $.capturedFee.year }",
+            "input_data.$": "$"
+          },
+          "inputs": [
+            "input_data",
+            "input_context"
+          ],
+          "outputs": [
+            "output_result",
+            "output_error"
+          ]
+        },
+        "3b12167b-a335-4ede-91b8-32302ea0475d": {
+          "type": "Task",
+          "resource": "sql://fees",
+          "next": "44842847-8c47-4633-9cbb-d465aaf81dae",
+          "parameters": {
+            "query.$": "$.query"
+          },
+          "inputs": [
+            "input_parameters",
+            "input_dataset"
+          ],
+          "outputs": [
+            "output_rows",
+            "output_count"
+          ],
+          "resultPath": "$.updateResult"
+        },
+        "e3bddfb5-e790-41d5-97c2-395a1268a167": {
+          "type": "Task",
+          "resource": "sql://fees",
+          "next": "9b63eb40-5800-4b74-ae29-6be6cf4607cf",
+          "parameters": {
+            "query.$": "$.query"
+          },
+          "inputs": [
+            "input_parameters",
+            "input_dataset"
+          ],
+          "outputs": [
+            "output_rows",
+            "output_count"
+          ],
+          "resultPath": "$.updateResult"
+        },
+        "9b63eb40-5800-4b74-ae29-6be6cf4607cf": {
+          "type": "Pass",
+          "resource": "utility://pass",
+          "parameters": {},
+          "inputs": [
+            "input_data"
+          ],
+          "outputs": [
+            "output_data"
+          ],
+          "end": true
+        },
+        "c95880ad-8c78-4c51-854a-dae527b54fa3": {
+          "type": "Fail",
+          "error": "UnknownFeeType",
+          "cause": "feeType must be one of: dog-license, liquor-license, food-premises-license"
+        },
+        "44842847-8c47-4633-9cbb-d465aaf81dae": {
+          "type": "Pass",
+          "resource": "utility://pass",
+          "parameters": {},
+          "inputs": [
+            "input_data"
+          ],
+          "outputs": [
+            "output_data"
+          ],
+          "end": true
+        }
+      }
+    },
+    {
+      "name": "Council Fees Read",
+      "description": "Read all council fees from SQLite, optionally filtered by fee type.",
+      "startAt": "BuildQuery",
+      "states": {
+        "BuildQuery": {
+          "type": "Task",
+          "resource": "transform://jsonata",
+          "parameters": {
+            "expression": "{ 'query': 'SELECT f.id, f.fee_type AS feeType, ft.display_name AS feeTypeName, f.year, f.amount, f.status, f.approved_by AS approvedBy, f.created_at_utc AS createdAtUtc FROM fees f LEFT JOIN fee_types ft ON ft.fee_type = f.fee_type' & ($exists($.feeType) ? (\" WHERE f.fee_type = '\" & $.feeType & \"'\") : '') }",
+            "input_data.$": "$"
+          },
+          "next": "ReadFees"
+        },
+        "ReadFees": {
+          "type": "Task",
+          "resource": "sql://fees",
+          "end": true
+        }
+      }
+    },
+    {
+      "name": "e2e-echo-flow",
+      "startAt": "Start",
+      "states": {
+        "Start": {
+          "type": "Pass",
+          "next": "Echo"
+        },
+        "Echo": {
+          "type": "Task",
+          "resource": "transform://jsonata",
+          "parameters": {
+            "expression": "{\"note\":'echoed', \"ping\":$.ping, \"hello\":$.hello}",
+            "input_data.$": "$"
+          },
+          "next": "Done"
+        },
+        "Done": {
+          "type": "Succeed"
+        }
+      }
+    },
+    {
+      "name": "mcp-ui-parity",
+      "description": "MCP-created parity flow: echo + jsonata transform (E2E UI compatibility)",
+      "startAt": "Greet",
+      "states": {
+        "Greet": {
+          "type": "Task",
+          "resource": "internal://echo",
+          "parameters": {
+            "greeting": "hello from MCP",
+            "source": "mcp-ui-parity"
+          },
+          "next": "Summarize"
+        },
+        "Summarize": {
+          "type": "Task",
+          "resource": "transform://jsonata",
+          "parameters": {
+            "expression": "{ \"source\": $.source, \"message\": $.greeting & ' - transformed' }",
+            "input_data.$": "$"
+          },
+          "end": true
+        }
+      }
+    },
+    {
+      "name": "New Flow",
+      "startAt": "c2df0f09-90b9-4a18-862e-bc935a3d8fb3",
+      "states": {
+        "c2df0f09-90b9-4a18-862e-bc935a3d8fb3": {
+          "type": "Pass",
+          "resource": "utility://default",
+          "next": "fe302fd3-bb4d-4f46-9af3-f9f0a1d26c16",
+          "parameters": {
+            "description": ""
+          },
+          "comment": "Marks the beginning of the workflow. Every flow starts here.",
+          "inputs": [],
+          "outputs": [
+            "start_output"
+          ]
+        },
+        "fe302fd3-bb4d-4f46-9af3-f9f0a1d26c16": {
+          "type": "Task",
+          "resource": "eav://customer_refund_request",
+          "next": "a43a02cc-60f6-46bf-bff6-60254c67660f",
+          "parameters": {
+            "operation": "read",
+            "attributeFilter": "",
+            "rowPath": "$[0]",
+            "columnSelector": "",
+            "entityTypeMapping": "",
+            "enableVersioning": false,
+            "entityType": "customer_refund_request"
+          },
+          "comment": "Entity-Attribute-Value operations for flexible data modeling. Inside a Map loop, row columns are picked from the parent flow's data source.",
+          "inputs": [
+            "input_entity",
+            "input_attributes"
+          ],
+          "outputs": [
+            "output_result",
+            "output_metadata"
+          ]
+        },
+        "a43a02cc-60f6-46bf-bff6-60254c67660f": {
+          "type": "Task",
+          "resource": "transform://jsonata",
+          "next": "646d297e-b5d6-4fc5-a6a0-09bf31a39dad",
+          "parameters": {
+            "expression": "$map($, function($v) { return { \"amount\": $v.amount, \"reason\": $v.reason, \"customer_id\": $v.customer_id } })",
+            "enableDebug": false,
+            "timeout": 5000,
+            "input_data.$": "$"
+          },
+          "comment": "Transform data using JSONata expressions.",
+          "inputs": [
+            "input_data",
+            "input_context"
+          ],
+          "outputs": [
+            "output_result",
+            "output_error"
+          ]
+        },
+        "646d297e-b5d6-4fc5-a6a0-09bf31a39dad": {
+          "type": "Map",
+          "itemsPath": "$",
+          "maxConcurrency": 1,
+          "resultPath": "$",
+          "iterator": {
+            "startAt": "Iteration Start",
+            "states": {
+              "Iteration Start": {
+                "type": "Pass",
+                "resource": "utility://pass",
+                "next": "Read Row",
+                "parameters": {},
+                "inputs": [
+                  "input_data"
+                ],
+                "outputs": [
+                  "output_data"
+                ]
+              },
+              "Read Row": {
+                "type": "Task",
+                "resource": "eav://customer_refund_request",
+                "next": "Approve Refund?",
+                "parameters": {
+                  "operation": "read",
+                  "entityType": "customer_refund_request"
+                },
+                "inputs": [
+                  "input_entity",
+                  "input_attributes"
+                ],
+                "outputs": [
+                  "output_result",
+                  "output_metadata"
+                ]
+              },
+              "Approve Refund?": {
+                "type": "Task",
+                "resource": "ai://azureOpenAI",
+                "next": "Iteration End",
+                "parameters": {
+                  "model": "gpt-4-turbo",
+                  "prompt": "Decide whether this refund request should be approved. Consider the amount and reason. Respond with a clear approve/deny decision."
+                },
+                "inputs": [
+                  "input_data",
+                  "input_context"
+                ],
+                "outputs": [
+                  "output_result",
+                  "output_decision"
+                ]
+              },
+              "Iteration End": {
+                "type": "Pass",
+                "end": true,
+                "inputs": [
+                  "end_input"
+                ],
+                "outputs": []
+              }
+            }
+          },
+          "next": "80815f10-3e34-4e58-a5d1-4b1620946e9a"
+        },
+        "80815f10-3e34-4e58-a5d1-4b1620946e9a": {
+          "type": "Task",
+          "resource": "eav://refund_decision",
+          "next": "df69f1b5-0f30-49c2-adb9-e20af10eeb6c",
+          "parameters": {
+            "operation": "write",
+            "attributeFilter": "",
+            "rowPath": "$[0]",
+            "columnSelector": "",
+            "entityTypeMapping": "",
+            "enableVersioning": false,
+            "entityType": "refund_decision",
+            "values.$": "$"
+          },
+          "comment": "Entity-Attribute-Value operations for flexible data modeling. Inside a Map loop, row columns are picked from the parent flow's data source.",
+          "inputs": [
+            "input_entity",
+            "input_attributes"
+          ],
+          "outputs": [
+            "output_result",
+            "output_metadata"
+          ]
+        },
+        "df69f1b5-0f30-49c2-adb9-e20af10eeb6c": {
+          "type": "Pass",
+          "end": true,
+          "comment": "Marks the end of the workflow. Place one or more END states to define flow completion.",
+          "inputs": [
+            "end_input"
+          ],
+          "outputs": []
+        }
+      }
+    },
+    {
+      "name": "ui-save-test-0912",
+      "startAt": "3556ccb6-66d6-4776-85fb-380cba79f50e",
+      "states": {
+        "3556ccb6-66d6-4776-85fb-380cba79f50e": {
+          "type": "Task",
+          "resource": "transform://jsonata",
+          "next": "c3ae4cc7-1ef5-4025-9e7e-00c1a766c7a4",
+          "parameters": {
+            "expression": "{ 'query': 'SELECT f.id, f.fee_type AS feeType, ft.display_name AS feeTypeName, f.year, f.amount, f.status, f.approved_by AS approvedBy, f.created_at_utc AS createdAtUtc FROM fees f LEFT JOIN fee_types ft ON ft.fee_type = f.fee_type' & ($exists($.feeType) ? (\" WHERE f.fee_type = '\" & $.feeType & \"'\") : '') }",
+            "input_data.$": "$"
+          },
+          "inputs": [
+            "input_data",
+            "input_context"
+          ],
+          "outputs": [
+            "output_result",
+            "output_error"
+          ]
+        },
+        "c3ae4cc7-1ef5-4025-9e7e-00c1a766c7a4": {
+          "type": "Pass",
+          "end": true,
+          "inputs": [
+            "end_input"
+          ],
+          "outputs": []
+        }
+      }
+    }
+  ],
+  "attributeDomains": [
+    {
+      "name": "CouncilFee",
+      "version": "1",
+      "description": "Annual council fee: type, year and amount; approved by the responsible department.",
+      "attributes": [
+        {
+          "attributeName": "feeType",
+          "dataType": "String",
+          "description": "",
+          "displayName": "Fee Type",
+          "placeholder": "",
+          "helpText": "Pick one of the three council fee types.",
+          "visible": true,
+          "readOnly": false,
+          "primaryKey": false,
+          "validationSchemaJson": {
+            "required": true
+          }
+        },
+        {
+          "attributeName": "year",
+          "dataType": "Number",
+          "description": "",
+          "displayName": "Year",
+          "placeholder": "2026",
+          "helpText": "Fee year (integer).",
+          "visible": true,
+          "readOnly": false,
+          "primaryKey": false,
+          "validationSchemaJson": {
+            "required": true,
+            "minimum": 2000,
+            "maximum": 2100
+          }
+        },
+        {
+          "attributeName": "amount",
+          "dataType": "Number",
+          "description": "",
+          "displayName": "Amount (USD)",
+          "placeholder": "150.00",
+          "helpText": "Annual fee amount in USD.",
+          "visible": true,
+          "readOnly": false,
+          "primaryKey": false,
+          "validationSchemaJson": {
+            "required": true,
+            "minimum": 0
+          }
+        }
+      ]
+    }
+  ],
+  "schemaDefinitions": [],
+  "forms": [
+    {
+      "formId": "council-fees",
+      "version": "1",
+      "title": "Council Fee Application",
+      "description": "Submit an annual council fee for departmental approval.",
+      "attributeDomainName": "CouncilFee",
+      "page": {
+        "Title": "Council Fee Application",
+        "Description": "Pick the fee type, year and amount. The responsible department approves it.",
+        "Author": "stepflow-builder",
+        "PageName": 0,
+        "PageVersion": "1.0",
+        "RootElements": [
+          {
+            "Id": 10,
+            "Type": "Section",
+            "Label": "Fee Details",
+            "Heading": "Fee Details",
+            "Children": [
+              {
+                "Id": 11,
+                "Type": "Dropdown",
+                "Attribute": "feeType",
+                "Label": "Fee Type",
+                "Children": [
+                  {
+                    "Id": 111,
+                    "Type": "DropdownOption",
+                    "Value": "dog-license",
+                    "DisplayText": "Dog License Fee"
+                  },
+                  {
+                    "Id": 112,
+                    "Type": "DropdownOption",
+                    "Value": "liquor-license",
+                    "DisplayText": "Liquor License Fee"
+                  },
+                  {
+                    "Id": 113,
+                    "Type": "DropdownOption",
+                    "Value": "food-premises-license",
+                    "DisplayText": "Food Premises License Fee"
+                  }
+                ]
+              },
+              {
+                "Id": 12,
+                "Type": "TextBox",
+                "Attribute": "year",
+                "Label": "Year",
+                "Placeholder": "2026"
+              },
+              {
+                "Id": 13,
+                "Type": "TextBox",
+                "Attribute": "amount",
+                "Label": "Amount (USD)",
+                "Placeholder": "150.00"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "dynamicApis": [
+    {
+      "id": "Council-Fees-API",
+      "name": "Council Fees API",
+      "description": "Read council fees: all, or filtered by fee type.",
+      "basePath": "/council-fees",
+      "isActive": true,
+      "isPublished": true,
+      "operations": [
+        {
+          "method": "GET",
+          "path": "",
+          "handlerType": "flow",
+          "flowId": "council-fees-read",
+          "description": "All council fees"
+        },
+        {
+          "method": "GET",
+          "path": "/type/{feeType}",
+          "handlerType": "flow",
+          "flowId": "council-fees-read",
+          "description": "Fees for one fee type"
+        }
+      ]
+    }
+  ],
+  "dataSources": [
+    {
+      "name": "fees",
+      "migrations": [
+        "CREATE TABLE IF NOT EXISTS fee_types (\n  fee_type TEXT PRIMARY KEY,\n  display_name TEXT NOT NULL,\n  department TEXT NOT NULL\n);",
+        "CREATE TABLE IF NOT EXISTS fees (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  fee_type TEXT NOT NULL REFERENCES fee_types(fee_type),\n  year INTEGER NOT NULL,\n  amount REAL NOT NULL,\n  status TEXT NOT NULL DEFAULT 'pending',\n  submitted_by TEXT,\n  approved_by TEXT,\n  approved_at_utc TEXT,\n  created_at_utc TEXT NOT NULL,\n  UNIQUE(fee_type, year)\n);",
+        "INSERT OR IGNORE INTO \"fee_types\" (\"fee_type\", \"display_name\", \"department\") VALUES ('dog-license', 'Dog License Fee', 'Animal Control');\nINSERT OR IGNORE INTO \"fee_types\" (\"fee_type\", \"display_name\", \"department\") VALUES ('liquor-license', 'Liquor License Fee', 'Liquor Licensing Board');\nINSERT OR IGNORE INTO \"fee_types\" (\"fee_type\", \"display_name\", \"department\") VALUES ('food-premises-license', 'Food Premises License Fee', 'Food Safety Department');"
+      ]
+    }
+  ]
+}

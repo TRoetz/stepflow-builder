@@ -1,0 +1,1 @@
+{"startAt":"Start","states":{"Start":{"type":"Pass","next":"Echo"},"Echo":{"type":"Task","resource":"transform://jsonata","parameters":{"expression":"{\"note\":'echoed', \"ping\":$.ping, \"hello\":$.hello}","input_data.$":"$"},"next":"Done"},"Done":{"type":"Succeed"}}}

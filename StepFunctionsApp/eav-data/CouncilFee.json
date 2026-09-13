@@ -1,0 +1,506 @@
+[
+  {
+    "RowKeyId": "1c3beb11ca7648e7bb85cf2c52cebdc9",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "3ab5ee56",
+    "CapturedAtUtc": "2026-09-12T08:04:18.0872008Z",
+    "Values": {
+      "feeType": "dog-license",
+      "year": 2026.0,
+      "amount": 150.0
+    }
+  },
+  {
+    "RowKeyId": "a190fcb529514879bc471cd36da5fe19",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "7fa7a4b1",
+    "CapturedAtUtc": "2026-09-12T08:13:40.9648202Z",
+    "Values": {
+      "feeType": "dog-license",
+      "year": 2026.0,
+      "amount": 150.0
+    }
+  },
+  {
+    "RowKeyId": "4d8b1791867f41098e3ac860311af526",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "182c0152",
+    "CapturedAtUtc": "2026-09-12T08:16:20.1547395Z",
+    "Values": {
+      "feeType": "dog-license",
+      "year": 2026.0,
+      "amount": 150.0
+    }
+  },
+  {
+    "RowKeyId": "3e20f5f0825d464bb7d77218d7a5c958",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "f2a0d8b0",
+    "CapturedAtUtc": "2026-09-12T08:18:33.368901Z",
+    "Values": {
+      "feeType": "liquor-license",
+      "year": 2026.0,
+      "amount": 500.0
+    }
+  },
+  {
+    "RowKeyId": "0e9e33368d324877a7c9459f9e7bb4e0",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "04a2a75f",
+    "CapturedAtUtc": "2026-09-12T08:22:01.6881625Z",
+    "Values": {
+      "feeType": "liqor-license",
+      "year": 2026.0,
+      "amount": 500.0
+    }
+  },
+  {
+    "RowKeyId": "ffcfde6d011a4e8a928176175926fb14",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "1b3ba969",
+    "CapturedAtUtc": "2026-09-12T08:23:37.2004175Z",
+    "Values": {
+      "feeType": "bogus-type",
+      "year": 2026.0,
+      "amount": 1.0
+    }
+  },
+  {
+    "RowKeyId": "8fddb812598740b880ccdbb0c4d833ee",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "cc91a615",
+    "CapturedAtUtc": "2026-09-12T10:12:21.6454913Z",
+    "Values": {
+      "feeType": "dog-license",
+      "year": 2026.0,
+      "amount": 150.0
+    }
+  },
+  {
+    "RowKeyId": "f6da0cc9477947ffbc9c1442215ec820",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "f4b7f358",
+    "CapturedAtUtc": "2026-09-12T10:15:23.7568597Z",
+    "Values": {
+      "feeType": "dog-license",
+      "year": 2026.0,
+      "amount": 150.0
+    }
+  },
+  {
+    "RowKeyId": "f346bb70b59b4fccbc52e4cc70e224b8",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "ca362833",
+    "CapturedAtUtc": "2026-09-12T10:24:03.8700238Z",
+    "Values": {
+      "feeType": "dog-license",
+      "year": 2026.0,
+      "amount": 150.0
+    }
+  },
+  {
+    "RowKeyId": "cfd510d3bcc243529ebdab6aa6178517",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "fe7b8ff8",
+    "CapturedAtUtc": "2026-09-12T10:27:16.3488048Z",
+    "Values": {
+      "feeType": "dog-license",
+      "year": 2026.0,
+      "amount": 150.0
+    }
+  },
+  {
+    "RowKeyId": "b76d7f6addde43109228c86fa100c1b9",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "6e90c7ea",
+    "CapturedAtUtc": "2026-09-12T10:30:22.172921Z",
+    "Values": {
+      "feeType": "dog-license",
+      "year": 2026.0,
+      "amount": 75.0
+    }
+  },
+  {
+    "RowKeyId": "895c506878d14b248cd4140a39e4f68c",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "f2cf5ad5",
+    "CapturedAtUtc": "2026-09-12T10:33:31.6631135Z",
+    "Values": {
+      "feeType": "liquor-license",
+      "year": 2026.0,
+      "amount": 75.0
+    }
+  },
+  {
+    "RowKeyId": "a2f4abadcacf4be78be4dba46168ec48",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "cf239e99",
+    "CapturedAtUtc": "2026-09-12T10:35:54.7126614Z",
+    "Values": {
+      "feeType": "food-premises-license",
+      "year": 2026.0,
+      "amount": 40.0
+    }
+  },
+  {
+    "RowKeyId": "f18d80af60c9491db33570389fcaa8f8",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "9e6e7058",
+    "CapturedAtUtc": "2026-09-13T05:15:02.4171684Z",
+    "Values": {
+      "feeType": "dog-license",
+      "year": 2027.0,
+      "amount": 150.0
+    }
+  },
+  {
+    "RowKeyId": "05dab26a368648cfa35bb29a330d19ec",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "0712ee70",
+    "CapturedAtUtc": "2026-09-13T05:15:05.5173973Z",
+    "Values": {
+      "feeType": "food-premises-license",
+      "year": 2027.0,
+      "amount": 40.0
+    }
+  },
+  {
+    "RowKeyId": "d40e98569539467a8b6366d89217c46e",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "9756d267",
+    "CapturedAtUtc": "2026-09-13T05:15:07.1301352Z",
+    "Values": {
+      "feeType": "liquor-license",
+      "year": 2026.0,
+      "amount": 300.0
+    }
+  },
+  {
+    "RowKeyId": "81bd90e1447b4e8280dbc1e536904a9c",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "e49814b8",
+    "CapturedAtUtc": "2026-09-13T05:15:10.2563596Z",
+    "Values": {
+      "feeType": "parking-permit",
+      "year": 2027.0,
+      "amount": 10.0
+    }
+  },
+  {
+    "RowKeyId": "040811372070485ea960d8643e6d0abc",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "273adbd3",
+    "CapturedAtUtc": "2026-09-13T05:24:02.5147151Z",
+    "Values": {
+      "feeType": "dog-license",
+      "year": 2027.0,
+      "amount": 150.0
+    }
+  },
+  {
+    "RowKeyId": "a9e70664ba794602a14854002975bb9e",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "7b24d69c",
+    "CapturedAtUtc": "2026-09-13T05:24:05.6171888Z",
+    "Values": {
+      "feeType": "food-premises-license",
+      "year": 2027.0,
+      "amount": 40.0
+    }
+  },
+  {
+    "RowKeyId": "4a25109979934472a013ed603fc53def",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "7df5d7f9",
+    "CapturedAtUtc": "2026-09-13T05:24:08.7674031Z",
+    "Values": {
+      "feeType": "liquor-license",
+      "year": 2026.0,
+      "amount": 300.0
+    }
+  },
+  {
+    "RowKeyId": "60bd1156c2484bc68592c17d67af8d2f",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "b28df8f6",
+    "CapturedAtUtc": "2026-09-13T05:24:11.7924091Z",
+    "Values": {
+      "feeType": "parking-permit",
+      "year": 2027.0,
+      "amount": 10.0
+    }
+  },
+  {
+    "RowKeyId": "052d23f2a582414a9530c9b6a2d11c9b",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "af96416b",
+    "CapturedAtUtc": "2026-09-13T05:26:02.5046537Z",
+    "Values": {
+      "feeType": "dog-license",
+      "year": 2027.0,
+      "amount": 150.0
+    }
+  },
+  {
+    "RowKeyId": "5df58bec1a3b4c3ab4c40e2afbfca334",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "f7c0bf8e",
+    "CapturedAtUtc": "2026-09-13T05:26:05.595397Z",
+    "Values": {
+      "feeType": "food-premises-license",
+      "year": 2027.0,
+      "amount": 40.0
+    }
+  },
+  {
+    "RowKeyId": "cd6cb42951094c6da5ce1350379e8912",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "47c7550a",
+    "CapturedAtUtc": "2026-09-13T05:26:08.6773926Z",
+    "Values": {
+      "feeType": "liquor-license",
+      "year": 2026.0,
+      "amount": 300.0
+    }
+  },
+  {
+    "RowKeyId": "d2c9afc933d1464485852a607d23144f",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "720427cc",
+    "CapturedAtUtc": "2026-09-13T05:26:11.7745052Z",
+    "Values": {
+      "feeType": "parking-permit",
+      "year": 2027.0,
+      "amount": 10.0
+    }
+  },
+  {
+    "RowKeyId": "1bcd1b4104bc45328e4768cd396ae456",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "77334380",
+    "CapturedAtUtc": "2026-09-13T05:30:31.2609898Z",
+    "Values": {
+      "feeType": "dog-license",
+      "year": 2027.0,
+      "amount": 150.0
+    }
+  },
+  {
+    "RowKeyId": "bf727bad86394d7ba2cd7ecd7480333a",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "08ddcc58",
+    "CapturedAtUtc": "2026-09-13T05:30:34.3257464Z",
+    "Values": {
+      "feeType": "food-premises-license",
+      "year": 2027.0,
+      "amount": 40.0
+    }
+  },
+  {
+    "RowKeyId": "ac1665a49863453d8fc74be647351328",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "11911b96",
+    "CapturedAtUtc": "2026-09-13T05:30:37.4578832Z",
+    "Values": {
+      "feeType": "liquor-license",
+      "year": 2026.0,
+      "amount": 300.0
+    }
+  },
+  {
+    "RowKeyId": "4a42ad4173074e6ca6639f93d0ce2386",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "219ab99b",
+    "CapturedAtUtc": "2026-09-13T05:30:40.5255942Z",
+    "Values": {
+      "feeType": "parking-permit",
+      "year": 2027.0,
+      "amount": 10.0
+    }
+  },
+  {
+    "RowKeyId": "f46dcf5ac2bc4926aac471f2d68fed77",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "d3996d05",
+    "CapturedAtUtc": "2026-09-13T05:39:58.4995693Z",
+    "Values": {
+      "feeType": "liquor-license",
+      "year": 2028.0,
+      "amount": 300.0
+    }
+  },
+  {
+    "RowKeyId": "578dacd4f69c4273b897bb10e2fc6f37",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "ffc3c30f",
+    "CapturedAtUtc": "2026-09-13T08:30:38.8668031Z",
+    "Values": {
+      "feeType": "dog-license",
+      "year": 2027.0,
+      "amount": 150.0
+    }
+  },
+  {
+    "RowKeyId": "ecc139f5e775471c8cec45c671285032",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "b0b5ae45",
+    "CapturedAtUtc": "2026-09-13T08:30:42.0537064Z",
+    "Values": {
+      "feeType": "food-premises-license",
+      "year": 2027.0,
+      "amount": 40.0
+    }
+  },
+  {
+    "RowKeyId": "36b6af99d77b4132ab2ae104ee38f398",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "1162ad23",
+    "CapturedAtUtc": "2026-09-13T08:30:45.1805484Z",
+    "Values": {
+      "feeType": "liquor-license",
+      "year": 2026.0,
+      "amount": 300.0
+    }
+  },
+  {
+    "RowKeyId": "eaa04b291c834bc4a728c5d114f37ad6",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "8fb44eee",
+    "CapturedAtUtc": "2026-09-13T08:30:48.2556894Z",
+    "Values": {
+      "feeType": "parking-permit",
+      "year": 2027.0,
+      "amount": 10.0
+    }
+  },
+  {
+    "RowKeyId": "07cf42936ad74ad68f2cda7b0e673718",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "43635b40",
+    "CapturedAtUtc": "2026-09-13T08:32:00.4468218Z",
+    "Values": {
+      "feeType": "dog-license",
+      "year": 2027.0,
+      "amount": 150.0
+    }
+  },
+  {
+    "RowKeyId": "c2bd5cc3cd5c404cab2886e1fc197605",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "22ece387",
+    "CapturedAtUtc": "2026-09-13T08:32:03.5259162Z",
+    "Values": {
+      "feeType": "food-premises-license",
+      "year": 2027.0,
+      "amount": 40.0
+    }
+  },
+  {
+    "RowKeyId": "f69b1234204f48a9a9b945de79fca569",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "fca31746",
+    "CapturedAtUtc": "2026-09-13T08:32:06.609274Z",
+    "Values": {
+      "feeType": "liquor-license",
+      "year": 2026.0,
+      "amount": 300.0
+    }
+  },
+  {
+    "RowKeyId": "aca90e892a07492590e159ee5a8be798",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "b6093e03",
+    "CapturedAtUtc": "2026-09-13T08:32:09.6787076Z",
+    "Values": {
+      "feeType": "parking-permit",
+      "year": 2027.0,
+      "amount": 10.0
+    }
+  },
+  {
+    "RowKeyId": "3724ce0ae28f4801a172f762ed623caa",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "837f7970",
+    "CapturedAtUtc": "2026-09-13T09:03:31.8565539Z",
+    "Values": {
+      "feeType": "dog-license",
+      "year": 2027.0,
+      "amount": 150.0
+    }
+  },
+  {
+    "RowKeyId": "8b4000227b414aebab02763b573e86b6",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "79b35723",
+    "CapturedAtUtc": "2026-09-13T09:03:34.9833085Z",
+    "Values": {
+      "feeType": "food-premises-license",
+      "year": 2027.0,
+      "amount": 40.0
+    }
+  },
+  {
+    "RowKeyId": "339bb84575bd48ae9856f92d36d62343",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "1405301f",
+    "CapturedAtUtc": "2026-09-13T09:03:38.0857207Z",
+    "Values": {
+      "feeType": "liquor-license",
+      "year": 2026.0,
+      "amount": 300.0
+    }
+  },
+  {
+    "RowKeyId": "d2dc8492861d4548932769cacdfdbcbc",
+    "EntityId": null,
+    "EntityType": null,
+    "SourceTaskId": "a0efe834",
+    "CapturedAtUtc": "2026-09-13T09:03:41.1916695Z",
+    "Values": {
+      "feeType": "parking-permit",
+      "year": 2027.0,
+      "amount": 10.0
+    }
+  }
+]

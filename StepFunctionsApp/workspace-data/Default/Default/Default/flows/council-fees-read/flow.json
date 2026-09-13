@@ -1,0 +1,19 @@
+{
+  "startAt": "BuildQuery",
+  "states": {
+    "BuildQuery": {
+      "type": "Task",
+      "resource": "transform://jsonata",
+      "parameters": {
+        "expression": "{ 'query': 'SELECT f.id, f.fee_type AS feeType, ft.display_name AS feeTypeName, f.year, f.amount, f.status, f.approved_by AS approvedBy, f.created_at_utc AS createdAtUtc FROM fees f LEFT JOIN fee_types ft ON ft.fee_type = f.fee_type' & ($exists($.feeType) ? (\" WHERE f.fee_type = '\" & $.feeType & \"'\") : '') }",
+        "input_data.$": "$"
+      },
+      "next": "ReadFees"
+    },
+    "ReadFees": {
+      "type": "Task",
+      "resource": "sql://fees",
+      "end": true
+    }
+  }
+}

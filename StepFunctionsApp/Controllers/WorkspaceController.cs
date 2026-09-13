@@ -250,8 +250,11 @@ namespace StepFunctionsApp.Controllers
                     ?? payload["definition"]?["startAt"]?.ToString()
                     ?? statesObj.Properties().FirstOrDefault()?.Name ?? "";
 
-                // Persist the normalized camelCase document exactly as the UI exports it.
-                var definitionJson = new JObject { ["startAt"] = startAt, ["states"] = statesObj }.ToString(Newtonsoft.Json.Formatting.None);
+                // Persist the normalized camelCase document exactly as the UI exports it (canvas layout included when present).
+                var definitionDoc = new JObject { ["startAt"] = startAt, ["states"] = statesObj };
+                if (payload["canvas"] is JToken canvas && canvas.Type == JTokenType.Object)
+                    definitionDoc["canvas"] = canvas;
+                var definitionJson = definitionDoc.ToString(Newtonsoft.Json.Formatting.None);
                 var (id, created) = _store.SaveFlow(subPath, payload["id"]?.ToString(), name, description, definitionJson);
 
                 // Register so the flow is immediately executable (upsert by name — same as POST /api/flows).

@@ -37,12 +37,13 @@ public sealed class FlowResolver
             try
             {
                 var doc = JObject.Parse(json);
-                var statesObj = doc["states"] as JObject;
-                if (statesObj == null || !statesObj.HasValues) continue;
+                if (doc["states"] is not JObject { HasValues: true } statesObj) continue;
 
-                var startAt = doc["startAt"]?.ToString() ?? statesObj.Properties().FirstOrDefault()?.Name ?? "";
+                // Full deserialization so flow-level fields (queryLanguage, timeoutSeconds, comment) survive — manual construction dropped them.
+                var def = doc.ToObject<StateMachineDefinition>();
+                if (def == null || def.States.Count == 0) continue;
+                if (string.IsNullOrEmpty(def.StartAt)) def.StartAt = statesObj.Properties().FirstOrDefault()?.Name ?? "";
                 var meta = _workspace.ListFlows(sub).FirstOrDefault(f => f.Id == flowIdOrName).Meta; // may be default when missing — guard null
-                var def = new StateMachineDefinition { StartAt = startAt, States = statesObj.ToObject<Dictionary<string, StateDefinition>>()! };
                 _stepService.RegisterStateMachine(meta?.Name ?? flowIdOrName, def, meta?.Description, id: flowIdOrName);
                 return def;
             }

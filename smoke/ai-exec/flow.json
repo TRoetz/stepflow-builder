@@ -1,0 +1,87 @@
+{
+  "name": "ai-exec-poller",
+  "description": "Polls C:\\temp\\ai-exec for new CSV files (Task,Description). Imports each via DataExchange profile ai-exec-import, then a local AI agent loop (192.168.10.175:8080) executes the tasks with shell/file tools. Loops every 60s; retries unprocessed files while the AI is down.",
+  "startAt": "CheckNewFiles",
+  "states": {
+    "CheckNewFiles": {
+      "type": "Task",
+      "resource": "transform://powershell",
+      "parameters": {
+        "script": "# CheckNewFiles - scan the ai-exec drop folder for unprocessed CSVs.\n# Emits: { hasNew, file (first pending path or null), pendingCount, filesInDrop }\n$dir = \"C:\\temp\\ai-exec\"\nif (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }\n\n# Processed marker: array of { file, processedAt, aiStatus, summary }\n$marker = Join-Path $dir \".processed.json\"\n$processed = @()\nif (Test-Path $marker) {\n    try {\n        $m = Get-Content $marker -Raw | ConvertFrom-Json\n        if ($m) { foreach ($x in @($m)) { if ($x.file) { $processed += [string]$x.file } } }\n    } catch {}\n}\n\n# Top-level CSVs only (processed/ and failed/ subfolders are excluded by non-recursive listing).\n# Require 10s of age so a file still being copied is not picked up mid-write.\n$files = @(Get-ChildItem -Path $dir -Filter \"*.csv\" -File | Sort-Object LastWriteTime)\n$new = @()\nforeach ($f in $files) {\n    if (($processed -notcontains $f.FullName) -and ((Get-Date) - $f.LastWriteTime -gt [TimeSpan]::FromSeconds(10))) {\n        $new += $f.FullName\n    }\n}\n\n$file = $null\nif ($new.Count -gt 0) { $file = [string]$new[0] }\n\nreturn [pscustomobject]@{\n    hasNew       = ($new.Count -gt 0)\n    file         = $file\n    pendingCount = $new.Count\n    filesInDrop  = @($files | ForEach-Object { $_.Name })\n}\n",
+        "input_data.$": "$"
+      },
+      "next": "HasNewFile"
+    },
+    "HasNewFile": {
+      "type": "Choice",
+      "choices": [
+        {
+          "variable": "$.hasNew",
+          "booleanEquals": true,
+          "next": "ImportTasks"
+        }
+      ],
+      "default": "WaitPoll"
+    },
+    "ImportTasks": {
+      "type": "Task",
+      "resource": "dataexchange://ai-exec-import",
+      "parameters": {
+        "filePath.$": "$.file"
+      },
+      "resultPath": "$.import",
+      "next": "AskAi",
+      "catch": [
+        {
+          "errorEquals": [
+            "States.TaskFailed"
+          ],
+          "resultPath": "$.importError",
+          "next": "QuarantineFile"
+        }
+      ]
+    },
+    "AskAi": {
+      "type": "Task",
+      "resource": "transform://powershell",
+      "parameters": {
+        "script": "# AskAi - autonomous tool-calling loop against a local OpenAI-compatible endpoint.\n# Input: { file, import: { enrichedRows: [ {Task, Description}, ... ] } }\n# Emits: { status, iterations, answer, toolLog }\n$ErrorActionPreference = \"Stop\"\n\n$model  = \"Terron-Bonsai-27B-Q2_0.gguf\"\n$apiUrl = \"http://192.168.10.175:8080/v1/chat/completions\"\n\nfunction Trunc([string]$s) {\n    if ($null -eq $s) { return \"\" }\n    if ($s.Length -gt 4000) { return $s.Substring(0, 4000) + \" ...[truncated]\" }\n    return $s\n}\n\nfunction Invoke-LocalTool([string]$name, [string]$argsJson) {\n    try {\n        $a = if ($argsJson -and $argsJson.Trim()) { $argsJson | ConvertFrom-Json } else { $null }\n        switch ($name) {\n            \"run_command\" {\n                if (-not $a.command) { throw \"run_command requires 'command'\" }\n                $tmp = Join-Path $env:TEMP (\"sf_ai_\" + [guid]::NewGuid().ToString(\"N\") + \".ps1\")\n                Set-Content -Path $tmp -Value ([string]$a.command) -Encoding UTF8\n                $outFile = \"$tmp.out\"\n                $errFile = \"$tmp.err\"\n                $p = Start-Process -FilePath \"powershell.exe\" -ArgumentList @(\"-NoProfile\", \"-NonInteractive\", \"-ExecutionPolicy\", \"Bypass\", \"-File\", $tmp) -RedirectStandardOutput $outFile -RedirectStandardError $errFile -PassThru -WindowStyle Hidden\n                $so = \"\"; $se = \"\"\n                if (Test-Path $outFile) { $so = Get-Content $outFile -Raw }\n                if (Test-Path $errFile) { $se = Get-Content $errFile -Raw }\n                return ([pscustomobject]@{ exitCode = $p.ExitCode; stdout = (Trunc $so); stderr = (Trunc $se) } | ConvertTo-Json -Depth 5 -Compress)\n            }\n            \"read_file\" {\n                if (-not $a.path) { throw \"read_file requires 'path'\" }\n                if (-not (Test-Path ([string]$a.path))) { return ([pscustomobject]@{ error = (\"file not found: \" + [string]$a.path) } | ConvertTo-Json -Depth 5 -Compress) }\n                $c = Get-Content ([string]$a.path) -Raw\n                return (Trunc $c)\n            }\n            \"write_file\" {\n                if (-not $a.path) { throw \"write_file requires 'path'\" }\n                $p2 = [string]$a.path\n                $parent = Split-Path $p2 -Parent\n                if ($parent -and -not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }\n                Set-Content -Path $p2 -Value ([string]$a.content) -Encoding UTF8\n                return ([pscustomobject]@{ ok = $true; path = $p2; bytes = (Get-Item $p2).Length } | ConvertTo-Json -Depth 5 -Compress)\n            }\n            default { throw (\"unknown tool: \" + $name) }\n        }\n    } catch {\n        return ([pscustomobject]@{ error = ($_.Exception.Message) } | ConvertTo-Json -Depth 5 -Compress)\n    }\n}\n\n# Tasks come from the DataExchange import result.\n$tasks = @()\nif ($input_data.import -and $input_data.import.enrichedRows) { $tasks = @($input_data.import.enrichedRows) }\nif ($tasks.Count -eq 0) { return [pscustomobject]@{ status = \"skipped\"; reason = \"no enriched rows in import result\" } }\n\n$systemPrompt = @\"\nYou are an autonomous task-execution agent running on a Windows machine. You will be given a list of tasks, each with a Task and Description. Execute every task using your tools: run_command executes any PowerShell command (services, scripts, system operations); read_file reads a file's content; write_file creates or overwrites a file. Work through the tasks in order. After each tool call, inspect its result; if something fails, try to fix it or record the failure and continue with the remaining tasks. Make reasonable decisions yourself - never ask questions. When all tasks are complete (or you have exhausted reasonable attempts), reply with a final plain-text summary listing what was executed for each task and any failures.\n\"@\n\n$messages = New-Object System.Collections.Generic.List[object]\n$messages.Add([pscustomobject]@{ role = \"system\"; content = $systemPrompt })\n$messages.Add([pscustomobject]@{ role = \"user\"; content = (\"Tasks to execute (JSON):\" + [Environment]::NewLine + ($tasks | ConvertTo-Json -Depth 5)) })\n\n$tools = @(\n    [pscustomobject]@{ type = \"function\"; function = [pscustomobject]@{ name = \"run_command\"; description = \"Execute a PowerShell command on this Windows machine. Returns exitCode, stdout and stderr.\"; parameters = [pscustomobject]@{ type = \"object\"; properties = @{ command = [pscustomobject]@{ type = \"string\"; description = \"PowerShell command line to execute\" } }; required = @(\"command\") } } },\n    [pscustomobject]@{ type = \"function\"; function = [pscustomobject]@{ name = \"read_file\"; description = \"Read the contents of a file from this machine.\"; parameters = [pscustomobject]@{ type = \"object\"; properties = @{ path = [pscustomobject]@{ type = \"string\"; description = \"Absolute file path\" } }; required = @(\"path\") } } },\n    [pscustomobject]@{ type = \"function\"; function = [pscustomobject]@{ name = \"write_file\"; description = \"Create or overwrite a file with the given content. Parent directories are created automatically.\"; parameters = [pscustomobject]@{ type = \"object\"; properties = @{ path = [pscustomobject]@{ type = \"string\" }; content = [pscustomobject]@{ type = \"string\" } }; required = @(\"path\", \"content\") } } }\n)\n\n$toolLog = New-Object System.Collections.Generic.List[object]\n$maxIter = 15\n$finalAnswer = \"\"\n$status = \"completed\"\n\nfor ($i = 0; $i -lt $maxIter; $i++) {\n    $body = [pscustomobject]@{ model = $model; messages = @($messages); tools = @($tools); tool_choice = \"auto\"; max_tokens = 8192; temperature = 0.3 }\n    $resp = Invoke-RestMethod -Uri $apiUrl -Method Post -ContentType \"application/json\" -Body ($body | ConvertTo-Json -Depth 20) -TimeoutSec 900\n\n    if (-not $resp.choices -or @($resp.choices).Count -eq 0) {\n        throw (\"AI returned no choices: \" + (Trunc (($resp | ConvertTo-Json -Depth 5))))\n    }\n    $choice = $resp.choices[0]\n    $msg = $choice.message\n\n    $assistantMsg = [pscustomobject]@{ role = \"assistant\"; content = \"\" }\n    if ($null -ne $msg.content) { $assistantMsg.content = [string]$msg.content }\n\n    if ($msg.tool_calls) {\n        $tcs = @()\n        foreach ($tc in @($msg.tool_calls)) {\n            $argsStr = \"{}\"\n            if ($tc.function.arguments) { $argsStr = [string]$tc.function.arguments }\n            $tcs += [pscustomobject]@{ id = [string]$tc.id; type = \"function\"; function = [pscustomobject]@{ name = [string]$tc.function.name; arguments = $argsStr } }\n        }\n        $assistantMsg.tool_calls = @($tcs)\n    }\n    $messages.Add($assistantMsg)\n\n    if ($choice.finish_reason -eq \"tool_calls\" -and $msg.tool_calls) {\n        foreach ($tc in @($msg.tool_calls)) {\n            $tname = [string]$tc.function.name\n            $argsStr = \"{}\"\n            if ($tc.function.arguments) { $argsStr = [string]$tc.function.arguments }\n            $tresult = Invoke-LocalTool $tname $argsStr\n            $toolLog.Add([pscustomobject]@{ iteration = ($i + 1); tool = $tname; arguments = (Trunc $argsStr); result = (Trunc $tresult) })\n            $messages.Add([pscustomobject]@{ role = \"tool\"; tool_call_id = [string]$tc.id; content = $tresult })\n        }\n    } else {\n        if ($msg.content) { $finalAnswer = [string]$msg.content }\n        if ($choice.finish_reason -eq \"length\") { $status = \"truncated\" }\n        break\n    }\n}\nif ($i -ge $maxIter) { $status = \"iteration_limit\" }\n\nreturn [pscustomobject]@{ status = $status; iterations = ($i + 1); answer = (Trunc $finalAnswer); toolLog = @($toolLog) }\n",
+        "input_data.$": "$"
+      },
+      "resultPath": "$.ai",
+      "next": "MarkProcessed",
+      "catch": [
+        {
+          "errorEquals": [
+            "States.TaskFailed"
+          ],
+          "resultPath": "$.aiError",
+          "next": "WaitPoll"
+        }
+      ]
+    },
+    "QuarantineFile": {
+      "type": "Task",
+      "resource": "transform://powershell",
+      "parameters": {
+        "script": "# QuarantineFile - move a CSV that failed DataExchange import into C:\\temp\\ai-exec\\failed\\.\n# Input: { file, ..., importError: { error, cause } } (catch resultPath merge)\n$file = [string]$input_data.file\n\n$errText = \"unknown\"\nif ($input_data.importError -and $input_data.importError.error) {\n    $e = [string]$input_data.importError.error\n    if ($e.Length -gt 1000) { $e = $e.Substring(0, 1000) + \" ...[truncated]\" }\n    $errText = $e\n}\n\n$moved = $false\nif ($file -and (Test-Path $file)) {\n    $failedDir = \"C:\\temp\\ai-exec\\failed\"\n    if (-not (Test-Path $failedDir)) { New-Item -ItemType Directory -Path $failedDir -Force | Out-Null }\n    Move-Item -Path $file -Destination (Join-Path $failedDir (Split-Path $file -Leaf)) -Force\n    $moved = $true\n}\n\nreturn [pscustomobject]@{ quarantined = $file; moved = $moved; importError = $errText }\n",
+        "input_data.$": "$"
+      },
+      "next": "WaitPoll"
+    },
+    "MarkProcessed": {
+      "type": "Task",
+      "resource": "transform://powershell",
+      "parameters": {
+        "script": "# MarkProcessed - record the file in .processed.json and move it to C:\\temp\\ai-exec\\processed\\.\n# Input: { file, import: {...}, ai: { status, answer, ... } }\n$file = [string]$input_data.file\n$dir = \"C:\\temp\\ai-exec\"\n\n$marker = Join-Path $dir \".processed.json\"\n$list = @()\nif (Test-Path $marker) {\n    try {\n        $m = Get-Content $marker -Raw | ConvertFrom-Json\n        if ($m) { $list = @($m) }\n    } catch {}\n}\n\n$aiStatus = \"unknown\"\n$summary = \"\"\nif ($input_data.ai) {\n    if ($input_data.ai.status) { $aiStatus = [string]$input_data.ai.status }\n    if ($input_data.ai.answer) {\n        $s = [string]$input_data.ai.answer\n        if ($s.Length -gt 2000) { $s = $s.Substring(0, 2000) + \" ...[truncated]\" }\n        $summary = $s\n    }\n}\n\n$list += [pscustomobject]@{\n    file        = $file\n    processedAt = (Get-Date).ToString(\"o\")\n    aiStatus    = $aiStatus\n    summary     = $summary\n}\n$list | ConvertTo-Json -Depth 5 | Set-Content -Path $marker -Encoding UTF8\n\n$moved = $false\nif ($file -and (Test-Path $file)) {\n    $procDir = Join-Path $dir \"processed\"\n    if (-not (Test-Path $procDir)) { New-Item -ItemType Directory -Path $procDir -Force | Out-Null }\n    Move-Item -Path $file -Destination (Join-Path $procDir (Split-Path $file -Leaf)) -Force\n    $moved = $true\n}\n\nreturn [pscustomobject]@{ marked = $file; movedToProcessed = $moved; totalProcessed = $list.Count }\n",
+        "input_data.$": "$"
+      },
+      "next": "WaitPoll"
+    },
+    "WaitPoll": {
+      "type": "Wait",
+      "seconds": 60,
+      "next": "CheckNewFiles"
+    }
+  }
+}

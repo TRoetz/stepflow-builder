@@ -15,6 +15,7 @@ describe('FlowService', () => {
       expect(result).toEqual({
         startAt: '',
         states: {},
+        canvas: { nodes: {} },
       });
     });
 
@@ -392,6 +393,39 @@ describe('FlowService', () => {
 
       const choiceNode = useNodeStore.getState().nodes.find((n) => n.data?.schemaId === 'stepflow:flow:choice');
       expect(choiceNode!.data?.configuration).toMatchObject({ condition: '$.city = "Wellington"' });
+    });
+
+    it('restores saved canvas layout and labels on import, skipping auto-layout', () => {
+      useNodeStore.getState().addNode('stepflow:terminal:start', { x: 10, y: 20 });
+      const http = useNodeStore.getState().addNode('stepflow:api:http', { x: 340, y: 560 });
+      if (http) http.data.label = 'Check Endpoint';
+
+      const exported = FlowService.exportFlow();
+      expect(exported.canvas?.nodes[http!.id]).toEqual({ label: 'Check Endpoint', position: { x: 340, y: 560 } });
+
+      useNodeStore.setState({ nodes: [] });
+      useEdgeStore.setState({ edges: [] });
+      const restored = FlowService.importFlow(exported);
+
+      expect(restored).toBe(true);
+      const imported = useNodeStore.getState().nodes.find((n) => n.data?.label === 'Check Endpoint');
+      expect(imported).toBeDefined();
+      expect(imported!.position).toEqual({ x: 340, y: 560 });
+    });
+
+    it('returns false for legacy definitions without canvas metadata so callers can auto-layout', () => {
+      const restored = FlowService.importFlow({
+        startAt: 'A',
+        states: { A: { type: 'Pass' }, B: { type: 'Succeed' } },
+      });
+
+      expect(restored).toBe(false);
+      // Nodes stack at the default offset (100, 100) with 150px increments.
+      const nodes = useNodeStore.getState().nodes;
+      expect(nodes.map((n) => n.position)).toEqual([
+        { x: 100, y: 100 },
+        { x: 100, y: 250 },
+      ]);
     });
   });
 });

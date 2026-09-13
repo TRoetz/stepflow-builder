@@ -1,10 +1,10 @@
 {
-  "startAt": "e8b41b74-699c-48a8-8d95-2ad520269533",
+  "startAt": "2b64ce00-1a20-49f5-9403-7ec27c0339c6",
   "states": {
-    "e8b41b74-699c-48a8-8d95-2ad520269533": {
+    "2b64ce00-1a20-49f5-9403-7ec27c0339c6": {
       "type": "Pass",
       "resource": "utility://default",
-      "next": "a8d71053-d2c7-4d09-b023-018d9c58c3d5",
+      "next": "b5ebd690-218d-4dd7-a68b-4d58bd304ace",
       "parameters": {
         "description": ""
       },
@@ -14,10 +14,10 @@
         "start_output"
       ]
     },
-    "a8d71053-d2c7-4d09-b023-018d9c58c3d5": {
+    "b5ebd690-218d-4dd7-a68b-4d58bd304ace": {
       "type": "Task",
       "resource": "eav://customer_refund_request",
-      "next": "516c1a3a-d598-471a-83a3-2224b65c19ef",
+      "next": "bb091435-8e69-40df-9d45-955af85d8b14",
       "parameters": {
         "operation": "read",
         "attributeFilter": "",
@@ -37,10 +37,10 @@
         "output_metadata"
       ]
     },
-    "516c1a3a-d598-471a-83a3-2224b65c19ef": {
+    "bb091435-8e69-40df-9d45-955af85d8b14": {
       "type": "Task",
       "resource": "transform://jsonata",
-      "next": "f540cb0e-1fda-4719-8ad5-7e21c6992027",
+      "next": "97096e49-48de-4792-8caf-0f092368efc7",
       "parameters": {
         "expression": "$map($, function($v) { return { \"amount\": $v.amount, \"reason\": $v.reason, \"customer_id\": $v.customer_id } })",
         "enableDebug": false,
@@ -57,7 +57,7 @@
         "output_error"
       ]
     },
-    "f540cb0e-1fda-4719-8ad5-7e21c6992027": {
+    "97096e49-48de-4792-8caf-0f092368efc7": {
       "type": "Map",
       "itemsPath": "$",
       "maxConcurrency": 1,
@@ -119,14 +119,46 @@
             ],
             "outputs": []
           }
+        },
+        "canvas": {
+          "nodes": {
+            "Iteration Start": {
+              "label": "Iteration Start",
+              "position": {
+                "x": 0,
+                "y": 0
+              }
+            },
+            "Read Row": {
+              "label": "Read Row",
+              "position": {
+                "x": 0,
+                "y": 0
+              }
+            },
+            "Approve Refund?": {
+              "label": "Approve Refund?",
+              "position": {
+                "x": 0,
+                "y": 0
+              }
+            },
+            "Iteration End": {
+              "label": "Iteration End",
+              "position": {
+                "x": 0,
+                "y": 0
+              }
+            }
+          }
         }
       },
-      "next": "839f3ec0-1159-471d-9f3d-1870d973e5ad"
+      "next": "38198069-29fa-4e65-91d2-4537fd6445ff"
     },
-    "839f3ec0-1159-471d-9f3d-1870d973e5ad": {
+    "38198069-29fa-4e65-91d2-4537fd6445ff": {
       "type": "Task",
       "resource": "eav://refund_decision",
-      "next": "239fae4f-93bd-482e-b9bf-4ed6991356f4",
+      "next": "263d1d4b-210c-455c-a89e-61201e6dd79b",
       "parameters": {
         "operation": "write",
         "attributeFilter": "",
@@ -147,7 +179,7 @@
         "output_metadata"
       ]
     },
-    "239fae4f-93bd-482e-b9bf-4ed6991356f4": {
+    "263d1d4b-210c-455c-a89e-61201e6dd79b": {
       "type": "Pass",
       "end": true,
       "comment": "Marks the end of the workflow. Place one or more END states to define flow completion.",
@@ -155,6 +187,52 @@
         "end_input"
       ],
       "outputs": []
+    }
+  },
+  "canvas": {
+    "nodes": {
+      "2b64ce00-1a20-49f5-9403-7ec27c0339c6": {
+        "label": "Start",
+        "position": {
+          "x": 100,
+          "y": 100
+        }
+      },
+      "b5ebd690-218d-4dd7-a68b-4d58bd304ace": {
+        "label": "Fetch Requests",
+        "position": {
+          "x": 100,
+          "y": 250
+        }
+      },
+      "bb091435-8e69-40df-9d45-955af85d8b14": {
+        "label": "Normalize Rows",
+        "position": {
+          "x": 100,
+          "y": 400
+        }
+      },
+      "97096e49-48de-4792-8caf-0f092368efc7": {
+        "label": "Review Each Row",
+        "position": {
+          "x": 100,
+          "y": 550
+        }
+      },
+      "38198069-29fa-4e65-91d2-4537fd6445ff": {
+        "label": "Store Decisions",
+        "position": {
+          "x": 100,
+          "y": 700
+        }
+      },
+      "263d1d4b-210c-455c-a89e-61201e6dd79b": {
+        "label": "End",
+        "position": {
+          "x": 100,
+          "y": 850
+        }
+      }
     }
   }
 }

@@ -1,0 +1,1 @@
+{"startAt":"s1","states":{"s1":{"type":"Pass","resource":"utility://default","end":true,"comment":"Parity echo: returns the input unchanged."}}}

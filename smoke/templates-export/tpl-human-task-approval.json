@@ -1,10 +1,10 @@
 {
-  "startAt": "e11c8db0-8001-41eb-8fef-ae7cb6c0fd9f",
+  "startAt": "d8be0245-e14b-4c63-b51c-1a1438a12e26",
   "states": {
-    "e11c8db0-8001-41eb-8fef-ae7cb6c0fd9f": {
+    "d8be0245-e14b-4c63-b51c-1a1438a12e26": {
       "type": "Pass",
       "resource": "utility://default",
-      "next": "b08d3cc0-aa73-42c6-a087-3544c5989f61",
+      "next": "3b5ac4aa-42c0-4b93-b5d3-2d1f5c75a5a9",
       "parameters": {
         "description": ""
       },
@@ -14,10 +14,10 @@
         "start_output"
       ]
     },
-    "b08d3cc0-aa73-42c6-a087-3544c5989f61": {
+    "3b5ac4aa-42c0-4b93-b5d3-2d1f5c75a5a9": {
       "type": "Task",
       "resource": "transform://jsonata",
-      "next": "76699497-cf42-415e-b124-9d6518acbc0e",
+      "next": "bdff9dbe-2700-4bcf-8987-196fd9aa0ef3",
       "parameters": {
         "expression": "{ \"requestId\": 'REQ-001', \"reason\": 'Quarterly budget review', \"amount\": 5000 }",
         "enableDebug": false,
@@ -34,9 +34,9 @@
         "output_error"
       ]
     },
-    "76699497-cf42-415e-b124-9d6518acbc0e": {
+    "bdff9dbe-2700-4bcf-8987-196fd9aa0ef3": {
       "type": "HumanTask",
-      "next": "a00baa32-c7bb-48a1-ac44-9e0b24b6bbf8",
+      "next": "7d783157-1b6b-433e-a468-dcd1fecd91fa",
       "task": {
         "title": "Quarterly budget review - approve request REQ-001",
         "assignee": "finance-team"
@@ -46,10 +46,10 @@
       },
       "comment": "Suspend the flow until a person completes an external action (approval, review, file drop). Completion arrives via POST /api/human-tasks/{id}/complete or by dropping {taskId}.json into the watched directory."
     },
-    "a00baa32-c7bb-48a1-ac44-9e0b24b6bbf8": {
+    "7d783157-1b6b-433e-a468-dcd1fecd91fa": {
       "type": "Task",
       "resource": "transform://jsonata",
-      "next": "cc0bf61e-020e-4da0-b9b2-392634e7b58e",
+      "next": "83870799-52ba-48f0-b83a-042e15f041ca",
       "parameters": {
         "expression": "{ \"approved\": $.approved, \"decision\": $.decision }",
         "enableDebug": false,
@@ -66,7 +66,7 @@
         "output_error"
       ]
     },
-    "cc0bf61e-020e-4da0-b9b2-392634e7b58e": {
+    "83870799-52ba-48f0-b83a-042e15f041ca": {
       "type": "Pass",
       "end": true,
       "comment": "Marks the end of the workflow. Place one or more END states to define flow completion.",
@@ -74,6 +74,45 @@
         "end_input"
       ],
       "outputs": []
+    }
+  },
+  "canvas": {
+    "nodes": {
+      "d8be0245-e14b-4c63-b51c-1a1438a12e26": {
+        "label": "Start",
+        "position": {
+          "x": 100,
+          "y": 100
+        }
+      },
+      "3b5ac4aa-42c0-4b93-b5d3-2d1f5c75a5a9": {
+        "label": "Prepare Request",
+        "position": {
+          "x": 100,
+          "y": 250
+        }
+      },
+      "bdff9dbe-2700-4bcf-8987-196fd9aa0ef3": {
+        "label": "Approve?",
+        "position": {
+          "x": 100,
+          "y": 400
+        }
+      },
+      "7d783157-1b6b-433e-a468-dcd1fecd91fa": {
+        "label": "Record Decision",
+        "position": {
+          "x": 100,
+          "y": 550
+        }
+      },
+      "83870799-52ba-48f0-b83a-042e15f041ca": {
+        "label": "End",
+        "position": {
+          "x": 100,
+          "y": 700
+        }
+      }
     }
   }
 }

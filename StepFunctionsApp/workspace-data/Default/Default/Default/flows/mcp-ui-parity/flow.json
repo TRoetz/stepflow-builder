@@ -1,0 +1,1 @@
+{"startAt":"Greet","states":{"Greet":{"type":"Task","resource":"internal://echo","parameters":{"greeting":"hello from MCP","source":"mcp-ui-parity"},"next":"Summarize"},"Summarize":{"type":"Task","resource":"transform://jsonata","parameters":{"expression":"{ \"source\": $.source, \"message\": $.greeting & ' - transformed' }","input_data.$":"$"},"end":true}}}

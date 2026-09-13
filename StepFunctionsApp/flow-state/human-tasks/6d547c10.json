@@ -1,0 +1,47 @@
+{
+  "TaskId": "6d547c10",
+  "ExecutionId": "6f28ad4b",
+  "StateMachineName": "",
+  "StateName": "0b2bcd8a-5c3f-42c3-b68e-82b757a7c6f1",
+  "NextState": "e0f85864-d202-48a1-a67e-c1f48238b546",
+  "IsEnd": false,
+  "ResultPath": "$.approval",
+  "FormVersion": null,
+  "Title": "Council approval: Liquor License Fee",
+  "Assignee": "Liquor Licensing Board",
+  "Payload": {
+    "task": {
+      "title": "Council approval: Liquor License Fee",
+      "assignee": "Liquor Licensing Board"
+    },
+    "input": {
+      "capturedFee": {
+        "feeType": "liquor-license",
+        "year": 2028.0,
+        "amount": 300.0
+      },
+      "query": "SELECT fee_type, display_name, department FROM fee_types WHERE fee_type = 'liquor-license'",
+      "departmentLookup": {
+        "rows": [
+          {
+            "fee_type": "liquor-license",
+            "display_name": "Liquor License Fee",
+            "department": "Liquor Licensing Board"
+          }
+        ],
+        "count": 1
+      }
+    }
+  },
+  "CompletionType": "api",
+  "CompletionConfig": {
+    "Type": "api"
+  },
+  "Status": "Completed",
+  "CreatedAtUtc": "2026-09-13T05:39:58.6313996Z",
+  "CompletedAtUtc": "2026-09-13T05:40:31.4578401Z",
+  "Result": {
+    "approved": true,
+    "completedBy": "Liquor Licensing Board"
+  }
+}

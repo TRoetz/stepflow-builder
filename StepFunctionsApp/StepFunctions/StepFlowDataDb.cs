@@ -173,10 +173,11 @@ namespace StepFunctionsApp.StepFunctions
             string? pkIndexName = null;
             using (var cmd = conn.CreateCommand())
             {
+                // PRAGMA index_list columns: 0=seq, 1=name, 2=unique(0/1), 3=origin('pk'|'u'|'c'|'k'), 4=partial.
                 cmd.CommandText = $"PRAGMA index_list({table});";
                 using var reader = cmd.ExecuteReader();
                 while (reader.Read())
-                    if (string.Equals(reader.GetString(2), "pk", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(reader.GetString(3), "pk", StringComparison.OrdinalIgnoreCase))
                         pkIndexName = reader.GetString(1);
             }
 

@@ -1,0 +1,28 @@
+{
+  "TaskId": "c18517ec",
+  "ExecutionId": "5d32f207",
+  "StateMachineName": "",
+  "StateName": "fa18ca66-c876-45a6-83e8-141ed041ad5a",
+  "NextState": "c4cb690b-a06d-40b8-9352-2f7c8fcbb600",
+  "IsEnd": false,
+  "ResultPath": "$.capturedFee",
+  "FormVersion": "1",
+  "Title": "",
+  "Assignee": "",
+  "Payload": {
+    "task": {
+      "formId": "council-fees",
+      "title": "",
+      "assignee": ""
+    },
+    "input": {}
+  },
+  "CompletionType": "form",
+  "CompletionConfig": {
+    "Type": "form"
+  },
+  "Status": "Pending",
+  "CreatedAtUtc": "2026-09-12T10:29:08.2442354Z",
+  "CompletedAtUtc": null,
+  "Result": null
+}

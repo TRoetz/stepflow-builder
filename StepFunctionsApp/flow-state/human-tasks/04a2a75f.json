@@ -1,0 +1,30 @@
+{
+  "TaskId": "04a2a75f",
+  "ExecutionId": "0a340dca",
+  "StateMachineName": "",
+  "StateName": "CaptureFee",
+  "NextState": "ValidateFeeType",
+  "IsEnd": false,
+  "ResultPath": "$.capturedFee",
+  "FormVersion": "1",
+  "Title": "Council Fee Application",
+  "Assignee": null,
+  "Payload": {
+    "task": {
+      "formId": "council-fees"
+    },
+    "input": {}
+  },
+  "CompletionType": "form",
+  "CompletionConfig": {
+    "Type": "form"
+  },
+  "Status": "Completed",
+  "CreatedAtUtc": "2026-09-12T08:21:16.1843265Z",
+  "CompletedAtUtc": "2026-09-12T08:22:01.6936173Z",
+  "Result": {
+    "feeType": "liqor-license",
+    "year": 2026.0,
+    "amount": 500.0
+  }
+}

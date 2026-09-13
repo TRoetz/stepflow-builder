@@ -1,0 +1,53 @@
+{
+  "DataExchangeProfileId": 0,
+  "DataExchangeProfileName": "AI Exec Task Import",
+  "ProfileId": "ai-exec-import",
+  "IsActive": true,
+  "DataExchangeId": 0,
+  "DataSourceId": 0,
+  "DataSource": {
+    "DataSourceId": 0,
+    "DataSourceName": "ai-exec dropped CSVs (Task, Description)",
+    "MediumType": 3,
+    "MediumConfigurationJson": "{\"filePath\": \"C:/temp/ai-exec\"}",
+    "ImportSchemaId": 0,
+    "ImportSchema": {
+      "AttributeDomainId": 0,
+      "AttributeDomainName": "AI Exec Task Schema",
+      "SchemaDefinitionId": 0,
+      "IsCurrentVersion": true,
+      "Attributes": [
+        {
+          "EntityAttributeId": 1,
+          "PrimaryKey": false,
+          "AttributeName": "Task",
+          "DataType": 0,
+          "Visible": true,
+          "ReadOnly": false,
+          "AttributeDomainId": 0,
+          "AttributeValueData": [],
+          "Rules": []
+        },
+        {
+          "EntityAttributeId": 2,
+          "PrimaryKey": false,
+          "AttributeName": "Description",
+          "DataType": 0,
+          "Visible": true,
+          "ReadOnly": false,
+          "AttributeDomainId": 0,
+          "AttributeValueData": [],
+          "Rules": []
+        }
+      ],
+      "Domain": []
+    }
+  },
+  "PipelineId": 0,
+  "Pipeline": {
+    "PipelineId": 0,
+    "PipelineName": "AiExecImport",
+    "Description": "Pure import of Task/Description rows from dropped CSVs; no transformation stages.",
+    "PipelineStages": []
+  }
+}

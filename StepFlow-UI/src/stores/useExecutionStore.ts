@@ -17,6 +17,7 @@ export interface StepExecutionLog {
 
 interface ExecutionState {
   status: ExecutionStatus;
+  stopRequested: boolean; // set by Stop; simulation checks halt before each step
   executionMode: ExecutionMode;
   currentNodeId: string | null;
   completedNodes: Set<string>;
@@ -40,6 +41,7 @@ interface ExecutionState {
 
 export const useExecutionStore = create<ExecutionState>((set) => ({
   status: 'idle',
+  stopRequested: false,
   executionMode: 'simulated',
   currentNodeId: null,
   completedNodes: new Set<string>(),
@@ -76,6 +78,7 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
   startExecution: () => {
     set({
       status: 'running',
+      stopRequested: false,
       currentNodeId: null,
       completedNodes: new Set<string>(),
       failedNodes: new Map<string, string>(),
@@ -87,6 +90,7 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
   stopExecution: () => {
     set({
       status: 'idle',
+      stopRequested: true,
       currentNodeId: null,
       endTime: Date.now(),
     });
@@ -138,6 +142,7 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
   resetExecution: () => {
     set({
       status: 'idle',
+      stopRequested: false,
       currentNodeId: null,
       completedNodes: new Set<string>(),
       failedNodes: new Map<string, string>(),

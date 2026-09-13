@@ -1,0 +1,75 @@
+{
+  "DataExchangeProfileId": 0,
+  "DataExchangeProfileName": "Order Exec Import",
+  "ProfileId": "order-exec-import",
+  "IsActive": true,
+  "DataExchangeId": 0,
+  "DataSourceId": 0,
+  "DataSource": {
+    "DataSourceId": 0,
+    "DataSourceName": "order-exec dropped CSVs (OrderId, ProductId, Qty, CustomerName)",
+    "MediumType": 3,
+    "MediumConfigurationJson": "{\"filePath\": \"C:/temp/order-exec\"}",
+    "ImportSchemaId": 0,
+    "ImportSchema": {
+      "AttributeDomainId": 0,
+      "AttributeDomainName": "Order Line Schema",
+      "SchemaDefinitionId": 0,
+      "IsCurrentVersion": true,
+      "Attributes": [
+        {
+          "EntityAttributeId": 1,
+          "PrimaryKey": false,
+          "AttributeName": "OrderId",
+          "DataType": 0,
+          "Visible": true,
+          "ReadOnly": false,
+          "AttributeDomainId": 0,
+          "AttributeValueData": [],
+          "Rules": []
+        },
+        {
+          "EntityAttributeId": 2,
+          "PrimaryKey": false,
+          "AttributeName": "ProductId",
+          "DataType": 0,
+          "Visible": true,
+          "ReadOnly": false,
+          "AttributeDomainId": 0,
+          "AttributeValueData": [],
+          "Rules": []
+        },
+        {
+          "EntityAttributeId": 3,
+          "PrimaryKey": false,
+          "AttributeName": "Qty",
+          "DataType": 0,
+          "Visible": true,
+          "ReadOnly": false,
+          "AttributeDomainId": 0,
+          "AttributeValueData": [],
+          "Rules": []
+        },
+        {
+          "EntityAttributeId": 4,
+          "PrimaryKey": false,
+          "AttributeName": "CustomerName",
+          "DataType": 0,
+          "Visible": true,
+          "ReadOnly": false,
+          "AttributeDomainId": 0,
+          "AttributeValueData": [],
+          "Rules": []
+        }
+      ],
+      "Domain": []
+    }
+  },
+  "PipelineId": 0,
+  "Pipeline": {
+    "PipelineId": 0,
+    "PipelineName": "OrderExecImport",
+    "Description": "Pure import of order line rows from dropped CSVs; no transformation stages.",
+    "PipelineStages": []
+  }
+}

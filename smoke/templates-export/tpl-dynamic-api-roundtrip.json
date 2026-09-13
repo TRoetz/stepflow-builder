@@ -1,10 +1,10 @@
 {
-  "startAt": "3b047fd1-0814-47e1-9214-90cf180f4905",
+  "startAt": "37c31c1d-d7f0-4c14-bd7a-cb6c4cd41cac",
   "states": {
-    "3b047fd1-0814-47e1-9214-90cf180f4905": {
+    "37c31c1d-d7f0-4c14-bd7a-cb6c4cd41cac": {
       "type": "Pass",
       "resource": "utility://default",
-      "next": "8316f4d9-b983-468c-93b0-8996bd138fa6",
+      "next": "0bbcba56-d672-42c2-bd7a-6b9f0d9c946e",
       "parameters": {
         "description": ""
       },
@@ -14,10 +14,10 @@
         "start_output"
       ]
     },
-    "8316f4d9-b983-468c-93b0-8996bd138fa6": {
+    "0bbcba56-d672-42c2-bd7a-6b9f0d9c946e": {
       "type": "Task",
       "resource": "http://localhost:5001/api/dynamic/apis",
-      "next": "09261828-7371-4552-a39a-a456aaf822ed",
+      "next": "96f184f8-a9f1-4bdc-8e49-0e710e782aee",
       "parameters": {
         "__handler": "http",
         "method": "POST",
@@ -54,10 +54,10 @@
         "output_status"
       ]
     },
-    "09261828-7371-4552-a39a-a456aaf822ed": {
+    "96f184f8-a9f1-4bdc-8e49-0e710e782aee": {
       "type": "Task",
       "resource": "http://localhost:5001/api/dynamic/demo-records",
-      "next": "c8b777fd-8b26-4eb9-9234-0810040d8d1e",
+      "next": "808af46b-74ae-4915-8306-7d9e2def7ad2",
       "parameters": {
         "__handler": "http",
         "method": "POST",
@@ -81,10 +81,10 @@
         "output_status"
       ]
     },
-    "c8b777fd-8b26-4eb9-9234-0810040d8d1e": {
+    "808af46b-74ae-4915-8306-7d9e2def7ad2": {
       "type": "Task",
       "resource": "http://localhost:5001/api/dynamic/demo-records?entityId=rec-demo-1",
-      "next": "46ed1680-3185-4e19-a5e8-cbb56ec884d8",
+      "next": "31471e82-4fb7-4f18-b3fc-b5e5067524e6",
       "parameters": {
         "__handler": "http",
         "method": "GET",
@@ -102,10 +102,10 @@
         "output_status"
       ]
     },
-    "46ed1680-3185-4e19-a5e8-cbb56ec884d8": {
+    "31471e82-4fb7-4f18-b3fc-b5e5067524e6": {
       "type": "Task",
       "resource": "transform://jsonata",
-      "next": "ce101375-445d-40d1-b39e-d516272f538d",
+      "next": "79cf7ef4-21fa-4fb6-ac15-2b6cf95cae5e",
       "parameters": {
         "expression": "{ \"count\": $.count, \"entityId\": $.rows[0].entityId, \"note\": $.rows[0].values.note }",
         "enableDebug": false,
@@ -122,7 +122,7 @@
         "output_error"
       ]
     },
-    "ce101375-445d-40d1-b39e-d516272f538d": {
+    "79cf7ef4-21fa-4fb6-ac15-2b6cf95cae5e": {
       "type": "Pass",
       "end": true,
       "comment": "Marks the end of the workflow. Place one or more END states to define flow completion.",
@@ -130,6 +130,52 @@
         "end_input"
       ],
       "outputs": []
+    }
+  },
+  "canvas": {
+    "nodes": {
+      "37c31c1d-d7f0-4c14-bd7a-cb6c4cd41cac": {
+        "label": "Start",
+        "position": {
+          "x": 100,
+          "y": 100
+        }
+      },
+      "0bbcba56-d672-42c2-bd7a-6b9f0d9c946e": {
+        "label": "Create Demo API",
+        "position": {
+          "x": 100,
+          "y": 250
+        }
+      },
+      "96f184f8-a9f1-4bdc-8e49-0e710e782aee": {
+        "label": "Save Record via POST",
+        "position": {
+          "x": 100,
+          "y": 400
+        }
+      },
+      "808af46b-74ae-4915-8306-7d9e2def7ad2": {
+        "label": "Read Record via GET",
+        "position": {
+          "x": 100,
+          "y": 550
+        }
+      },
+      "31471e82-4fb7-4f18-b3fc-b5e5067524e6": {
+        "label": "Verify Round Trip",
+        "position": {
+          "x": 100,
+          "y": 700
+        }
+      },
+      "79cf7ef4-21fa-4fb6-ac15-2b6cf95cae5e": {
+        "label": "End",
+        "position": {
+          "x": 100,
+          "y": 850
+        }
+      }
     }
   }
 }

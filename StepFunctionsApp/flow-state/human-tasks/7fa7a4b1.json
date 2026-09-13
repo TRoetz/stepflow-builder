@@ -1,0 +1,30 @@
+{
+  "TaskId": "7fa7a4b1",
+  "ExecutionId": "cdbd5763",
+  "StateMachineName": "",
+  "StateName": "CaptureFee",
+  "NextState": "BuildInsert",
+  "IsEnd": false,
+  "ResultPath": "$.capturedFee",
+  "FormVersion": "1",
+  "Title": "Council Fee Application",
+  "Assignee": null,
+  "Payload": {
+    "task": {
+      "formId": "council-fees"
+    },
+    "input": {}
+  },
+  "CompletionType": "form",
+  "CompletionConfig": {
+    "Type": "form"
+  },
+  "Status": "Completed",
+  "CreatedAtUtc": "2026-09-12T08:13:14.0437808Z",
+  "CompletedAtUtc": "2026-09-12T08:13:40.9671558Z",
+  "Result": {
+    "feeType": "dog-license",
+    "year": 2026.0,
+    "amount": 150.0
+  }
+}

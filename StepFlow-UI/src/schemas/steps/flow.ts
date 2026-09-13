@@ -40,7 +40,15 @@ export const choiceStateSchema: StepSchema = {
     },
   ],
 
-  validation: [],
+  validation: [
+    {
+      id: 'condition_required',
+      check: (data) => ({
+        isValid: !!data.configuration?.condition,
+        reason: 'Condition expression is required',
+      }),
+    },
+  ],
 };
 
 // ── Map State ──

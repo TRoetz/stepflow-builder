@@ -34,8 +34,6 @@ import { FlowNode } from '@components/Nodes/FlowNode';
 import { DefaultNode } from '@components/Nodes/DefaultNode';
 import { StepEdge } from './StepEdge';
 import { useAutoLayout } from '@hooks/useAutoLayout';
-import { useKeyboardShortcuts } from '@hooks/useKeyboardShortcuts';
-import { ExecutionService } from '@services/executionService';
 
 interface FlowCanvasProps {
   onNodeSelect: (nodeId: string | null) => void;
@@ -79,22 +77,6 @@ function FlowCanvasInner({
   onNodeCountChange(nodes.length);
   onEdgeCountChange(edges.length);
 
-  // ── Keyboard Shortcuts ──
-  useKeyboardShortcuts({
-    onAutoLayout: async () => {
-      // Auto-layout is handled by the parent App component
-    },
-    onSave: () => {
-      // Handled at App header level / global shortcut
-    },
-    onRun: async () => {
-      if (executionStatus === 'running' || executionStatus === 'paused') {
-        await ExecutionService.stopExecution();
-      } else {
-        await ExecutionService.startExecution();
-      }
-    },
-  });
 
   // ── Node Types ──
   // NOTE: getStepNodeTypes() is called here (lazy) to avoid circular dependency issues.

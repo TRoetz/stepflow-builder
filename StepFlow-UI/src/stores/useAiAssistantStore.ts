@@ -404,7 +404,6 @@ export async function callAiApi(
   } else {
     data = await directFetchJson(url, headers, body);
   }
-  console.log('AI API response keys:', Object.keys(data));
 
   // Extract response based on provider
   if (config.provider === 'anthropic') {
@@ -417,7 +416,6 @@ export async function callAiApi(
 
   // OpenAI-compatible extraction — inspect choices
   const choices = data.choices as Array<Record<string, unknown>> | undefined;
-  console.log('AI API choices:', JSON.stringify(choices));
 
   // Check for truncation — model ran out of tokens
   const finishReason = (choices?.[0] as { finish_reason?: string } | undefined)?.finish_reason;

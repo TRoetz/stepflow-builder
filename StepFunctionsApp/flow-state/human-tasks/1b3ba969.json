@@ -1,0 +1,30 @@
+{
+  "TaskId": "1b3ba969",
+  "ExecutionId": "a23e7ad3",
+  "StateMachineName": "",
+  "StateName": "CaptureFee",
+  "NextState": "ValidateFeeType",
+  "IsEnd": false,
+  "ResultPath": "$.capturedFee",
+  "FormVersion": "1",
+  "Title": "Council Fee Application",
+  "Assignee": null,
+  "Payload": {
+    "task": {
+      "formId": "council-fees"
+    },
+    "input": {}
+  },
+  "CompletionType": "form",
+  "CompletionConfig": {
+    "Type": "form"
+  },
+  "Status": "Completed",
+  "CreatedAtUtc": "2026-09-12T08:22:46.7457214Z",
+  "CompletedAtUtc": "2026-09-12T08:23:37.2014571Z",
+  "Result": {
+    "feeType": "bogus-type",
+    "year": 2026.0,
+    "amount": 1.0
+  }
+}

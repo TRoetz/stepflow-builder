@@ -1,0 +1,22 @@
+{
+  "success": true,
+  "executionId": "947e8b95",
+  "profileId": "ai-exec-import",
+  "source": "file:C:\\temp\\ai-exec\\task-001.csv",
+  "rowsIn": 2,
+  "rowsOut": 2,
+  "rejectedCount": 0,
+  "rejected": [],
+  "enrichedRows": [
+    {
+      "Task": "Create marker file",
+      "Description": "Use the write_file tool to create C:\\temp\\ai-exec\\output\\hello.txt containing exactly this text: hello-from-ai"
+    },
+    {
+      "Task": "Verify output folder",
+      "Description": "Run a PowerShell command that lists C:\\temp\\ai-exec recursively and confirm the output folder contains hello.txt"
+    }
+  ],
+  "stages": [],
+  "dispatched": []
+}
