@@ -19,7 +19,8 @@ namespace StepFunctionsApp.StepFunctions
     {
         private readonly SqliteConnection _connection;
         private readonly HashSet<string> _loadedTables = new();
-        private readonly Dictionary<string, RuleDefinition> _rules = new();
+        // OrdinalIgnoreCase: rule:// URIs lowercase their host (Uri.Host), so lookups must not be case-sensitive.
+        private readonly Dictionary<string, RuleDefinition> _rules = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<int, DomainInfo> _domains = new();
         private readonly object _lock = new();
         private readonly ILogger<RuleEngineService> _logger;
@@ -210,6 +211,15 @@ namespace StepFunctionsApp.StepFunctions
             {
                 _rules[ruleId] = rule;
                 _logger.LogInformation("Registered rule: {RuleId}", ruleId);
+            }
+        }
+
+        /// <summary>Removes a registered rule (no-op when unknown) — used by the named rule store on delete.</summary>
+        public void RemoveRule(string ruleId)
+        {
+            lock (_lock)
+            {
+                _rules.Remove(ruleId);
             }
         }
 

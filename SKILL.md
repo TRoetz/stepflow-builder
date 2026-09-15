@@ -29,7 +29,7 @@ Health check: `GET http://localhost:5001/api/health` (liveness + flow-state stor
 
 ## 2. MCP server — the primary AI interface
 
-The main app exposes an MCP server at **`http://localhost:5001/mcp`** (`Mcp/FlowTools.cs`; wired in `Program.cs` via `AddMcpServer().WithHttpTransport()` + `MapMcp("/mcp")`). Transport is **streamable HTTP, stateless**: every request is a plain JSON-RPC 2.0 POST with headers `Content-Type: application/json` and `Accept: application/json, text/event-stream`; responses are framed as SSE (`data:` lines). No session handshake needed.
+The main app exposes an MCP server at **`http://localhost:5001/mcp`** (tool classes in `Mcp/`: `FlowTools`, `DataExchangeTools`, `MetadataTools`, `EavTools`, `DynamicApiTools`, `SolutionTools`, `RuleTools`; wired in `Program.cs` via `AddMcpServer().WithHttpTransport()` + `MapMcp("/mcp")`). Transport is **streamable HTTP, stateless**: every request is a plain JSON-RPC 2.0 POST with headers `Content-Type: application/json` and `Accept: application/json, text/event-stream`; responses are framed as SSE (`data:` lines). No session handshake needed.
 
 Client configuration (Claude Desktop / VS Code Copilot / any MCP client):
 
@@ -77,6 +77,10 @@ Client configuration (Claude Desktop / VS Code Copilot / any MCP client):
 | `get_dynamic_api` | `id` (string) | Full definition JSON in camelCase including all operations; fetch before modifying an existing API |
 | `save_dynamic_api` | `definitionJson` (JSON **string** of the full definition, name inside) | Upsert by name inside the JSON; returns `{ id, created }` |
 | `delete_dynamic_api` | `id` (string) | `{ deleted: true\|false }` |
+| `list_rules` | — | Every persisted named rule: `{ name, kind, description, updatedAtUtc }`. Kinds: `choice`, `jsonata`, `sql`, `ms-rules`, `ai-decision` (§12) |
+| `get_rule` | `name` (string) | Full rule including its `definition` body; 404-style error when unknown |
+| `save_rule` | `ruleJson` (JSON **string** of `{ name, kind, description?, definition }`) | Upsert by name. Engine-backed kinds register immediately: `sql` → `RuleEngineService` (`rule://<name>`), `ms-rules` → Microsoft RulesEngine (`rules://<name>`) |
+| `delete_rule` | `name` (string) | Removes the rule and unregisters it from its engine: `{ deleted: true\|false }` |
 
 Conventions that matter when calling these tools:
 
@@ -152,7 +156,7 @@ Built-in error codes and semantics: UserManual §7.
 | # | Scheme | URI form | Behavior |
 |---|---|---|---|
 | 1–2 | `http://`, `https://` | any URL | HTTP call; input object is the body (POST) or query params (GET); supports `auth` config (`Bearer`/`OAuth` token) |
-| 3 | `rule://` | `rule://<ruleId>?eav=<entity>` | NRules rule execution; optional EAV mapping of dynamic JSON to a strict entity dictionary |
+| 3 | `rule://` | `rule://<ruleId>?eav=<entity>` | SQL-expression rule execution (SQLite-backed); optional EAV mapping of dynamic JSON to a strict entity dictionary. Rule ids are looked up case-insensitively (`Uri.Host` lowercases). Persisted named rules live in `rules.json` and auto-register at startup (§12) |
 | 4 | `rules://` | `rules://<workflowName>` | Microsoft RulesEngine workflow |
 | 5 | `transform://` | `transform://<operation>` | DuckDB transform (or script) over the input — batch SQL, joins, aggregations |
 | 6 | `ai://` | any path (ignored) | POSTs the input to `{callbackBaseUrl}/api/ai/ask`; fails with `States.TaskFailed` if the response has `"isError": true`. **`callbackBaseUrl` is hardcoded to `http://localhost:5000`** — the UI backend's port, not this app's 5001. No `/api/ai/ask` implementation exists in this repo (pre-existing gap) — AI states fail with a connection error until an external LLM service listens there |
@@ -221,6 +225,7 @@ Flows and DataExchange profiles are organized on disk in a three-level tree — 
 | POST/DELETE | `/api/workspace/nodes`, `POST /api/workspace/nodes/rename` | Create / rename / delete org, project or sub-project nodes (§7) |
 | GET/PUT | `/api/workspace/access?path=…` | Read local + effective grants / save a node's ACL (§7) |
 | GET/POST/DELETE | `/api/workspace/subprojects/{org}/{project}/{sub}/flows[/{flowId}]` | List / save / get / delete flows under a sub-project (§7) |
+| GET | `/api/rules`, `GET /api/rules/{*name}`, `POST /api/rules`, `DELETE /api/rules/{*name}` | Named rule catalog (persisted in `rules.json`; engine-backed kinds register on save — §12). `{*name}` is a catch-all: rule names may contain `/` |
 | GET | `/api/ssh/hosts` | Curated SSH hosts (name/host/port only — never credentials) |
 | GET | `/api/health` | Liveness + flow-state store status |
 
@@ -247,10 +252,10 @@ Flows and DataExchange profiles are organized on disk in a three-level tree — 
 
 ## 12. Solution packaging (export/import)
 
-Deploy a whole solution — flows + forms + attribute domains + schema definitions + dynamic APIs + SQLite migrations — between environments as one portable JSON package (`"format": "stepflow-solution"`, v1).
+Deploy a whole solution — flows (+ canvas layout) + forms + attribute domains + schema definitions + dynamic APIs + named rules + EAV datasets + SQLite migrations — between environments as one portable JSON package (`"format": "stepflow-solution"`, v2; v1 packages still import).
 
-- **Export**: MCP `export_solution(nodePath?, seedTables?, name?, version?)` or `GET /api/solutions/export?nodePath=...&seedTables=a,b`. Collects every flow in the node, the FormCapture forms they reference (with their attribute domains + pinned schema definitions), all dynamic APIs and data-exchange profiles filed under the node, and — for each distinct `sql://<name>` used by those flows — the live database's DDL (`CREATE TABLE`/`INDEX`, idempotent) plus optional seed-table row dumps as `INSERT OR IGNORE`. The package is a single JSON file — zip it (with docs/test data if you like) and ship it; import reads the JSON inside.
-- **Import**: MCP `import_solution(packageJson, targetNodePath?)` or `POST /api/solutions/import`. Upserts flows (by name), schema definitions, domains, forms and APIs in dependency order, then runs the datasource migrations against the path bound for that logical name. Re-import is idempotent.
+- **Export**: MCP `export_solution(nodePath?, seedTables?, seedDomains?, name?, version?)` or `GET /api/solutions/export?nodePath=...&seedTables=a,b&seedDomains=x,y`. Collects every flow in the node (including its designer `canvas` layout), the FormCapture forms they reference (with their attribute domains + pinned schema definitions), all dynamic APIs and data-exchange profiles filed under the node, and — for each distinct `sql://<name>` used by those flows — the live database's DDL (`CREATE TABLE`/`INDEX`, idempotent) plus optional seed-table row dumps as `INSERT OR IGNORE`. It also collects: **rules** (the persisted named-rule catalog from `rules.json`, plus decision logic lifted out of the node's flows — `Choice` states → `choice`, `transform://jsonata` tasks → `jsonata`, `ai://` tasks → `ai-decision`; names are `<flow>/<state>`) and **EAV datasets** (entity contracts + row dumps for every domain referenced by an `eav://<domain>` resource or a `rule://…?eav=<domain>` query, plus any explicitly seeded domains). The package is a single JSON file — zip it (with docs/test data if you like) and ship it; import reads the JSON inside.
+- **Import**: MCP `import_solution(packageJson, targetNodePath?)` or `POST /api/solutions/import`. Upserts flows (by name, canvas included), schema definitions, domains, forms and APIs in dependency order, upserts named rules into the target's catalog (engine-backed kinds register immediately — `rule://`/`rules://` work right away), registers EAV entity contracts, appends EAV rows **skipping any `rowKeyId` already present**, then runs the datasource migrations against the path bound for that logical name. Re-import is idempotent.
 - **Environment binding**: each environment's appsettings maps logical names to local paths — `"SqlDataSources": { "fees": "C:/prod/data/fees.db" }` (env-var expansion supported). Flows reference `sql://fees`, never a machine-specific path. Literal file paths in flows still work and take precedence when the file exists.
 - **Test→prod procedure**: export from test → review/diff the package JSON → set prod's `SqlDataSources` binding → import on prod → re-run the smoke suite against prod URLs as the acceptance gate (see `smoke/prod_deploy_check.py`).
-- v1 limits: node-level flow selection only (all flows in the node are exported); same-named flows in different nodes collide (flow names are global); API bearer tokens travel inside the package — treat packages as sensitive.
+- Limits: node-level flow selection only (all flows in the node are exported); same-named flows in different nodes collide (flow names are global); API bearer tokens travel inside the package — treat packages as sensitive. EAV rows are append-only on import (no update/delete of existing target rows).

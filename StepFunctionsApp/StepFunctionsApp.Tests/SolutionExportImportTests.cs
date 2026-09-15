@@ -17,6 +17,7 @@ using StepFlow.DataModel.Entities.MetaData;
 using StepFlow.DynamicApi;
 using StepFunctionsApp.DataExchange;
 using StepFunctionsApp.DynamicApi;
+using StepFunctionsApp.Rules;
 using StepFunctionsApp.StepFunctions;
 using StepFunctionsApp.Workspace;
 using Xunit;
@@ -235,6 +236,228 @@ namespace StepFunctionsApp.Tests
             Assert.All(reReport["flows"]!.Cast<JObject>(), f => Assert.False((bool)f!["created"]!)); // updated in place
         }
 
+        [Fact]
+        public async Task Canvas_layout_round_trips_through_the_solution_package()
+        {
+            var node = "CanvasOrg/CanvasProj/CanvasSub";
+            var srcClient = _source.CreateClient();
+            var tgtClient = _target.CreateClient();
+            var workspace = _source.Services.GetRequiredService<WorkspaceStore>();
+
+            // A flow with designer canvas metadata (labels + positions).
+            var flow = new JObject
+            {
+                ["startAt"] = "s1",
+                ["states"] = new JObject
+                {
+                    ["s1"] = new JObject { ["type"] = "Task", ["resource"] = "internal://noop", ["end"] = false },
+                    ["s2"] = new JObject { ["type"] = "Task", ["resource"] = "internal://noop", ["end"] = true }
+                },
+                ["canvas"] = new JObject
+                {
+                    ["nodes"] = new JObject
+                    {
+                        ["s1"] = new JObject { ["label"] = "Start", ["position"] = new JObject { ["x"] = 10, ["y"] = 20 } },
+                        ["s2"] = new JObject { ["label"] = "Done", ["position"] = new JObject { ["x"] = 300, ["y"] = 40 } }
+                    }
+                }
+            };
+            workspace.EnsureSubProject(node);
+            workspace.SaveFlow(node, null, "sol-canvas-flow", "Canvas round-trip demo", flow.ToString(Formatting.None));
+
+            // Export carries the canvas.
+            var exportRes = await srcClient.GetAsync($"/api/solutions/export?nodePath={Uri.EscapeDataString(node)}");
+            Assert.Equal(HttpStatusCode.OK, exportRes.StatusCode);
+            var package = JObject.Parse(await exportRes.Content.ReadAsStringAsync());
+            var exportedFlow = package["flows"]!.Single(f => (string?)f!["name"] == "sol-canvas-flow")!;
+            Assert.Equal(10, (int)exportedFlow!["canvas"]!["nodes"]!["s1"]!["position"]!["x"]!);
+            Assert.Equal("Start", (string?)exportedFlow["canvas"]?["nodes"]?["s1"]?["label"]);
+
+            // Import onto the target — the persisted flow.json keeps its layout.
+            var importRes = await tgtClient.PostAsync("/api/solutions/import",
+                new StringContent(JsonConvert.SerializeObject(new JObject { ["package"] = package, ["targetNodePath"] = node }), Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.OK, importRes.StatusCode);
+
+            var tgtWorkspace = _target.Services.GetRequiredService<WorkspaceStore>();
+            var (flowId, _) = tgtWorkspace.ListFlows(node).Single(f => f.Meta.Name == "sol-canvas-flow");
+            var importedDoc = JObject.Parse(tgtWorkspace.LoadFlowDefinition(node, flowId)!);
+            Assert.Equal(300, (int)importedDoc["canvas"]!["nodes"]!["s2"]!["position"]!["x"]!);
+            Assert.Equal("Done", (string?)importedDoc["canvas"]?["nodes"]?["s2"]?["label"]);
+        }
+
+        [Fact]
+        public async Task Eav_datasets_round_trip_and_reimport_is_idempotent()
+        {
+            var node = "EavOrg/EavProj/EavSub";
+            var srcClient = _source.CreateClient();
+            var tgtClient = _target.CreateClient();
+
+            // Source: an entity contract + two captured rows, referenced by a flow.
+            var registry = _source.Services.GetRequiredService<EavRegistryService>();
+            registry.RegisterEntity(new EavEntityDefinition
+            {
+                EntityName = "SolInvoice",
+                Description = "Solution test invoice dataset",
+                Attributes = new System.Collections.Generic.List<EavAttributeDefinition>
+                {
+                    new() { AttributeName = "invoiceNumber", DataType = "string", IsRequired = true },
+                    new() { AttributeName = "totalAmount", DataType = "number" }
+                }
+            });
+            var rows = _source.Services.GetRequiredService<EavRowStore>();
+            rows.AppendRow("SolInvoice", new EavRow { RowKeyId = "sol-inv-r1", Values = JObject.Parse("""{"invoiceNumber":"INV-1","totalAmount":100}""") });
+            rows.AppendRow("SolInvoice", new EavRow { RowKeyId = "sol-inv-r2", Values = JObject.Parse("""{"invoiceNumber":"INV-2","totalAmount":250.5}""") });
+
+            var workspace = _source.Services.GetRequiredService<WorkspaceStore>();
+            workspace.EnsureSubProject(node);
+            workspace.SaveFlow(node, null, "sol-eav-flow", "EAV reference demo",
+                new JObject
+                {
+                    ["startAt"] = "e1",
+                    ["states"] = new JObject
+                    {
+                        ["e1"] = new JObject { ["type"] = "Task", ["resource"] = "eav://SolInvoice", ["parameters"] = new JObject { ["operation"] = "read" }, ["end"] = true }
+                    }
+                }.ToString(Formatting.None));
+
+            // Export carries the entity contract and the row dump.
+            var exportRes = await srcClient.GetAsync($"/api/solutions/export?nodePath={Uri.EscapeDataString(node)}");
+            Assert.Equal(HttpStatusCode.OK, exportRes.StatusCode);
+            var package = JObject.Parse(await exportRes.Content.ReadAsStringAsync());
+
+            var entity = package["eavEntities"]!.Single(e => (string?)e!["name"] == "SolInvoice")!;
+            Assert.Equal(2, entity!["attributes"]!.Count());
+            Assert.Contains(entity["attributes"]!.Cast<JObject>(), a => (string?)a!["attributeName"] == "invoiceNumber" && (bool)a!["isRequired"]!);
+            var rowSet = package["eavRows"]!.Single(s => (string?)s!["domain"] == "SolInvoice")!;
+            Assert.Equal(2, rowSet!["rows"]!.Count());
+            Assert.Contains(rowSet["rows"]!.Cast<JObject>(), r => (string?)r!["rowKeyId"] == "sol-inv-r1");
+
+            // Import onto the fresh target.
+            var importBody = new JObject { ["package"] = package, ["targetNodePath"] = node };
+            var importRes = await tgtClient.PostAsync("/api/solutions/import",
+                new StringContent(JsonConvert.SerializeObject(importBody), Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.OK, importRes.StatusCode);
+            var report = JObject.Parse(await importRes.Content.ReadAsStringAsync());
+
+            Assert.Single(report["eavEntities"]!);
+            Assert.Equal(2, (int)report["eavRows"]![0]!["added"]!);
+
+            var tgtRegistry = _target.Services.GetRequiredService<EavRegistryService>();
+            var tgtEntity = tgtRegistry.GetEntity("SolInvoice");
+            Assert.NotNull(tgtEntity);
+            Assert.Equal(2, tgtEntity!.Attributes.Count);
+            var tgtRows = _target.Services.GetRequiredService<EavRowStore>().ListRows("SolInvoice");
+            Assert.Equal(2, tgtRows.Count);
+            Assert.Contains(tgtRows, r => r.RowKeyId == "sol-inv-r1" && (string?)r.Values["invoiceNumber"] == "INV-1");
+
+            // Re-import: rows are keyed by rowKeyId — nothing is duplicated.
+            var reimportRes = await tgtClient.PostAsync("/api/solutions/import",
+                new StringContent(JsonConvert.SerializeObject(importBody), Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.OK, reimportRes.StatusCode);
+            var reReport = JObject.Parse(await reimportRes.Content.ReadAsStringAsync());
+            Assert.Equal(0, (int)reReport["eavRows"]![0]!["added"]!);
+            Assert.Equal(2, (int)reReport["eavRows"]![0]!["skippedExisting"]!);
+            Assert.Equal(2, _target.Services.GetRequiredService<EavRowStore>().ListRows("SolInvoice").Count);
+        }
+
+        [Fact]
+        public async Task Rules_are_separate_artifacts_and_survive_redeploy()
+        {
+            var node = "RuleOrg/RuleProj/RuleSub";
+            var srcClient = _source.CreateClient();
+            var tgtClient = _target.CreateClient();
+
+            // A persisted standalone rule (sql kind — engine-backed via rule://).
+            var rules = _source.Services.GetRequiredService<NamedRuleManager>();
+            rules.Save(new NamedRule
+            {
+                Name = "SolFeeCheck",
+                Kind = RuleKinds.Sql,
+                Description = "Fees above 100 need review.",
+                Definition = JObject.Parse("""{"expression":"{amount} > 100","requiredParameters":["amount"]}""")
+            });
+
+            var workspace = _source.Services.GetRequiredService<WorkspaceStore>();
+            workspace.EnsureSubProject(node);
+
+            // Flow A: executes the persisted rule via rule://SolFeeCheck.
+            workspace.SaveFlow(node, null, "sol-fee-check", "Rule-backed flow",
+                new JObject
+                {
+                    ["startAt"] = "r1",
+                    ["states"] = new JObject
+                    {
+                        ["r1"] = new JObject { ["type"] = "Task", ["resource"] = "rule://SolFeeCheck", ["parameters"] = new JObject { ["amount"] = 500 }, ["end"] = true }
+                    }
+                }.ToString(Formatting.None));
+
+            // Flow B: inline Choice + JSONata logic that export must lift into rule artifacts.
+            workspace.SaveFlow(node, null, "sol-choice-flow", "Choice + transform demo",
+                new JObject
+                {
+                    ["startAt"] = "c1",
+                    ["states"] = new JObject
+                    {
+                        ["c1"] = new JObject
+                        {
+                            ["type"] = "Choice",
+                            ["choices"] = new JArray
+                            {
+                                new JObject { ["expression"] = "$amount > 0", ["next"] = "t1" },
+                                new JObject { ["expression"] = "true", ["next"] = "t1" }
+                            }
+                        },
+                        ["t1"] = new JObject
+                        {
+                            ["type"] = "Task",
+                            ["resource"] = "transform://jsonata",
+                            ["parameters"] = new JObject { ["expression"] = "$amount * 2" },
+                            ["end"] = true
+                        }
+                    }
+                }.ToString(Formatting.None));
+
+            // Export: the package's rules section is a standalone catalog.
+            var exportRes = await srcClient.GetAsync($"/api/solutions/export?nodePath={Uri.EscapeDataString(node)}");
+            Assert.Equal(HttpStatusCode.OK, exportRes.StatusCode);
+            var package = JObject.Parse(await exportRes.Content.ReadAsStringAsync());
+
+            var ruleNames = package["rules"]!.Select(r => (string?)r!["name"]).ToList();
+            Assert.Contains("SolFeeCheck", ruleNames);
+            Assert.Contains("sol-choice-flow/c1", ruleNames);   // Choice logic lifted out of the flow
+            Assert.Contains("sol-choice-flow/t1", ruleNames);   // JSONata transform lifted out of the flow
+
+            var sqlRule = package["rules"]!.Single(r => (string?)r!["name"] == "SolFeeCheck")!;
+            Assert.Equal(RuleKinds.Sql, (string?)sqlRule!["kind"]);
+            Assert.Equal("{amount} > 100", (string?)sqlRule["definition"]?["expression"]);
+            var choiceRule = package["rules"]!.Single(r => (string?)r!["name"] == "sol-choice-flow/c1")!;
+            Assert.Equal(RuleKinds.Choice, (string?)choiceRule!["kind"]);
+            Assert.Equal(2, choiceRule!["definition"]!["conditions"]!.Count());
+
+            // Import onto the fresh target: rules land in its catalog and engines.
+            var importRes = await tgtClient.PostAsync("/api/solutions/import",
+                new StringContent(JsonConvert.SerializeObject(new JObject { ["package"] = package, ["targetNodePath"] = node }), Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.OK, importRes.StatusCode);
+            var report = JObject.Parse(await importRes.Content.ReadAsStringAsync());
+            Assert.Equal(3, report["rules"]!.Count());
+
+            var tgtRules = _target.Services.GetRequiredService<NamedRuleManager>();
+            Assert.NotNull(tgtRules.Get("SolFeeCheck"));
+            Assert.NotNull(tgtRules.Get("sol-choice-flow/c1"));
+            Assert.True(File.Exists(Path.Combine(_target.Root, "rules.json"))); // persisted artifact on disk
+
+            // The imported rule is engine-registered: running the flow executes it on the target.
+            var runRes = await tgtClient.PostAsync("/api/flows/execute-sync/sol-fee-check",
+                new StringContent("{}", Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.OK, runRes.StatusCode);
+            var execution = JObject.Parse(await runRes.Content.ReadAsStringAsync());
+            Assert.True((string?)execution?["status"] == "Succeeded",
+                $"flow failed: errorCode={(string?)execution?["errorCode"]} errorMessage={(string?)execution?["errorMessage"]}");
+            // RuleResultEx serializes with PascalCase keys (JObject.FromObject default).
+            var ruleOut = execution["output"]!;
+            Assert.True((bool)ruleOut!["Status"]!, $"rule {{amount}} > 100 should pass for amount=500; output={ruleOut}");
+        }
+
         /// <summary>Isolated source instance: its own workspace, stepflow_data.db and tds datasource binding.</summary>
         public sealed class SourceFactory : WebApplicationFactory<Program>
         {
@@ -248,6 +471,9 @@ namespace StepFunctionsApp.Tests
                         [FormDataOptions.SectionName + ":DatabasePath"] = Path.Combine(Root, "stepflow_data.db"),
                         [WorkspaceOptions.SectionName + ":RootDirectory"] = Path.Combine(Root, "workspace-data"),
                         ["SqlDataSources:tds"] = Path.Combine(Root, "data", "fees.db"),
+                        ["Eav:RegistryPath"] = Path.Combine(Root, "eav_registry.json"),
+                        ["Eav:DataDirectory"] = Path.Combine(Root, "eav-data"),
+                        ["Rules:Path"] = Path.Combine(Root, "rules.json"),
                     }));
 
             protected override void Dispose(bool disposing)
@@ -270,6 +496,9 @@ namespace StepFunctionsApp.Tests
                         [FormDataOptions.SectionName + ":DatabasePath"] = Path.Combine(Root, "stepflow_data.db"),
                         [WorkspaceOptions.SectionName + ":RootDirectory"] = Path.Combine(Root, "workspace-data"),
                         ["SqlDataSources:tds"] = Path.Combine(Root, "data", "fees.db"),
+                        ["Eav:RegistryPath"] = Path.Combine(Root, "eav_registry.json"),
+                        ["Eav:DataDirectory"] = Path.Combine(Root, "eav-data"),
+                        ["Rules:Path"] = Path.Combine(Root, "rules.json"),
                     }));
 
             public void Dispose()

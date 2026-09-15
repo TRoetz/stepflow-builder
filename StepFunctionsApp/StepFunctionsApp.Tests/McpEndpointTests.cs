@@ -30,7 +30,11 @@ namespace StepFunctionsApp.Tests
 
             protected override void ConfigureWebHost(IWebHostBuilder builder) =>
                 builder.ConfigureAppConfiguration((_, config) =>
-                    config.AddInMemoryCollection(new Dictionary<string, string?> { [FlowStateOptions.SectionName + ":DiskPath"] = _flowStateDir }));
+                    config.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        [FlowStateOptions.SectionName + ":DiskPath"] = _flowStateDir,
+                        ["Rules:Path"] = Path.Combine(_flowStateDir, "rules.json"), // keep the named-rule catalog out of the repo
+                    }));
 
             protected override void Dispose(bool disposing)
             {
@@ -126,22 +130,22 @@ namespace StepFunctionsApp.Tests
             var rpc = await RpcAsync("tools/list");
             var tools = (JArray)rpc["result"]!["tools"]!;
 
-            // Six tool groups: flows, data-exchange profiles, metadata (attribute domains + schema definitions),
-            // EAV rows/registry, dynamic APIs, solution packages. Names are snake_case of the method names.
+            // Seven tool groups: flows, data-exchange profiles, metadata (attribute domains + schema definitions),
+            // EAV rows/registry, dynamic APIs, solution packages, named rules. Names are snake_case of the method names.
             var expected = new[]
             {
                 "delete_attribute_domain", "delete_data_exchange_profile", "delete_dynamic_api",
-                "delete_eav_entity", "delete_eav_row", "delete_schema_definition",
+                "delete_eav_entity", "delete_eav_row", "delete_rule", "delete_schema_definition",
                 "export_solution",
                 "get_attribute_domain", "get_data_exchange_profile", "get_dynamic_api",
-                "get_flow", "get_schema_definition",
+                "get_flow", "get_rule", "get_schema_definition",
                 "import_solution",
                 "list_attribute_domains", "list_data_exchange_profiles", "list_dynamic_apis",
-                "list_eav_domains", "list_eav_entities", "list_flows", "list_schema_definitions",
+                "list_eav_domains", "list_eav_entities", "list_flows", "list_rules", "list_schema_definitions",
                 "patch_eav_row", "read_eav_rows", "register_eav_entity",
                 "run_data_exchange_profile", "run_flow",
                 "save_attribute_domain", "save_data_exchange_profile", "save_dynamic_api",
-                "save_flow", "save_schema_definition",
+                "save_flow", "save_rule", "save_schema_definition",
                 "update_eav_row", "write_eav_row"
             };
             var names = tools.Select(t => (string)t["name"]!).ToList();
@@ -220,6 +224,43 @@ namespace StepFunctionsApp.Tests
             });
 
             Assert.Contains("not valid JSON", (string)result["error"]!);
+        }
+
+        // ── 2b. NAMED RULES ────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Rules_RoundTrip_SaveListGetDelete()
+        {
+            var ruleName = UniqueName("mcp-rule");
+
+            // save_rule persists the artifact and returns it (camelCase).
+            var saved = await CallToolAsync("save_rule", new JObject
+            {
+                ["ruleJson"] = new JObject
+                {
+                    ["name"] = ruleName,
+                    ["kind"] = "choice",
+                    ["description"] = "demo choice rule",
+                    ["definition"] = new JObject { ["conditions"] = new JArray(new JObject { ["expression"] = "true", ["next"] = "ok" }) }
+                }.ToString(Formatting.None)
+            });
+            Assert.Equal(ruleName, (string)saved["name"]!);
+            Assert.Equal("choice", (string)saved["kind"]!);
+
+            // list_rules returns the catalog as a JSON array.
+            var rpc = await RpcAsync("tools/call", new JObject { ["name"] = "list_rules", ["arguments"] = new JObject() });
+            var listText = (string)((JArray)rpc["result"]!["content"]!)[0]!["text"]!;
+            Assert.Contains(JArray.Parse(listText), r => (string)r!["name"] == ruleName);
+
+            // get_rule returns the full definition body.
+            var got = await CallToolAsync("get_rule", new JObject { ["name"] = ruleName });
+            Assert.Equal(1, ((JArray)got["definition"]!["conditions"]!).Count);
+
+            // delete_rule removes it from the catalog and engine.
+            var del = await CallToolAsync("delete_rule", new JObject { ["name"] = ruleName });
+            Assert.Equal(ruleName, (string)del["deleted"]!);
+            var missing = await CallToolAsync("get_rule", new JObject { ["name"] = ruleName });
+            Assert.Contains("not found", (string)missing["error"]!);
         }
 
         // ── 3. EXECUTION ───────────────────────────────────────────────────────

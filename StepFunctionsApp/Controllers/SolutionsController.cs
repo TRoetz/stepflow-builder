@@ -6,10 +6,14 @@ namespace StepFunctionsApp.Controllers
 {
     // ═══════════════════════════════════════════════════════════════════════════════
     // SOLUTIONS — portable application packages (test -> prod deploy path).
-    //   GET  /api/solutions/export?nodePath=org/project/sub[&seedTables=a,b]
-    //        → the full solution package JSON for that workspace node.
+    //   GET  /api/solutions/export?nodePath=org/project/sub[&seedTables=a,b][&seedDomains=x,y]
+    //        → the full solution package JSON for that workspace node: flows (+ canvas layouts),
+    //          forms, attribute domains, dynamic APIs, data-exchange profiles, named rules
+    //          (persisted + Choice/JSONata/AI logic extracted from the flows), EAV datasets
+    //          (entity contracts + row dumps) and SQL data-source schemas/seeds.
     //   POST /api/solutions/import   { "package": {...}, "targetNodePath"? }
-    //        → imports the package (flows + metadata upserts + data-source migrations) and returns a report.
+    //        → imports the package (flows + canvas, metadata upserts, rules, EAV entities/rows,
+    //          data-source migrations) and returns a report.
     // ═══════════════════════════════════════════════════════════════════════════════
 
     [ApiController]
@@ -28,14 +32,17 @@ namespace StepFunctionsApp.Controllers
 
         /// <summary>Exports the application attached to a workspace node as a portable solution package.</summary>
         [HttpGet("export")]
-        public IActionResult Export([FromQuery] string? nodePath, [FromQuery] string? seedTables, [FromQuery] string? name, [FromQuery] string? version)
+        public IActionResult Export([FromQuery] string? nodePath, [FromQuery] string? seedTables, [FromQuery] string? seedDomains, [FromQuery] string? name, [FromQuery] string? version)
         {
             try
             {
                 var seeds = string.IsNullOrWhiteSpace(seedTables)
                     ? null
                     : seedTables.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                var package = _solutions.Export(string.IsNullOrWhiteSpace(nodePath) ? _defaultNode : nodePath.Trim(), seeds, name, version);
+                var domainSeeds = string.IsNullOrWhiteSpace(seedDomains)
+                    ? null
+                    : seedDomains.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                var package = _solutions.Export(string.IsNullOrWhiteSpace(nodePath) ? _defaultNode : nodePath.Trim(), seeds, domainSeeds, name, version);
                 return Ok(package);
             }
             catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)

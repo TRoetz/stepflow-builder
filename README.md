@@ -522,6 +522,9 @@ The frontend communicates with the backend via these endpoints:
 | `/api/execution/:id` | GET | Get execution status |
 | `/api/flows/:id` | DELETE | Delete a registered flow from the in-memory registry (404 when unknown) |
 | `/api/api-registry` | GET | List registered APIs |
+| `/api/rules`, `/api/rules/{*name}` | GET/POST/DELETE | Named rule catalog (persisted in `rules.json`; engine-backed kinds register on save and at startup) |
+| `/api/solutions/export?nodePath=&seedTables=&seedDomains=` | GET | Export a solution package — flows + canvas layout, forms, domains, schemas, APIs, DX profiles, named rules, EAV datasets, SQL migrations — as JSON |
+| `/api/solutions/import` | POST | Import a solution package onto this instance (idempotent redeploy) |
 
 ### Resource URI Scheme
 
@@ -541,7 +544,7 @@ The frontend communicates with the backend via these endpoints:
 
 ## MCP Server
 
-The backend exposes a **Model Context Protocol (MCP)** server at `/mcp`, letting AI agents (Claude Desktop, VS Code Copilot, or any MCP client) manage flows **and** workspace configuration — data-exchange profiles, attribute domains, schema definitions, EAV rows and entity contracts, dynamic APIs — through the same .NET engine as the UI. Transport: streamable HTTP — stateless, so no session handshake is required per request. All 30 tools return errors as JSON (`{"error": "…"}`) rather than throwing; full parameter/return details live in **SKILL.md §2**.
+The backend exposes a **Model Context Protocol (MCP)** server at `/mcp`, letting AI agents (Claude Desktop, VS Code Copilot, or any MCP client) manage flows **and** workspace configuration — data-exchange profiles, attribute domains, schema definitions, EAV rows and entity contracts, dynamic APIs, named rules, solution packages — through the same .NET engine as the UI. Transport: streamable HTTP — stateless, so no session handshake is required per request. All 34 tools return errors as JSON (`{"error": "…"}`) rather than throwing; full parameter/return details live in **SKILL.md §2**.
 
 ### Tools
 
@@ -577,6 +580,12 @@ The backend exposes a **Model Context Protocol (MCP)** server at `/mcp`, letting
 | `get_dynamic_api` | Full API definition JSON including all operations | `id` |
 | `save_dynamic_api` | Create or replace an API by the name in its JSON | `definitionJson` |
 | `delete_dynamic_api` | Delete a dynamic API by id | `id` |
+| `export_solution` | Export a solution package (flows + canvas, forms, domains, schemas, APIs, DX profiles, named rules, EAV datasets, SQL migrations) as one JSON document | `nodePath?`, `seedTables?`, `seedDomains?`, `name?`, `version?` |
+| `import_solution` | Import a solution package onto this instance (idempotent redeploy; engine-backed rules register immediately) | `packageJson`, `targetNodePath?` |
+| `list_rules` | List persisted named rules (`choice`, `jsonata`, `sql`, `ms-rules`, `ai-decision`) | — |
+| `get_rule` | Full rule including its definition body | `name` |
+| `save_rule` | Create or replace a rule by name; engine-backed kinds register immediately (`rule://` / `rules://`) | `ruleJson` |
+| `delete_rule` | Delete a rule and unregister it from its engine | `name` |
 
 Definitions use the same camelCase Amazon States Language format the React UI exports (`startAt`, `states`, `type`, `next`, …), so a flow fetched via MCP can be re-imported into the canvas unchanged. State names keep their original casing. Supported state types: `Task`, `Pass`, `Choice`, `Wait`, `Parallel`, `Map`, `Succeed`, `Fail`.
 

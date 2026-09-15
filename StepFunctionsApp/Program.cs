@@ -89,6 +89,16 @@ public class Startup
         services.AddSingleton<SshCommandService>();
         services.AddSingleton<FetchRemoteFilesService>();
         services.AddSingleton<IResourceInvoker, CompositeResourceInvoker>();
+        // Named rule artifacts — persistent rule catalog (rules.json) + engine sync so
+        // sql/ms-rules rules survive restarts and travel inside solution packages.
+        services.AddSingleton<Rules.INamedRuleStore>(provider =>
+        {
+            var store = new Rules.JsonFileNamedRuleStore();
+            store.Initialize(_config["Rules:Path"] ?? "rules.json");
+            return store;
+        });
+        services.AddSingleton<Rules.NamedRuleManager>();
+
         // Solution packaging (export/import portable application packages — test -> prod deploy path).
         services.AddSingleton<Solutions.SolutionService>();
         services.AddSingleton<StepFunctionInterpreter>();
@@ -184,6 +194,7 @@ public class Startup
             .WithTools<StepFunctionsApp.Mcp.MetaDataTools>()
             .WithTools<StepFunctionsApp.Mcp.EavTools>()
             .WithTools<StepFunctionsApp.Mcp.DynamicApiTools>()
+            .WithTools<StepFunctionsApp.Mcp.RuleTools>()
             .WithTools<StepFunctionsApp.Mcp.SolutionTools>();
     }
     public void Configure(IApplicationBuilder app, IHostEnvironment env)
@@ -223,6 +234,10 @@ public class Startup
                 }
             }
         }
+
+        // Register persisted sql + ms-rules named rules with their engines so rule:// and rules://
+        // flow resources keep working across restarts.
+        app.ApplicationServices.GetRequiredService<Rules.NamedRuleManager>().SyncAllWithEngines();
 
         // Serve static files (JS, CSS) from dist/ directory
         var distPath = Path.Combine(Directory.GetCurrentDirectory(), "dist");
