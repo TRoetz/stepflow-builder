@@ -25,7 +25,13 @@
     <PackageReference Include="SSH.NET" Version="2024.1.0" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\StepFlow.Asl\StepFlow.Asl.csproj" />
+    <ProjectReference Include="..\StepFlow.DataExchange\StepFlow.DataExchange.csproj" />
     <ProjectReference Include="..\StepFlow.DynamicApi.Core\StepFlow.DynamicApi.Core.csproj" />
+    <ProjectReference Include="..\StepFlow.Eav\StepFlow.Eav.csproj" />
+    <ProjectReference Include="..\StepFlow.Forms\StepFlow.Forms.csproj" />
+    <ProjectReference Include="..\StepFlow.Metadata\StepFlow.Metadata.csproj" />
+    <ProjectReference Include="..\StepFlow.Transform\StepFlow.Transform.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="StepFunctionsApp.Tests\**" />

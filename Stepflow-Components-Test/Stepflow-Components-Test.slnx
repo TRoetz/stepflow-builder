@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="Demos.StepFlow.Asl/Demos.StepFlow.Asl.csproj" />
+  <Project Path="Demos.StepFlow.DataExchange/Demos.StepFlow.DataExchange.csproj" />
+  <Project Path="Demos.StepFlow.DynamicApi.Core/Demos.StepFlow.DynamicApi.Core.csproj" />
+  <Project Path="Demos.StepFlow.Eav/Demos.StepFlow.Eav.csproj" />
+  <Project Path="Demos.StepFlow.Forms/Demos.StepFlow.Forms.csproj" />
+  <Project Path="Demos.StepFlow.Metadata/Demos.StepFlow.Metadata.csproj" />
+  <Project Path="Demos.StepFlow.Transform/Demos.StepFlow.Transform.csproj" />
+</Solution>

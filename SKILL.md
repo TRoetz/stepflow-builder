@@ -118,7 +118,7 @@ A flow is a JSON document:
 
 ### 3.1 State types and their fields
 
-Ten types (`StateType` enum, `StepFunctions/StatesLanguageModels.cs`). Common optional fields on every state: `comment`, `inputPath`, `outputPath`, `resultPath`, `parameters`, `resultSelector`, `retry[]`, `catch[]`.
+Ten types (`StateType` enum, `StepFlow.Asl/StatesLanguageModels.cs`). Common optional fields on every state: `comment`, `inputPath`, `outputPath`, `resultPath`, `parameters`, `resultSelector`, `retry[]`, `catch[]`.
 
 | Type | Key fields | Behavior |
 |---|---|---|
@@ -151,7 +151,7 @@ Built-in error codes and semantics: UserManual §7.
 
 ## 4. Resource schemes (Task states)
 
-`CompositeResourceInvoker.InvokeAsync` (`StepFunctions/ResourceInvoker.cs`) dispatches on the `resource` URI scheme — the complete set of fourteen:
+`CompositeResourceInvoker.InvokeAsync` (`StepFlow.Asl/ResourceInvoker.cs`) dispatches on the `resource` URI scheme — the complete set of fourteen:
 
 | # | Scheme | URI form | Behavior |
 |---|---|---|---|
@@ -259,3 +259,22 @@ Deploy a whole solution — flows (+ canvas layout) + forms + attribute domains 
 - **Environment binding**: each environment's appsettings maps logical names to local paths — `"SqlDataSources": { "fees": "C:/prod/data/fees.db" }` (env-var expansion supported). Flows reference `sql://fees`, never a machine-specific path. Literal file paths in flows still work and take precedence when the file exists.
 - **Test→prod procedure**: export from test → review/diff the package JSON → set prod's `SqlDataSources` binding → import on prod → re-run the smoke suite against prod URLs as the acceptance gate (see `smoke/prod_deploy_check.py`).
 - Limits: node-level flow selection only (all flows in the node are exported); same-named flows in different nodes collide (flow names are global); API bearer tokens travel inside the package — treat packages as sensitive. EAV rows are append-only on import (no update/delete of existing target rows).
+
+## 13. Component packages (NuGet)
+
+The backend is split into seven packable class libraries so components can be reused in other apps (`dotnet pack <proj> -o nupkgs`):
+
+| Package | Contents |
+|---|---|
+| `StepFlow.Asl` | ASL interpreter + checkpointing, resource invoker (all 14 schemes), named-rule catalog + rule engines, human tasks, flow state store (SQLite/Redis), BPMN conversion. References every other package. |
+| `StepFlow.DataExchange` | Profile pipeline engine: profile store + file-watch reload, SQL Server/CSV/HTTP sources, DuckDB transforms, routing, execution log. → Metadata + Transform |
+| `StepFlow.DynamicApi.Core` | Dynamic API route matching, request/response models, EAV GET mapping. Reference host: `DynamicApiHost`. In-app hosting (`StepFunctionsApp/DynamicApi/`) stays in the builder. |
+| `StepFlow.Eav` | EAV registry, JSON row store (idempotent appends), attribute-domain bridging, shared eav GET query language. → Metadata |
+| `StepFlow.Forms` | Versioned form definitions (JSON + SQLite stores) + transport-agnostic validation/coercion engine (`FormValidationService`). → Metadata |
+| `StepFlow.Metadata` | Attribute domain + schema definition contracts with JSON/SQLite persistence; shared infra types (`StepEngineException`, `KeyPreservingCamelCaseContractResolver`). Leaf. |
+| `StepFlow.Transform` | DuckDB transform service shared by ASL and DataExchange. Leaf. |
+
+Notes for code work:
+- Types keep their original namespaces (`StepFunctionsApp.StepFunctions`, `StepFlow.DataModel.*`) — the split moved files, not usings; find a type by name, not by folder.
+- The builder host (`StepFunctionsApp/Program.cs`) is the canonical DI wiring example for consuming any of these packages elsewhere.
+- `InternalsVisibleTo("StepFunctionsApp.Tests")` is set on every package so the test suite can reach internals across assemblies.

@@ -30,3 +30,8 @@ Thumbs.db
 
 # SSH host inventory (may contain credentials — see ssh_hosts.example.json)
 ssh_hosts.json
+
+# Pack output + test results
+nupkgs/
+TestResults/
+*.trx

@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- NuGet packaging: StepFlow.DataExchange — profile pipeline engine (sources, actions, routing) -->
+    <IsPackable>true</IsPackable>
+    <PackageId>StepFlow.DataExchange</PackageId>
+    <Version>1.0.0</Version>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Authors>StepFlow Builder</Authors>
+    <Description>Data Exchange pipeline engine: profile store with file-watch reload, multi-source ingestion (SQL Server, CSV, HTTP), DuckDB transforms, routing and execution logging.</Description>
+    <PackageTags>stepflow;dataexchange;pipeline;etl</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="StepFunctionsApp.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="6.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\StepFlow.Metadata\StepFlow.Metadata.csproj" />
+    <ProjectReference Include="..\StepFlow.Transform\StepFlow.Transform.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -385,19 +385,53 @@ stepflow-builder/
 │   ├── tsconfig.json
 │   ├── tailwind.config.js
 │   └── vitest.config.ts
-├── StepFunctionsApp/              ← Backend (.NET 10); serves built UI from dist/ in single-process mode
-│   ├── Program.cs                 ← Host; serves frontend from dist/ if present
-│   ├── StepFunctions/             ← Execution engine (interpreter, invoker, state store)
-│   ├── Controllers/               ← REST API: flows, tests, fake data endpoints
-│   ├── Flows/                     ← Flow definitions (JSON)
-│   ├── Converters/                ← BPMN converter
-│   ├── Mcp/                       ← MCP endpoint for AI harnesses
+├── StepFlow.Asl/                  ← NuGet package: ASL flow engine (interpreter, invoker, rules, human tasks)
+├── StepFlow.DataExchange/         ← NuGet package: Data Exchange pipeline engine
+├── StepFlow.DynamicApi.Core/      ← NuGet package: dynamic API matching/dispatch code
+├── StepFlow.Eav/                  ← NuGet package: EAV registry, row store, query language
+├── StepFlow.Forms/                ← NuGet package: form definitions + validation/coercion engine
+├── StepFlow.Metadata/             ← NuGet package: attribute domains, schema definitions, stores
+├── StepFlow.Transform/            ← NuGet package: DuckDB transform service (shared by ASL + DataExchange)
+├── StepFunctionsApp/              ← Backend host (.NET 10); references all packages; serves built UI from dist/
+│   ├── Program.cs                 ← Host; DI wiring for every component; serves frontend if present
+│   ├── Controllers/               ← REST API: flows, forms, EAV, rules, solutions, dynamic APIs
+│   ├── DynamicApi/                ← In-app dynamic API hosting (dispatcher + SQLite store)
+│   ├── Solutions/                 ← Solution package export/import (the portable "project" artifact)
+│   ├── Workspace/                 ← Org → project → sub-project tree, ACLs, flow/profile storage
+│   ├── Converters/                ← BPMN/SSIS conversion pipeline
+│   ├── Mcp/                       ← MCP endpoint for AI harnesses (34 tools)
 │   ├── StepFunctionsApp.Tests/    ← xUnit backend test suite (engine, flow state, MCP, scenarios)
 │   └── Stepflow-Builder-Tests/    ← Standalone fake test API host (http://localhost:5095)
 ├── DynamicApiHost/                ← Standalone host exposing published dynamic APIs (:5002)
-├── StepFlow.DynamicApi.Core/      ← Shared dynamic API matching/dispatch code
 ├── docker-example/                ← Docker Compose showcase: frontend + Dynamic API host + backend
 └── start.ps1                      ← One-command dev launcher (backend + fake test host + frontend)
+```
+
+### Component packages
+
+The backend is split into seven packable class libraries so each component can be reused in other apps:
+
+| Package | Contents |
+|---|---|
+| `StepFlow.Asl` | ASL state-machine interpreter with checkpointing, resource invoker (all 14 schemes), named-rule catalog (`rules.json`), rule engines (SQL + MS Rules), human tasks, flow state store (SQLite/Redis), BPMN conversion |
+| `StepFlow.DataExchange` | Profile pipeline engine: profile store with file-watch reload, SQL Server/CSV/HTTP sources, DuckDB transforms, routing, execution log |
+| `StepFlow.DynamicApi.Core` | Dynamic API route matching, request/response models, EAV GET mapping (reference host: `DynamicApiHost`) |
+| `StepFlow.Eav` | EAV entity registry, JSON row store with idempotent appends, attribute-domain bridging, shared eav GET query language |
+| `StepFlow.Forms` | Versioned form definitions (JSON + SQLite stores) and the transport-agnostic validation/coercion engine (`FormValidationService`) |
+| `StepFlow.Metadata` | Attribute domain + schema definition contracts with JSON/SQLite persistence providers; shared infrastructure types |
+| `StepFlow.Transform` | DuckDB-backed transform service shared by ASL flows and DataExchange pipelines |
+
+Dependency direction: `Transform`, `Metadata` → leaf · `Eav`, `Forms` → Metadata · `DataExchange` → Metadata + Transform · `Asl` → all of the above. No cycles.
+
+Each package folder has its own `README.md` with dependencies, key types and usage examples.
+
+```bash
+dotnet pack StepFlow.Asl/StepFlow.Asl.csproj -o nupkgs   # repeat per package, or publish to a feed
+```
+
+Consuming in another app: add the package reference(s), then register the services you need (e.g. `EavRegistryService`, `EavRowStore`, `FormValidationService`, `StepFunctionInterpreter` + `CompositeResourceInvoker`) — see `StepFunctionsApp/Program.cs` for a complete wiring example.
+
+> Note: types keep their original namespaces (`StepFunctionsApp.StepFunctions`, `StepFlow.DataModel.*`, …) so the builder's code needed no using-changes during the split; treat the package as the unit of reuse, not the namespace.
 
 ---
 

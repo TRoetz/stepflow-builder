@@ -645,10 +645,4 @@ namespace StepFunctionsApp.StepFunctions
 
         private JToken Truncate(JToken token, int max = 500) { var s = token.ToString(Formatting.None); return s.Length <= max ? token : JValue.CreateString(s[..max] + "..."); }
     }
-
-    public class StepEngineException : Exception
-    {
-        public string ErrorCode { get; }
-        public StepEngineException(string errorCode, string message) : base(message) => ErrorCode = errorCode;
-    }
 }

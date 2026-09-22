@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- NuGet packaging: StepFlow.Asl — the ASL state-machine flow engine -->
+    <IsPackable>true</IsPackable>
+    <PackageId>StepFlow.Asl</PackageId>
+    <Version>1.0.0</Version>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Authors>StepFlow Builder</Authors>
+    <Description>ASL (Amazon States Language) flow engine: state-machine interpreter with checkpointing, resource invoker (rule://, sql://, eav://, dataexchange://, transform://, script://, ssh://, fetch://, ai://, tool://), named-rule catalog, human tasks and BPMN conversion.</Description>
+    <PackageTags>stepflow;asl;state-machine;flows;bpmn</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="StepFunctionsApp.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Jsonata.Net.Native.JsonNet" Version="3.0.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.8.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Abstractions" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.5" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="RulesEngine" Version="6.0.1" />
+    <PackageReference Include="SSH.NET" Version="2024.1.0" />
+    <PackageReference Include="StackExchange.Redis" Version="3.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\StepFlow.DataExchange\StepFlow.DataExchange.csproj" />
+    <ProjectReference Include="..\StepFlow.Eav\StepFlow.Eav.csproj" />
+    <ProjectReference Include="..\StepFlow.Forms\StepFlow.Forms.csproj" />
+    <ProjectReference Include="..\StepFlow.Metadata\StepFlow.Metadata.csproj" />
+    <ProjectReference Include="..\StepFlow.Transform\StepFlow.Transform.csproj" />
+  </ItemGroup>
+
+</Project>

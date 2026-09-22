@@ -4,7 +4,19 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- NuGet packaging: StepFlow.DynamicApi.Core — dynamic API matching, models and request support -->
+    <IsPackable>true</IsPackable>
+    <PackageId>StepFlow.DynamicApi.Core</PackageId>
+    <Version>1.0.0</Version>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Authors>StepFlow Builder</Authors>
+    <Description>Dynamic API component core: route matching, request/response models and EAV GET mapping for runtime-defined REST APIs (see DynamicApiHost for a reference host).</Description>
+    <PackageTags>stepflow;dynamic-api;rest</PackageTags>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />

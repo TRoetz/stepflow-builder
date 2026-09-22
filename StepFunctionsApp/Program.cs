@@ -349,8 +349,4 @@ public class Startup
 
 }
 
-/// <summary>camelCase property names, but leaves dictionary keys (state names) untouched. Internal so non-MVC writers (e.g. DynamicApiDispatcher) emit the same wire shape.</summary>
-internal sealed class KeyPreservingCamelCaseContractResolver : CamelCasePropertyNamesContractResolver
-{
-    protected override string ResolveDictionaryKey(string key) => key;
-}
+

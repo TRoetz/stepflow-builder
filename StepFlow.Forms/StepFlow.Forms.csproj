@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- NuGet packaging: StepFlow.Forms — UI form definitions, versioned stores and the validation/coercion engine -->
+    <IsPackable>true</IsPackable>
+    <PackageId>StepFlow.Forms</PackageId>
+    <Version>1.0.0</Version>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Authors>StepFlow Builder</Authors>
+    <Description>UI Forms component: versioned form definitions (JSON + SQLite stores) and the transport-agnostic validation/coercion engine that checks submissions against attribute-domain contracts.</Description>
+    <PackageTags>stepflow;forms;ui;validation</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="StepFunctionsApp.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\StepFlow.Metadata\StepFlow.Metadata.csproj" />
+  </ItemGroup>
+
+</Project>

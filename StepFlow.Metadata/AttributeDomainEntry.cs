@@ -1,6 +1,5 @@
 using StepFlow.DataModel.Entities;
 using StepFlow.DataModel.Entities.MetaData;
-using StepFunctionsApp.DataExchange;
 
 namespace StepFunctionsApp.StepFunctions
 {

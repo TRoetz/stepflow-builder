@@ -4,7 +4,6 @@ using System.Linq;
 using Newtonsoft.Json.Linq;
 using StepFlow.DataModel.Entities;
 using StepFlow.DataModel.Entities.MetaData;
-using StepFunctionsApp.DataExchange;
 
 namespace StepFunctionsApp.StepFunctions
 {
