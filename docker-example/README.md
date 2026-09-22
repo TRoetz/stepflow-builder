@@ -1,6 +1,6 @@
 # StepFlow docker example
 
-Runs the full stack as one Docker Compose demo: the visual builder UI (nginx), the standalone dynamic API host, and the StepFlow backend with its sample data. No seed job — the tracked `StepFunctionsApp/stepflow_data.db` already contains flows, EAV rows, and a published "Orders API".
+Runs the full stack as one Docker Compose demo: the visual builder UI (nginx), the standalone dynamic API host, and the StepFlow backend. Fresh clones start with an empty database — create flows / publish APIs from the UI or MCP to populate it (the `smoke/` scripts show end-to-end examples).
 
 ## Architecture
 
@@ -31,10 +31,10 @@ Then open `http://localhost:8080/`.
 | `http://localhost:5001/api/health` | Backend direct — returns `"healthy"` |
 | `http://localhost:5002/api/dynamic/orders` | Published Orders API via DynamicApiHost (EAV domain `OrderApproval`; GET lists rows, POST creates one) |
 
-The dynamic API requires the demo bearer token that ships in the sample DB:
+The dynamic API requires the bearer token you configured when publishing it (set in the Dynamic API panel / publish call):
 
 ```powershell
-curl -H "Authorization: Bearer 7336d1c033212a69afeba44a99bbdbb5" http://localhost:5002/api/dynamic/orders/
+curl -H "Authorization: Bearer <your-orders-api-token>" http://localhost:5002/api/dynamic/orders/
 ```
 
 ## Verification curls
@@ -46,8 +46,8 @@ curl -s http://localhost:8080/ | Select-String StepFlow
 # Proxied health returns "healthy"
 curl -s http://localhost:8080/api/health
 
-# Dynamic API eav GET with bearer token
-curl -H "Authorization: Bearer 7336d1c033212a69afeba44a99bbdbb5" http://localhost:5002/api/dynamic/orders/
+# Dynamic API eav GET with bearer token (use the token you set when publishing)
+curl -H "Authorization: Bearer <your-orders-api-token>" http://localhost:5002/api/dynamic/orders/
 ```
 
 ## Notes

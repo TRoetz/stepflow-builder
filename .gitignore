@@ -12,6 +12,11 @@ publish/
 
 # Logs
 logs/
+backend.log
+
+# Runtime state (execution history, SQLite data — never commit; may contain tokens/real data)
+StepFunctionsApp/flow-state/
+*.db
 
 # Build artifacts
 *.tsbuildinfo

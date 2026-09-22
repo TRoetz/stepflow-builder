@@ -11,6 +11,9 @@ StepFlow.DynamicApi.Core/obj/
 # Test projects live inside StepFunctionsApp/ - anchor the paths (bare names don't match at depth).
 StepFunctionsApp/Stepflow-Builder-Tests/
 StepFunctionsApp/StepFunctionsApp.Tests/
+*.db
 *.db-journal
+StepFunctionsApp/flow-state/
+backend.log
 # Local publish output (hundreds of MB of build artifacts, not needed in the image).
 StepFunctionsApp/publish/

@@ -2,8 +2,9 @@
 #
 #   http://localhost:8080/                          -> builder UI (nginx serves the SPA, proxies /api and /mcp to the backend)
 #   http://localhost:5001/api/health                -> backend direct ("healthy")
-#   curl -H "Authorization: Bearer 7336d1c033212a69afeba44a99bbdbb5" \
-#        http://localhost:5002/api/dynamic/orders/  -> published Orders API via DynamicApiHost (sample data in stepflow_data.db)
+#   curl -H "Authorization: Bearer <your-orders-api-token>" \
+#        http://localhost:5002/api/dynamic/orders/  -> published Orders API via DynamicApiHost
+#   (fresh clones start with an empty database — publish the Orders API from the UI/MCP first)
 
 services:
   backend:
