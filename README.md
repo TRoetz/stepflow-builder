@@ -65,6 +65,7 @@ StepFlow Builder replaces the original div-based drag-and-drop UI with a profess
 
 The frontend lives in **`StepFlow-UI/`** at the repo root (React + xyflow). The **.NET 10 backend** (`StepFunctions/`) is kept as-is — it provides the execution engine, resource invoker, and flow storage. Vite builds into `StepFlow-UI/dist/`, which [`docker-example/`](docker-example/) serves via nginx; for single-process mode copy `dist/` next to the backend as `StepFunctionsApp/dist`, which it serves at `/`.
 
+```
 stepflow-builder/
 ├── StepFlow-UI/                   ← Frontend (React + xyflow); Vite builds into dist/
 │   ├── Canvas with custom nodes       ← Drag, drop, connect, layout
@@ -80,6 +81,7 @@ stepflow-builder/
 ├── StepFlow.DynamicApi.Core/      ← Shared dynamic API matching/dispatch code
 ├── docker-example/                ← Docker Compose showcase: frontend + Dynamic API host + backend
 └── start.ps1                      ← One-command dev launcher (backend + fake test host + frontend)
+```
 
 ### Key Design Decisions
 
