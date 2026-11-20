@@ -28,6 +28,23 @@ namespace StepFunctionsApp.Controllers
         [HttpGet("api/forms/provider")]
         public IActionResult Provider() => Ok(new { provider = _store.ProviderName });
 
+        // One saved form definition — the current version, or an exact (formId, version) pair when ?version= is given.
+        [HttpGet("api/forms/{formId}")]
+        public IActionResult Get(string formId, [FromQuery] string? version)
+        {
+            try
+            {
+                var def = string.IsNullOrWhiteSpace(version) ? _store.Get(formId) : _store.Get(formId, version);
+                return def is null
+                    ? NotFound(new { error = $"Form '{formId}' not found" })
+                    : Ok(def);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { error = ex.Message }); // invalid form id / version label
+            }
+        }
+
         // Create or replace a form by FormId (body: full FormDefinition JSON incl. Page).
         [HttpPost("api/forms")]
         public IActionResult Save([FromBody] FormDefinition def)

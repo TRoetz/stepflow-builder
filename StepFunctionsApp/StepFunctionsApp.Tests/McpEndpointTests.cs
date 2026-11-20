@@ -33,6 +33,7 @@ namespace StepFunctionsApp.Tests
                     config.AddInMemoryCollection(new Dictionary<string, string?>
                     {
                         [FlowStateOptions.SectionName + ":DiskPath"] = _flowStateDir,
+                        [HumanTaskOptions.SectionName + ":DiskPath"] = Path.Combine(_flowStateDir, "human-tasks"), // keep task records out of the repo
                         ["Rules:Path"] = Path.Combine(_flowStateDir, "rules.json"), // keep the named-rule catalog out of the repo
                     }));
 
@@ -130,22 +131,30 @@ namespace StepFunctionsApp.Tests
             var rpc = await RpcAsync("tools/list");
             var tools = (JArray)rpc["result"]!["tools"]!;
 
-            // Seven tool groups: flows, data-exchange profiles, metadata (attribute domains + schema definitions),
-            // EAV rows/registry, dynamic APIs, solution packages, named rules. Names are snake_case of the method names.
+            // Ten tool groups: flows (+ execution lifecycle), data-exchange profiles, metadata (attribute domains + schema definitions),
+            // EAV rows/registry, dynamic APIs, solution packages, named rules, human tasks, form capture, form definitions.
+            // Names are snake_case of the method names.
             var expected = new[]
             {
+                "complete_human_task",
                 "delete_attribute_domain", "delete_data_exchange_profile", "delete_dynamic_api",
-                "delete_eav_entity", "delete_eav_row", "delete_rule", "delete_schema_definition",
+                "delete_eav_entity", "delete_eav_row", "delete_execution", "delete_flow",
+                "delete_form_definition", "delete_rule", "delete_schema_definition",
                 "export_solution",
                 "get_attribute_domain", "get_data_exchange_profile", "get_dynamic_api",
-                "get_flow", "get_rule", "get_schema_definition",
+                "get_execution", "get_flow", "get_form_capture", "get_form_definition",
+                "get_human_task",
+                "get_rule", "get_schema_definition",
                 "import_solution",
                 "list_attribute_domains", "list_data_exchange_profiles", "list_dynamic_apis",
-                "list_eav_domains", "list_eav_entities", "list_flows", "list_rules", "list_schema_definitions",
-                "patch_eav_row", "read_eav_rows", "register_eav_entity",
+                "list_eav_domains", "list_eav_entities", "list_executions", "list_flows",
+                "list_form_definitions", "list_human_tasks",
+                "list_rules", "list_schema_definitions",
+                "patch_eav_row", "read_eav_rows", "register_eav_entity", "resume_execution",
                 "run_data_exchange_profile", "run_flow",
                 "save_attribute_domain", "save_data_exchange_profile", "save_dynamic_api",
-                "save_flow", "save_rule", "save_schema_definition",
+                "save_flow", "save_form_definition", "save_rule", "save_schema_definition",
+                "stop_execution", "submit_form_capture",
                 "update_eav_row", "write_eav_row"
             };
             var names = tools.Select(t => (string)t["name"]!).ToList();
@@ -332,6 +341,84 @@ namespace StepFunctionsApp.Tests
 
             Assert.Contains("not valid JSON", (string)result["error"]!);
         }
+
+        // ── HUMAN-TASK LIFECYCLE (headless operation) ────────────────────────
+
+        [Fact]
+        public async Task HumanTask_SuspendCompleteResume_FullyViaMcp()
+        {
+            var name = UniqueName("mcp-ht");
+            await CallToolAsync("save_flow", new JObject
+            {
+                ["name"] = name,
+                ["startAt"] = "A",
+                ["statesJson"] = "{\"A\":{\"type\":\"Pass\",\"next\":\"B\"}," +
+                                 "\"B\":{\"type\":\"HumanTask\",\"task\":{\"title\":\"Approve order\",\"assignee\":\"alice\"},\"completion\":{\"Type\":\"api\"},\"next\":\"C\"}," +
+                                 "\"C\":{\"type\":\"Task\",\"resource\":\"internal://echo\",\"end\":true}}"
+            });
+
+            // run_flow executes synchronously until the HumanTask state suspends it.
+            var run = await CallToolAsync("run_flow", new JObject
+            {
+                ["idOrName"] = name,
+                ["inputJson"] = "{\"orderId\":42}"
+            });
+            Assert.Equal("Suspended", (string)run["status"]!);
+            var executionId = (string)run["executionId"]!;
+
+            // list_human_tasks surfaces the pending task for this execution.
+            var rpc = await RpcAsync("tools/call", new JObject
+            {
+                ["name"] = "list_human_tasks",
+                ["arguments"] = new JObject { ["executionId"] = executionId }
+            });
+            var tasks = JArray.Parse((string)((JArray)rpc["result"]!["content"]!)[0]!["text"]!);
+            Assert.Equal(1, tasks.Count);
+            var taskId = (string)tasks[0]!["taskId"]!;
+            Assert.Equal("Pending", (string)tasks[0]!["status"]!);
+            Assert.Equal(name, (string)tasks[0]!["stateMachineName"]!);
+
+            // get_human_task exposes the payload snapshot taken at suspension time.
+            var task = await CallToolAsync("get_human_task", new JObject { ["taskId"] = taskId });
+            Assert.Equal("Approve order", (string)task["title"]!);
+            Assert.NotNull(task["payload"]);
+
+            // complete_human_task resumes; the resumed run continues in the background.
+            var done = await CallToolAsync("complete_human_task", new JObject
+            {
+                ["taskId"] = taskId,
+                ["resultJson"] = "{\"approved\":true}"
+            });
+            Assert.Equal("Completed", (string)done["status"]!);
+            Assert.Equal(executionId, (string)done["executionId"]!);
+
+            // Poll get_execution until the resumed run finishes. Without a ResultPath on state B the
+            // completion result replaces the input entirely, so the echo state returns it unchanged.
+            var exec = await WaitForTerminalAsync(executionId);
+            Assert.Equal("Succeeded", (string)exec["status"]!);
+            Assert.True(JToken.DeepEquals(new JObject { ["approved"] = true }, exec["output"]));
+
+            // Completing twice is rejected with a tool error.
+            var again = await CallToolAsync("complete_human_task", new JObject { ["taskId"] = taskId });
+            Assert.Contains("already", (string)again["error"]!);
+        }
+
+        private async Task<JObject> WaitForTerminalAsync(string executionId, int timeoutMs = 15000)
+        {
+            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            JObject exec = new();
+            while (DateTime.UtcNow < deadline)
+            {
+                exec = await CallToolAsync("get_execution", new JObject { ["executionId"] = executionId });
+                if (exec["error"] == null && IsTerminal((string)exec["status"])) return exec;
+                await Task.Delay(100);
+            }
+            Assert.Fail($"Execution {executionId} did not reach a terminal state: {(string?)exec["status"]}");
+            throw new InvalidOperationException(); // unreachable
+        }
+
+        private static bool IsTerminal(string status) =>
+            status is "Succeeded" or "Failed" or "Aborted" or "TimedOut";
 
         // ── helpers ────────────────────────────────────────────────────────────
 

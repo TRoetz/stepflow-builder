@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -33,11 +34,13 @@ namespace StepFunctionsApp.Controllers
 
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ILogger<AiProxyController> _logger;
+        private readonly IConfiguration _config;
 
-        public AiProxyController(IHttpClientFactory httpClientFactory, ILogger<AiProxyController> logger)
+        public AiProxyController(IHttpClientFactory httpClientFactory, ILogger<AiProxyController> logger, IConfiguration config)
         {
             _httpClientFactory = httpClientFactory;
             _logger = logger;
+            _config = config;
         }
 
         // ── Request models (camelCase on the wire via Newtonsoft binding) ──
@@ -73,22 +76,128 @@ namespace StepFunctionsApp.Controllers
                 || request.Messages.Any(m => string.IsNullOrWhiteSpace(m.Role) || m.Content is null))
                 return BadRequest(new { error = new { message = "messages must be a non-empty list of { role, content } objects." } });
 
+            var relay = await RelayChatCompletionAsync(request.Provider, request.BaseUrl, request.Model, request.Messages, request.MaxTokens, request.Temperature, request.TopP, ct);
+            if (relay.Error is not null)
+                return StatusCode(StatusCodes.Status502BadGateway, new { error = new { message = relay.Error } });
+
+            // Pass the upstream body through verbatim — the UI parses OpenAI-compatible responses.
+            return Content(relay.RawBody!, "application/json");
+        }
+
+        // ── POST /api/ai/ask — single-shot question for ai:// resource states (engine-facing) ──
+        // The engine posts the state's input JToken verbatim and uses our response as the state output,
+        // except when isError is true — then it fails the run with errorMessage. So every failure mode
+        // returns 200 + { isError: true, errorMessage } rather than an HTTP error status.
+
+        [HttpPost("api/ai/ask")]
+        public async Task<IActionResult> Ask([FromBody] JToken? body, CancellationToken ct)
+        {
+            if (body is not JObject obj)
+                return AskError("request must be a JSON object with at least one of: prompt, messages.");
+
+            // Defaults come from the Ai: config section; per-request fields win when present.
+            var provider = (string?)obj["provider"] ?? _config["Ai:Provider"];
+            var baseUrl = (string?)obj["baseUrl"] ?? _config["Ai:BaseUrl"];
+            var model = (string?)obj["model"] ?? _config["Ai:Model"];
+            int? maxTokens = obj["maxTokens"] is { Type: JTokenType.Integer or JTokenType.Float } mt ? (int)mt : null;
+            double? temperature = obj["temperature"] is { Type: JTokenType.Integer or JTokenType.Float } t ? (double)t : null;
+
+            List<AiChatMessage> messages;
+            var promptToken = obj["prompt"];
+            if (promptToken != null && promptToken.Type != JTokenType.String)
+                return AskError("prompt must be a string.");
+            var prompt = (string?)promptToken;
+            if (!string.IsNullOrWhiteSpace(prompt))
+            {
+                messages = new List<AiChatMessage> { new() { Role = "user", Content = prompt! } };
+            }
+            else if (obj["messages"] is JArray arr)
+            {
+                try
+                {
+                    messages = arr.ToObject<List<AiChatMessage>>() ?? new();
+                }
+                catch (Exception ex)
+                {
+                    return AskError($"messages must be a list of {{ role, content }} objects: {ex.Message}");
+                }
+            }
+            else
+            {
+                return AskError("either prompt or messages is required.");
+            }
+
+            var validationError = ValidateLocalTarget(provider, baseUrl);
+            if (validationError is not null) return AskError(validationError);
+            if (messages.Count == 0 || messages.Any(m => string.IsNullOrWhiteSpace(m.Role) || m.Content is null))
+                return AskError("messages must be a non-empty list of { role, content } objects.");
+
+            // Model auto-discovery: first id from the endpoint's catalog when no model was pinned.
+            if (string.IsNullOrWhiteSpace(model))
+            {
+                var (ok, names, error) = await FetchModelNamesAsync(provider!, baseUrl!, ct);
+                if (!ok || names.Count == 0) return AskError(error ?? $"No models found at {baseUrl}.");
+                model = names[0];
+            }
+
+            var relay = await RelayChatCompletionAsync(provider!, baseUrl!, model, messages, maxTokens, temperature, null, ct);
+            if (relay.Error is not null) return AskError(relay.Error);
+            if (string.IsNullOrEmpty(relay.Answer))
+                return AskError("Upstream returned HTTP 200 but the completion body has no choices[0].message.content.");
+
+            return Ok(new { answer = relay.Answer });
+        }
+
+        /// <summary>Engine contract: failures are data, not status codes — the invoker checks isError, not HTTP.</summary>
+        private IActionResult AskError(string message) => Ok(new { isError = true, errorMessage = message }); // engine contract: it checks isError, not HTTP status
+
+        // ── GET /api/ai/models?provider=...&baseUrl=... — list models installed on the endpoint ──
+
+        [HttpGet("api/ai/models")]
+        public async Task<IActionResult> ListModels([FromQuery] string provider, [FromQuery] string baseUrl, CancellationToken ct)
+        {
+            var validationError = ValidateLocalTarget(provider, baseUrl);
+            if (validationError is not null) return BadRequest(new { error = new { message = validationError } });
+
+            var (ok, names, error) = await FetchModelNamesAsync(provider, baseUrl, ct);
+            if (!ok)
+                return StatusCode(StatusCodes.Status502BadGateway, new { error = new { message = error! } });
+
+            return Ok(new { models = names });
+        }
+
+        // ── Helpers ──
+
+        /// <summary>Outcome of one relayed chat completion: either the upstream 2xx body (+ parsed answer) or a human-readable error.</summary>
+        private sealed class RelayResult
+        {
+            public string? RawBody;   // verbatim upstream 2xx body (chat passthrough)
+            public string? Answer;    // choices[0].message.content, when present in the body
+            public string? Error;     // set on any failure — network or non-2xx upstream
+        }
+
+        /// <summary>Shared relay core: build the OpenAI-compatible payload and POST it to {baseUrl}/v1/chat/completions via the "ai-proxy" client.</summary>
+        private async Task<RelayResult> RelayChatCompletionAsync(
+            string provider, string baseUrl, string model, List<AiChatMessage> messages,
+            int? maxTokens, double? temperature, double? topP, CancellationToken ct)
+        {
+            var result = new RelayResult();
+
             // Mirror the UI's stripV1Suffix: users may save the base URL with or without /v1.
-            var baseUrl = StripV1(request.BaseUrl.Trim());
-            var url = $"{baseUrl}/v1/chat/completions";
+            var url = $"{StripV1(baseUrl.Trim())}/v1/chat/completions";
 
             var payload = new JObject
             {
-                ["model"] = request.Model,
-                ["messages"] = JArray.FromObject(request.Messages.Select(m => new JObject
+                ["model"] = model,
+                ["messages"] = JArray.FromObject(messages.Select(m => new JObject
                 {
                     ["role"] = m.Role,
                     ["content"] = m.Content
                 }))
             };
-            if (request.MaxTokens is int maxTokens) payload["max_tokens"] = maxTokens;
-            if (request.Temperature is double temperature) payload["temperature"] = temperature;
-            if (request.TopP is double topP) payload["top_p"] = topP;
+            if (maxTokens is int max) payload["max_tokens"] = max;
+            if (temperature is double temp) payload["temperature"] = temp;
+            if (topP is double top) payload["top_p"] = top;
 
             var client = _httpClientFactory.CreateClient("ai-proxy");
             using var content = new StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json");
@@ -100,10 +209,8 @@ namespace StepFunctionsApp.Controllers
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or UriFormatException)
             {
                 _logger.LogWarning(ex, "AI proxy: could not reach local LLM endpoint at {Url}", url);
-                return StatusCode(StatusCodes.Status502BadGateway, new
-                {
-                    error = new { message = $"Could not reach the AI server at {request.BaseUrl.Trim()}. Is it running and reachable from this machine? ({DescribeNetworkError(ex)})" }
-                });
+                result.Error = $"Could not reach the AI server at {baseUrl.Trim()}. Is it running and reachable from this machine? ({DescribeNetworkError(ex)})";
+                return result;
             }
 
             using (response)
@@ -112,28 +219,30 @@ namespace StepFunctionsApp.Controllers
                 if (!response.IsSuccessStatusCode)
                 {
                     _logger.LogInformation("AI proxy: upstream {Url} returned HTTP {Status}: {Body}", url, (int)response.StatusCode, Truncate(body));
-                    return StatusCode(StatusCodes.Status502BadGateway, new
-                    {
-                        error = new { message = $"Upstream AI server returned HTTP {(int)response.StatusCode}. {Truncate(ExtractErrorMessage(body))}" }
-                    });
+                    result.Error = $"Upstream AI server returned HTTP {(int)response.StatusCode}. {Truncate(ExtractErrorMessage(body))}";
+                    return result;
                 }
 
-                // Pass the upstream body through verbatim — the UI parses OpenAI-compatible responses.
-                return Content(body, "application/json");
+                result.RawBody = body;
+                try
+                {
+                    var parsed = JObject.Parse(body);
+                    result.Answer = (string?)parsed?["choices"]?[0]?["message"]?["content"];
+                }
+                catch (JsonException)
+                {
+                    // Non-JSON success body — RawBody is still passed through for /api/ai/chat.
+                }
             }
+            return result;
         }
 
-        // ── GET /api/ai/models?provider=...&baseUrl=... — list models installed on the endpoint ──
-
-        [HttpGet("api/ai/models")]
-        public async Task<IActionResult> ListModels([FromQuery] string provider, [FromQuery] string baseUrl, CancellationToken ct)
+        /// <summary>Shared model catalog fetch: Ollama at /api/tags, every other local server at the OpenAI-compatible /v1/models.</summary>
+        private async Task<(bool Ok, List<string> Names, string? Error)> FetchModelNamesAsync(string provider, string baseUrl, CancellationToken ct)
         {
-            var validationError = ValidateLocalTarget(provider, baseUrl);
-            if (validationError is not null) return BadRequest(new { error = new { message = validationError } });
-
-            var root = StripV1(baseUrl.Trim());
-            // Ollama exposes its catalog at /api/tags; every other local server speaks the OpenAI-compatible /v1/models.
-            var url = provider.Equals("ollama", StringComparison.OrdinalIgnoreCase) ? $"{root}/api/tags" : $"{root}/v1/models";
+            var url = provider.Equals("ollama", StringComparison.OrdinalIgnoreCase)
+                ? $"{StripV1(baseUrl.Trim())}/api/tags"
+                : $"{StripV1(baseUrl.Trim())}/v1/models";
 
             var client = _httpClientFactory.CreateClient("ai-proxy");
             HttpResponseMessage response;
@@ -144,29 +253,18 @@ namespace StepFunctionsApp.Controllers
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or UriFormatException)
             {
                 _logger.LogWarning(ex, "AI proxy: could not list models at {Url}", url);
-                return StatusCode(StatusCodes.Status502BadGateway, new
-                {
-                    error = new { message = $"Could not reach the AI server at {baseUrl.Trim()}. Is it running and reachable from this machine? ({DescribeNetworkError(ex)})" }
-                });
+                return (false, new List<string>(), $"Could not reach the AI server at {baseUrl.Trim()}. Is it running and reachable from this machine? ({DescribeNetworkError(ex)})");
             }
 
             using (response)
             {
                 var body = await response.Content.ReadAsStringAsync(ct);
                 if (!response.IsSuccessStatusCode)
-                {
-                    return StatusCode(StatusCodes.Status502BadGateway, new
-                    {
-                        error = new { message = $"Upstream AI server returned HTTP {(int)response.StatusCode} while listing models. {Truncate(ExtractErrorMessage(body))}" }
-                    });
-                }
+                    return (false, new List<string>(), $"Upstream AI server returned HTTP {(int)response.StatusCode} while listing models. {Truncate(ExtractErrorMessage(body))}");
 
-                var names = ParseModelNames(provider, body);
-                return Ok(new { models = names });
+                return (true, ParseModelNames(provider, body), null);
             }
         }
-
-        // ── Helpers ──
 
         /// <summary>Shared guard: only local providers may be proxied, and the target must be an http(s) URL.</summary>
         private static string? ValidateLocalTarget(string? provider, string? baseUrl)

@@ -81,6 +81,7 @@ State types supported by this .NET engine:
   - Wait:     { "type": "Wait", "seconds": N } or { "type": "Wait", "timestampPath": "$.ts" }.
   - Parallel: { "type": "Parallel", "branches": [ { "startAt": "...", "states": {...} }, ... ] }.
   - Map:      { "type": "Map", "itemsPath": "$.items", "iterator": { "startAt": "...", "states": {...} }, "maxConcurrency"? }.
+  - HumanTask:{ "type": "HumanTask", "task": {"title","assignee"?}, "completion": {"Type":"api"|"form"|...}, "resultPath"? } — suspends the execution until completed via complete_human_task (or submit_form_capture for form-bound tasks).
   - Succeed:  { "type": "Succeed" } — ends the flow successfully.
   - Fail:     { "type": "Fail", "error": "...", "cause"? }.
 
@@ -199,6 +200,108 @@ Accepts the flow id or name. input is an optional JSON object string (defaults t
                 errorMessage = exec.ErrorMessage,
                 history = exec.History.Select(h => new { type = h.Type, state = h.State, data = h.Data })
             }, McpJson.Settings);
+        }
+
+        [McpServerTool]
+        [Description(
+"""
+Get an execution's current status, output and per-state history by execution id (as returned by run_flow or complete_human_task). Works for running, suspended and terminal executions; terminal records survive backend restarts via the durable store. Poll this after completing a human task — the resumed run continues in the background until it reaches Succeeded/Failed.
+""")]
+        public async Task<string> GetExecution([Description("Execution id")] string executionId)
+        {
+            var execution = _service.GetExecution(executionId);
+            if (execution == null)
+            {
+                // Fall back to the durable store so executions survive a backend restart.
+                var record = await _service.LoadStoredExecutionAsync(executionId);
+                if (record?.Execution == null) return Error($"Execution '{executionId}' not found.");
+                execution = record.Execution;
+            }
+
+            return JsonConvert.SerializeObject(new
+            {
+                executionId = execution.ExecutionId,
+                stateMachineName = execution.StateMachineName,
+                status = execution.Status.ToString(),
+                input = execution.Input,
+                output = execution.Output,
+                currentNode = execution.CurrentState,
+                completedAt = execution.CompletedAt,
+                errorCode = execution.ErrorCode,
+                errorMessage = execution.ErrorMessage,
+                history = execution.History.Select(h => new { type = h.Type, state = h.State, data = h.Data })
+            }, McpJson.Settings);
+        }
+
+        [McpServerTool]
+        [Description(
+"""
+Delete a registered flow from the in-memory registry by id or name. In-flight executions keep their captured definition and continue running; durable recovery re-registers the flow while execution records exist, so deleting does not lose stored executions — use delete_execution to remove those. Returns { deleted: true, id } or an error when the flow is unknown.
+""")]
+        public string DeleteFlow([Description("Flow id or name")] string idOrName)
+        {
+            return _service.UnregisterStateMachine(idOrName)
+                ? JsonConvert.SerializeObject(new { deleted = true, id = idOrName }, McpJson.Settings)
+                : Error($"Flow '{idOrName}' not found. Use list_flows to see registered flows.");
+        }
+
+        [McpServerTool]
+        [Description(
+"""
+List all stored executions (any status), oldest checkpoint first. Summaries survive backend restarts and include terminal history: executionId, stateMachineName, status, currentState, startedAt, checkpointedAt. Use get_execution for the full record of one execution.
+""")]
+        public async Task<string> ListExecutions()
+        {
+            var summaries = await _service.ListStoredExecutionsAsync();
+            return JsonConvert.SerializeObject(summaries, McpJson.Settings);
+        }
+
+        [McpServerTool]
+        [Description(
+"""
+Stop an in-flight execution by execution id or state-machine id/name. Canceled runs finish as Aborted and are persisted so recovery won't resurrect them after a restart. Returns { message: "Stop requested", stopped } where stopped is the number of runs canceled (0 when nothing was running under that id).
+""")]
+        public string StopExecution([Description("Execution id or state-machine id/name")] string id)
+        {
+            var stopped = _service.StopExecution(id);
+            return JsonConvert.SerializeObject(new { message = "Stop requested", stopped }, McpJson.Settings);
+        }
+
+        [McpServerTool]
+        [Description(
+"""
+Resume a stored execution that is Suspended (or recovered-but-not-auto-resumed), e.g. after the backend restarted with AutoResume off. Re-registers the flow and queues the run in the background — poll get_execution until it reaches Succeeded/Failed. Errors: not found / not resumable, or already running / terminal.
+""")]
+        public async Task<string> ResumeExecution([Description("Execution id")] string id)
+        {
+            try
+            {
+                var execution = await _service.ResumeStoredExecutionAsync(id);
+                return JsonConvert.SerializeObject(new
+                {
+                    message = $"Execution '{id}' queued for resume",
+                    status = execution.Status.ToString()
+                }, McpJson.Settings);
+            }
+            catch (ArgumentException ex)
+            {
+                return Error(ex.Message); // not found / not resumable
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Error(ex.Message); // already running / terminal, or no flow-state store configured
+            }
+        }
+
+        [McpServerTool]
+        [Description(
+"""
+Delete a stored execution's flow-state checkpoint (and cancel it if still running). The record is gone after this — get_execution and list_executions will no longer report it. Use to clean up terminal executions you no longer need.
+""")]
+        public async Task<string> DeleteExecution([Description("Execution id")] string id)
+        {
+            await _service.DeleteStoredExecutionAsync(id);
+            return JsonConvert.SerializeObject(new { message = $"Execution '{id}' removed from the flow-state store" }, McpJson.Settings);
         }
 
         private static string Error(string message) => JsonConvert.SerializeObject(new { error = message });

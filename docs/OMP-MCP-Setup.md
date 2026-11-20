@@ -41,7 +41,12 @@ curl -s http://localhost:5001/mcp ^
 ```
 
 Expected: an SSE-framed response (`event: message` / `data: {"result":{"tools":[...]}}`)
-listing four tools: `list_flows`, `save_flow`, `get_flow`, `run_flow`.
+listing every exposed tool (51 as of this writing): flow lifecycle (CRUD plus execution
+control — `list_flows`, `save_flow`, `get_flow`, `run_flow`, `delete_flow`, `list_executions`,
+`stop_execution`, `resume_execution`, `delete_execution`), human tasks, form capture, form
+definitions, data-exchange profiles, dynamic API endpoints, EAV rows, metadata (attribute
+domains + schema definitions), named rules, and solution export/import. The full catalog is
+in [SKILL.md](../SKILL.md) §2; the flow-lifecycle core is detailed in §4 below.
 
 > **Port note.** The management port defaults to 5001 (`DynamicApi:ManagementPort` in
 > `StepFunctionsApp/appsettings.json`). If you run the backend on a different port (e.g.
@@ -160,8 +165,9 @@ not prompt for.
    /mcp test stepflow # one-shot connect + tools/list against just this server
    ```
 
-4. **Confirm the tools are in the agent's toolset.** With a healthy connection you get four
-   tools (server/tool names lowercased, sanitized to letters/underscores):
+4. **Confirm the tools are in the agent's toolset.** With a healthy connection you get one
+   OMP tool per MCP tool (server/tool names lowercased, sanitized to letters/underscores).
+   The flow-lifecycle core:
 
    | OMP tool name | StepFlow MCP tool |
    |---|---|
@@ -169,6 +175,15 @@ not prompt for.
    | `mcp__stepflow_get_flow` | `get_flow` |
    | `mcp__stepflow_save_flow` | `save_flow` |
    | `mcp__stepflow_run_flow` | `run_flow` |
+   | `mcp__stepflow_list_human_tasks` | `list_human_tasks` |
+   | `mcp__stepflow_get_human_task` | `get_human_task` |
+   | `mcp__stepflow_complete_human_task` | `complete_human_task` |
+   | `mcp__stepflow_submit_form_capture` | `submit_form_capture` |
+   | `mcp__stepflow_get_form_capture` | `get_form_capture` |
+   | `mcp__stepflow_get_execution` | `get_execution` |
+
+   …plus form-definition, data-exchange, dynamic-API, EAV, metadata, rule and solution tools
+   (full catalog in [SKILL.md](../SKILL.md) §2).
 
 5. **Smoke-test through the agent** (plain natural language is enough):
 
@@ -190,9 +205,14 @@ not prompt for.
 
 ## 4. Tool reference (what the agent can do)
 
-All four tools return **JSON strings**. Failures are returned as tool results of the form
+All tools return **JSON strings**. Failures are returned as tool results of the form
 `{"error": "<message>"}` — *not* protocol-level errors — so the agent can read and react to
 them (e.g. "flow not found, call list_flows").
+
+The flow-lifecycle and human-task tools below are the core; the remaining groups (form
+definitions, data-exchange profiles, dynamic API endpoints, EAV rows, metadata — attribute
+domains + schema definitions — named rules, solution export/import) follow the same
+conventions — JSON in/out, `{"error": …}` on failure. Full catalog: [SKILL.md](../SKILL.md) §2.
 
 ### `list_flows()`
 No parameters. Returns an array:
@@ -244,16 +264,52 @@ Returns:
   "history": [ { "type": "StateEntered", "state": "...", "data": "..." } ] }
 ```
 
-**Human-gated flows.** If the flow reaches a `HumanTask`/FormCapture state, execution
-suspends and `run_flow` returns `"status": "Suspended"` (with the task id in the history).
-MCP has **no resume tool** — completion happens out-of-band:
+**Human-gated flows — fully headless.** If the flow reaches a `HumanTask` state, execution
+suspends and `run_flow` returns `"status": "Suspended"`. The agent can then drive the whole
+loop through MCP alone:
 
-- UI form page: open `/form-capture.html?taskId=<id>` on the backend port, fill and submit; or
-- REST: `POST /api/form-captures/<taskId>/submit` with the captured values as JSON body; or
-- file drop: write a completion JSON into the `human-task-completions/` directory.
+1. `list_human_tasks(executionId?)` → pending tasks (filter by execution id or status);
+2. `get_human_task(taskId)` → payload snapshot (`payload.input`, `payload.task`); for form-bound tasks, `get_form_capture(taskId)` adds the bound form definition and attribute contract;
+3. complete it, either as a plain human task —
+   `complete_human_task(taskId, resultJson?)` — or as a form capture with the
+   attribute values — `submit_form_capture(taskId, valuesJson)` (values are validated
+   against the bound attributes before completion);
+4. poll `get_execution(executionId)` until terminal (`Succeeded`/`Failed`/…).
 
-The engine auto-resumes the suspended execution (also on backend restart, via
-`FlowState.AutoResume`).
+Completion resumes the suspended execution in the background; the result is merged at the
+state's `resultPath` (or replaces the input when unset). The out-of-band channels still work
+in parallel: UI form page `/form-capture.html?taskId=<id>`, REST
+`POST /api/form-captures/<taskId>/submit`, or a file drop into `human-task-completions/`.
+The engine also auto-resumes on backend restart via `FlowState.AutoResume`.
+
+### `list_human_tasks(executionId?, status?)`
+Lists human task records. Both filters optional; omit both for everything. Returns an array
+of `{ taskId, status, executionId, stateMachineName, stateName, nextState, isEnd, title, assignee, completionType, createdAtUtc, completedAtUtc }`.
+
+### `get_human_task(taskId)`
+Full record plus the payload snapshot captured at suspension time (`payload.input`,
+`payload.task`) and, once completed, the completion result. For form-capture tasks use
+`get_form_capture(taskId)` to see the bound form definition and attribute contract.
+
+### `complete_human_task(taskId, resultJson?)`
+Completes a **pending** task (idempotency: completing an already-completed/failed task is an
+error). `resultJson`: completion payload as a JSON *string* (defaults to `{}`); merged at the
+state's `resultPath`. Returns `{ taskId, status: "Completed", executionId }` — resume happens
+in the background; poll with `get_execution`.
+
+### `submit_form_capture(taskId, valuesJson)`
+Form-capture variant of completion: `valuesJson` is a JSON object *string* mapping attribute
+names to values. Values are validated against the bound attributes (missing/unknown → error
+listing what's wrong); on success the task completes with `{ "values": { … } }`.
+
+### `get_form_capture(taskId)`
+Read view of a form-capture task: status, title, assignee, timestamps, result (once done),
+`formUrl`, bound form definition and attribute contract.
+
+### `get_execution(executionId)`
+Execution snapshot: `{ executionId, stateMachineName, status, input, output, errorCode,
+errorMessage, currentState, history }`. This is the polling primitive for async resumes —
+after `complete_human_task`/`submit_form_capture`, call it until `status` leaves `Suspended`.
 
 ---
 
@@ -340,7 +396,7 @@ the flow keeps running and checkpoints to disk regardless.
 
 Run these once after connecting; each maps to a concrete observable:
 
-1. `curl` tools/list (§1) → four tool names in the SSE payload.
+1. `curl` tools/list (§1) → all 51 tool names in the SSE payload.
 2. OMP: `/mcp list` → `stepflow` **connected**, source `.omp/mcp.json`.
 3. Ask the agent to call `list_flows` → JSON array of registered flows (e.g. includes
    `csv-to-api-form-capture`).

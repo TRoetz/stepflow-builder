@@ -29,7 +29,7 @@ Health check: `GET http://localhost:5001/api/health` (liveness + flow-state stor
 
 ## 2. MCP server — the primary AI interface
 
-The main app exposes an MCP server at **`http://localhost:5001/mcp`** (tool classes in `Mcp/`: `FlowTools`, `DataExchangeTools`, `MetadataTools`, `EavTools`, `DynamicApiTools`, `SolutionTools`, `RuleTools`; wired in `Program.cs` via `AddMcpServer().WithHttpTransport()` + `MapMcp("/mcp")`). Transport is **streamable HTTP, stateless**: every request is a plain JSON-RPC 2.0 POST with headers `Content-Type: application/json` and `Accept: application/json, text/event-stream`; responses are framed as SSE (`data:` lines). No session handshake needed.
+The main app exposes an MCP server at **`http://localhost:5001/mcp`** (tool classes in `Mcp/`: `FlowTools`, `HumanTaskTools`, `FormCaptureTools`, `FormTools`, `DataExchangeTools`, `MetaDataTools`, `EavTools`, `DynamicApiTools`, `SolutionTools`, `RuleTools`; wired in `Program.cs` via `AddMcpServer().WithHttpTransport()` + `MapMcp("/mcp")`). Transport is **streamable HTTP, stateless**: every request is a plain JSON-RPC 2.0 POST with headers `Content-Type: application/json` and `Accept: application/json, text/event-stream`; responses are framed as SSE (`data:` lines). No session handshake needed.
 
 Client configuration (Claude Desktop / VS Code Copilot / any MCP client):
 
@@ -49,8 +49,23 @@ Client configuration (Claude Desktop / VS Code Copilot / any MCP client):
 |---|---|---|
 | `list_flows` | — | Array of `{ id, name, description, updatedAt }` for every registered flow |
 | `get_flow` | `idOrName` (string) | `{ id, name, description, createdAt, updatedAt, definition }`; `definition` is the full camelCase ASL (`startAt`, `states`) — re-importable into the React canvas unchanged |
-| `save_flow` | `name` (string), `statesJson` (JSON **string** of the states object), `startAt?` (defaults to first key), `description?` | `{ id, name, updatedAt }`. **Upsert by name**: saving again with the same name replaces the definition. Validates that `statesJson` parses, is non-empty, and that `startAt` names an existing state; dangling `next`/choice targets surface as errors at run time |
+| `save_flow` | `name` (string), `statesJson` (JSON **string** of the states object), `startAt?` (defaults to first key), `description?`, `subProjectPath?` (org/project/sub; defaults to the configured default node) | `{ id, name, created, updatedAt }`. **Upsert by name**: saving again with the same name replaces the definition. Persists to the workspace sub-project (§7) so it survives restarts and shows in the UI catalog. Validates that `statesJson` parses, is non-empty, and that `startAt` names an existing state; dangling `next`/choice targets surface as errors at run time |
 | `run_flow` | `idOrName` (string), `inputJson?` (JSON object string, default `{}`) | Synchronous execution: `{ executionId, status, output, errorCode, errorMessage, history: [{ type, state, data }] }` |
+| `get_execution` | `executionId` (string) | `{ executionId, stateMachineName, status, input, output, currentNode, completedAt, errorCode, errorMessage, history: [{ type, state, data }] }`; works for running/suspended/terminal — terminal records survive restarts. Poll after completing a human task: the resumed run continues in the background (§5) |
+| `delete_flow` | `idOrName` (string) | Unregisters from the in-memory registry: `{ deleted: true, id }`. In-flight executions keep their captured definition and continue; stored execution records are untouched — use `delete_execution` for those (§2 caveat) |
+| `list_executions` | — | Every stored execution (any status), oldest checkpoint first: `{ executionId, stateMachineName, status, currentState, startedAt, checkpointedAt }`; summaries survive restarts. Use `get_execution` for the full record of one |
+| `stop_execution` | `id` (execution id or flow id/name) | Cancels in-flight runs under that id; they finish as Aborted and are persisted so recovery won't resurrect them: `{ message, stopped }` (`stopped` = number canceled) |
+| `resume_execution` | `id` (execution id) | Re-registers the flow and queues a stored Suspended execution for background resume: `{ message, status }`. Errors when not found / not resumable / already running or terminal; poll `get_execution` after |
+| `delete_execution` | `id` (execution id) | Removes the stored checkpoint (cancels first if still running): `{ message }`; gone from `list_executions`/`get_execution` afterwards. Use to clean up terminal executions |
+| `list_human_tasks` | `status?` (`'Pending'\|'Completed'`), `executionId?` | Array of `{ taskId, status, executionId, stateMachineName, stateName, nextState, isEnd, title, assignee, completionType, createdAtUtc, completedAtUtc }` for tasks suspended at a HumanTask/FormCapture state (§5) |
+| `get_human_task` | `taskId` (string) | Full record + payload snapshot captured at suspension (`payload.input`, `payload.task`) and the completion result once done. For form-bound tasks use `get_form_capture` to see the bound form + attribute contract |
+| `complete_human_task` | `taskId` (string), `resultJson?` (JSON value string, default `{}`) | Completes a pending task — resumes or terminates its execution: `{ taskId, status, executionId, nextState, isEnd }`. Without a state ResultPath the result replaces the flow input; with one it merges at that path. The resumed run continues in the background — poll `get_execution` (§5) |
+| `submit_form_capture` | `taskId` (string), `valuesJson` (JSON object string `{ "<attributeName>": value }`) | Form-capture completion: validates/coerces values against the bound attribute domain, persists an EAV row (bound forms only), then resumes. Call `get_form_capture` first for expected attributes; structured failures pass through as-is (`{error}` / `{errors}`) (§5/§8) |
+| `get_form_capture` | `taskId` (string) | Task metadata + full form definition (fields, layout) + the bound domain's attributes — everything needed to build a valid submission (§5/§8) |
+| `list_form_definitions` | — | Every saved version of every form: `{ formId, version, isCurrentVersion, title, attributeDomainName }`. Use `get_form_definition` for the full page definition |
+| `get_form_definition` | `formId` (string), `version?` (exact label; defaults to current) | Full form JSON including the Page UIPage (`RootElements`) and bound domain/schema names; error when unknown |
+| `save_form_definition` | `definitionJson` (JSON **string** of the full FormDefinition: `formId`, `version?` default `"1"`, `isCurrentVersion?` default true, `title`, `page` with `RootElements`; optional `attributeDomainName` to bind) | Upsert by formId+version; returns `{ status: "saved", formId, version }`. Binding a saved AttributeDomain is what makes a new HumanTask flow with completion type `"form"` work headlessly — submissions validate against the domain and persist EAV rows (§5) |
+| `delete_form_definition` | `formId` (string) | Deletes every saved version of the form: `{ status: "deleted", formId }`; error when unknown |
 | `list_data_exchange_profiles` | — | Array of `{ id, name, subProjectPath, stageCount }` for every profile on disk (§6) |
 | `get_data_exchange_profile` | `idOrName` (string) | Full profile JSON in camelCase; fetch before modifying an existing profile |
 | `save_data_exchange_profile` | `profileJson` (JSON **string** of the full profile), `subProjectPath?` (e.g. `'org/project/sub'`) | Upsert by the name inside the JSON; returns `{ id }`. Omitting `subProjectPath` leaves it unassigned at the workspace root |
@@ -81,13 +96,15 @@ Client configuration (Claude Desktop / VS Code Copilot / any MCP client):
 | `get_rule` | `name` (string) | Full rule including its `definition` body; 404-style error when unknown |
 | `save_rule` | `ruleJson` (JSON **string** of `{ name, kind, description?, definition }`) | Upsert by name. Engine-backed kinds register immediately: `sql` → `RuleEngineService` (`rule://<name>`), `ms-rules` → Microsoft RulesEngine (`rules://<name>`) |
 | `delete_rule` | `name` (string) | Removes the rule and unregisters it from its engine: `{ deleted: true\|false }` |
+| `export_solution` | `nodePath?`, `seedTables?` (comma-separated table names), `seedDomains?` (comma-separated EAV domains), `name?`, `version?` | One portable JSON package for a workspace node — flows (+ canvas layouts), forms + attribute domains, dynamic APIs, data-exchange profiles, named rules (persisted + logic extracted from the flows), EAV datasets, SQL schemas (§12) |
+| `import_solution` | `packageJson` (JSON **string** of the export output), `targetNodePath?` | Applies a package to this instance — idempotent redeploy: upserts by identity, appends only new EAV rows, runs datasource migrations. Returns an apply report (§12) |
 
 Conventions that matter when calling these tools:
 
 - **Errors are JSON, not exceptions**: every tool returns `{ "error": "…" }` on failure (unknown flow, bad JSON, unknown `startAt`). Read the message and fix the input.
-- All ten state types (§3) — including `HumanTask` and `FormCapture` — work in MCP-saved definitions. A `run_flow` that hits a pending one returns **status `Suspended`**; complete it via §5 (or the form-capture routes, §8) to resume it (the engine auto-resumes suspended executions on app restart).
+- All ten state types (§3) — including `HumanTask` and `FormCapture` — work in MCP-saved definitions. A `run_flow` that hits a pending one returns **status `Suspended`**; complete it headlessly with `complete_human_task` (plain tasks) or `submit_form_capture` (form-bound), then poll `get_execution` until terminal (§5). The REST routes and file drop work in parallel, and the engine auto-resumes suspended executions on app restart.
 - Definitions round-trip with the React UI: camelCase keys, dictionary keys (state names) keep their original casing.
-- **Registry flows are in-memory only** — `save_flow` and `POST /api/flows` register into memory and vanish on restart; seeded `Flows/*.json` load at startup, and workspace sub-project saves (§7) persist to disk under `<sub>/flows/{flowId}/`. To make a flow durable across restarts, save it via the sub-project route.
+- **MCP `save_flow` persists** to the workspace sub-project (§7) — it survives restarts and shows in the UI catalog. The raw REST `POST /api/flows` registers into memory only and vanishes on restart; seeded `Flows/*.json` load at startup, and workspace sub-project saves persist to disk under `<sub>/flows/{flowId}/`.
 
 Manual call without an MCP client:
 
@@ -159,9 +176,9 @@ Built-in error codes and semantics: UserManual §7.
 | 3 | `rule://` | `rule://<ruleId>?eav=<entity>` | SQL-expression rule execution (SQLite-backed); optional EAV mapping of dynamic JSON to a strict entity dictionary. Rule ids are looked up case-insensitively (`Uri.Host` lowercases). Persisted named rules live in `rules.json` and auto-register at startup (§12) |
 | 4 | `rules://` | `rules://<workflowName>` | Microsoft RulesEngine workflow |
 | 5 | `transform://` | `transform://<operation>` | DuckDB transform (or script) over the input — batch SQL, joins, aggregations |
-| 6 | `ai://` | any path (ignored) | POSTs the input to `{callbackBaseUrl}/api/ai/ask`; fails with `States.TaskFailed` if the response has `"isError": true`. **`callbackBaseUrl` is hardcoded to `http://localhost:5000`** — the UI backend's port, not this app's 5001. No `/api/ai/ask` implementation exists in this repo (pre-existing gap) — AI states fail with a connection error until an external LLM service listens there |
+| 6 | `ai://` | any path (ignored) | Single-shot question to a local LLM via the app's own `/api/ai/ask`. The state input is POSTed verbatim; recognized fields: `prompt?`, `messages?` (`[{role, content}]`) — at least one required — plus optional overrides `provider?`, `baseUrl?`, `model?`, `maxTokens?`, `temperature?`. Unset fields fall back to the appsettings `Ai:` section (`Provider`, `BaseUrl`, `Model`; default `lmStudio` @ `http://localhost:1234`); an empty model auto-detects the first id from `{baseUrl}/v1/models` (Ollama: `/api/tags`). Success → response `{ answer }` becomes the state output. **Every failure mode returns HTTP 200 + `{ isError: true, errorMessage }`** (validation error, unreachable LLM, upstream non-2xx, missing `choices[0].message.content`) — the engine then throws `States.TaskFailed: AI failed: <errorMessage>`. The callback base is appsettings `Callback:BaseUrl`, or `http://localhost:{DynamicApi:ManagementPort}` when unset (default 5001 — this app itself) |
 | 7 | `flow://` | `flow://<flowId>` | Synchronous sub-flow execution; a failed child throws its error code (or `SubFlow.Failed`) |
-| 8 | `tool://` | `tool://<toolName>` | POSTs the input to `{callbackBaseUrl}/api/tools/{toolName}/execute`; same hardcoded `http://localhost:5000` base as `ai://` |
+| 8 | `tool://` | `tool://<toolName>` | POSTs the input to `{callbackBaseUrl}/api/tools/{toolName}/execute`; same callback-base derivation as `ai://` (`Callback:BaseUrl`, else this app's management port) |
 | 9 | `internal://` | `internal://echo`, `internal://engine/status`, `internal://rules/status`, `internal://transform/status` | Built-in diagnostics; any other path throws `States.TaskFailed: Unknown internal resource`. **Use `internal://echo` for smoke tests** — it returns a deep clone of the input with no external dependencies |
 | 10 | `dataexchange://` | `dataexchange://<profileId>` | Runs a DataExchange profile pipeline end-to-end (§6) |
 | 11 | `ssh://` | `ssh://<hostName>` | Curated host inventory (`ssh_hosts.json`) + AI safety check on the command (`"override": true` in input bypasses it); output `{ host, command, exitCode, stdout, stderr, durationMs }`; `timeoutSeconds` default 30 (values below 1 are reset to 30) |
@@ -171,13 +188,14 @@ Built-in error codes and semantics: UserManual §7.
 
 ## 5. Human tasks
 
-A `HumanTask` state suspends the execution and creates a task record (8-char id). Completion arrives two ways:
+A `HumanTask` state suspends the execution and creates a task record (8-char id). Completion arrives via MCP or out-of-band channels:
 
+- **MCP** (headless): `complete_human_task(taskId, resultJson?)` for plain tasks; `submit_form_capture(taskId, valuesJson)` for form-bound ones — it validates/coerces values against the bound attribute domain and persists an EAV row before resuming. The resumed run continues in the **background**: poll `get_execution(executionId)` until terminal (§2).
 - **API**: `POST http://localhost:5001/api/human-tasks/{taskId}/complete` with the human's result JSON — resumes or terminates the execution.
 - **File drop**: write `{taskId}.json` into the watched directory (`Completion.directory`, default `human-task-completions/`).
-- **FormCapture states**: complete via `POST /api/form-captures/{taskId}/submit` with the filled form JSON — validates/coerces values against the bound attribute contract, persists an EAV row, then resumes (§8).
+- **FormCapture states** (REST): complete via `POST /api/form-captures/{taskId}/submit` with the filled form JSON — validates/coerces values against the bound attribute contract, persists an EAV row, then resumes (§8).
 
-The completion result is placed at the state's `resultPath` in the flow input (or replaces the entire input when unset). Discovery routes: `GET /api/human-tasks?status=&executionId=`, `GET /api/human-tasks/{id}`.
+The completion result is placed at the state's `resultPath` in the flow input (or replaces the entire input when unset). Discovery: MCP `list_human_tasks(status?, executionId?)` / `get_human_task(taskId)`; REST `GET /api/human-tasks?status=&executionId=`, `GET /api/human-tasks/{id}`.
 
 ```json
 "Approve": {
@@ -220,6 +238,8 @@ Flows and DataExchange profiles are organized on disk in a three-level tree — 
 | GET | `/api/human-tasks`, `GET /api/human-tasks/{id}`, `POST /api/human-tasks/{id}/complete` | Human task discovery & completion (§5) |
 | GET | `/api/form-captures/{taskId}` | FormCapture definition + bound attribute contract for a suspended form task (§5) |
 | POST | `/api/form-captures/{taskId}/submit` | Submit the filled form — validates/coerces values, persists an EAV row, resumes the execution (§5) |
+| GET/POST/DELETE | `/api/forms`, `GET /api/forms/{formId}?version=`, `DELETE /api/forms/{formId}`, `GET /api/forms/provider` | Saved form definitions: list every version / get one (current, or pinned via `?version=`; 404 when unknown) / create-or-replace (body = full FormDefinition JSON incl. Page) / delete all versions of a form; provider reports the active store (`json`\|`sqlite`). The store behind FormCapture's bound forms and the MCP form tools (§2/§5) |
+| POST/GET | `/api/ai/chat`, `POST /api/ai/ask`, `GET /api/ai/models` | Local LLM proxy: chat passthrough for the UI (verbatim OpenAI-compatible body), single-shot question for engine-facing `ai://` states (§4 scheme 6 — failures are HTTP 200 + `{ isError, errorMessage }`), model catalog. Per-request `provider`/`baseUrl` must be local targets; `/api/ai/ask` falls back to the appsettings `Ai:` defaults |
 | GET/POST/DELETE | `/api/data-exchange/profiles…`, `POST /api/data-exchange/execute`, `GET /api/data-exchange/executions…` | DataExchange profiles & executions (§6) |
 | GET | `/api/workspace` | Workspace tree (org → project → sub-project) with per-node ACLs, flow refs & profile ids (§7) |
 | POST/DELETE | `/api/workspace/nodes`, `POST /api/workspace/nodes/rename` | Create / rename / delete org, project or sub-project nodes (§7) |

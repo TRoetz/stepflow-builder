@@ -101,6 +101,7 @@ public class Startup
 
         // Solution packaging (export/import portable application packages — test -> prod deploy path).
         services.AddSingleton<Solutions.SolutionService>();
+        services.AddSingleton<Forms.FormCaptureService>();
         services.AddSingleton<StepFunctionInterpreter>();
         services.AddSingleton<BpmnConverter>();
 
@@ -195,7 +196,10 @@ public class Startup
             .WithTools<StepFunctionsApp.Mcp.EavTools>()
             .WithTools<StepFunctionsApp.Mcp.DynamicApiTools>()
             .WithTools<StepFunctionsApp.Mcp.RuleTools>()
-            .WithTools<StepFunctionsApp.Mcp.SolutionTools>();
+            .WithTools<StepFunctionsApp.Mcp.SolutionTools>()
+            .WithTools<StepFunctionsApp.Mcp.HumanTaskTools>()
+            .WithTools<StepFunctionsApp.Mcp.FormCaptureTools>()
+            .WithTools<StepFunctionsApp.Mcp.FormTools>();
     }
     public void Configure(IApplicationBuilder app, IHostEnvironment env)
     {
