@@ -1,6 +1,18 @@
-import { Play, Square, Save, Undo2, Redo2, LayoutGrid, Settings, Download, Upload, PanelLeft, PanelRight, MessageCircle, Puzzle, RotateCcw, FolderOpen, ArrowLeftRight, ClipboardList, FolderTree, Globe, Keyboard } from 'lucide-react';
+import { Play, Square, Save, Undo2, Redo2, LayoutGrid, Settings, Download, Upload, PanelLeft, PanelRight, MessageCircle, Puzzle, RotateCcw, FolderOpen, ArrowLeftRight, ClipboardList, FolderTree, Globe, Keyboard, Sun, Moon, ClipboardCheck, Activity, Scale, Database, Package } from 'lucide-react';
 import { useExecutionStore } from '@stores/useExecutionStore';
 import { useUndoRedoStore } from '@stores/useUndoRedoStore';
+import { useSettingsStore } from '@stores/useSettingsStore';
+
+/** Dark/light theme toggle. The store persists to localStorage; App.tsx applies <html data-theme>. */
+function ThemeToggle() {
+  const theme = useSettingsStore((s) => s.theme);
+  const setTheme = useSettingsStore((s) => s.setTheme);
+  return (
+    <button className="btn-icon" title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+      {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+    </button>
+  );
+}
 interface AppHeaderProps {
   isRunning: boolean;
   onRun: () => void;
@@ -14,6 +26,11 @@ interface AppHeaderProps {
   onToggleDataExchange?: () => void;
   onToggleWorkspace?: () => void;
   onToggleDynamicApi?: () => void;
+  onToggleHumanTasks?: () => void;
+  onToggleExecutions?: () => void;
+  onToggleRules?: () => void;
+  onToggleEavData?: () => void;
+  onOpenSolution?: () => void;
   onToggleFormBuilder?: () => void;
   onToggleAiConfig: () => void;
   onToggleHelp?: () => void;
@@ -26,7 +43,7 @@ interface AppHeaderProps {
   onFlowNameChange?: (name: string) => void;
 }
 
-export function AppHeader({ isRunning, onRun, onSave, onSaveProject, onLoadProject, onTogglePalette, onToggleProperties, onToggleAiAssistant, onToggleAgentPanel, onToggleDataExchange, onToggleWorkspace, onToggleDynamicApi, onToggleFormBuilder, onToggleAiConfig, onToggleHelp, onAutoLayout, onResetFlow, onImport, onExport, onLoad, flowName, onFlowNameChange }: AppHeaderProps) {
+export function AppHeader({ isRunning, onRun, onSave, onSaveProject, onLoadProject, onTogglePalette, onToggleProperties, onToggleAiAssistant, onToggleAgentPanel, onToggleDataExchange, onToggleWorkspace, onToggleDynamicApi, onToggleHumanTasks, onToggleExecutions, onToggleRules, onToggleEavData, onOpenSolution, onToggleFormBuilder, onToggleAiConfig, onToggleHelp, onAutoLayout, onResetFlow, onImport, onExport, onLoad, flowName, onFlowNameChange }: AppHeaderProps) {
   const canUndo = useUndoRedoStore((s) => s.canUndo);
   const canRedo = useUndoRedoStore((s) => s.canRedo);
 
@@ -166,6 +183,31 @@ export function AppHeader({ isRunning, onRun, onSave, onSaveProject, onLoadProje
             <Globe className="w-4 h-4" />
           </button>
         )}
+        {onToggleHumanTasks && (
+          <button className="btn-icon" title="Toggle Human Tasks Panel" onClick={onToggleHumanTasks}>
+            <ClipboardCheck className="w-4 h-4" />
+          </button>
+        )}
+        {onToggleExecutions && (
+          <button className="btn-icon" title="Toggle Executions Panel" onClick={onToggleExecutions}>
+            <Activity className="w-4 h-4" />
+          </button>
+        )}
+        {onToggleRules && (
+          <button className="btn-icon" title="Toggle Rules Panel" onClick={onToggleRules}>
+            <Scale className="w-4 h-4" />
+          </button>
+        )}
+        {onToggleEavData && (
+          <button className="btn-icon" title="Toggle EAV Data Panel" onClick={onToggleEavData}>
+            <Database className="w-4 h-4" />
+          </button>
+        )}
+        {onOpenSolution && (
+          <button className="btn-icon" title="Export / Import Solution Package" onClick={onOpenSolution}>
+            <Package className="w-4 h-4" />
+          </button>
+        )}
         <button className="btn-icon" title="Open Form Builder" onClick={onToggleFormBuilder}>
           <ClipboardList className="w-4 h-4" />
         </button>
@@ -193,6 +235,7 @@ export function AppHeader({ isRunning, onRun, onSave, onSaveProject, onLoadProje
             <Keyboard className="w-4 h-4" />
           </button>
         )}
+        <ThemeToggle />
       </div>
     </header>
   );

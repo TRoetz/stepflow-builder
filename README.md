@@ -49,7 +49,7 @@ A professional node-based flow builder for designing [Amazon Step Functions](htt
 
 StepFlow Builder replaces the original div-based drag-and-drop UI with a professional node editor featuring:
 
-- **15 step schemas** across 7 categories (AI, Rule, Data, API, Transform, Utility, SubFlow)
+- **Step schemas** across 13 categories (Terminal, Flow, AI, Rule, Data, API, Transform, Utility, SubFlow, Human Task, Form Capture, Remote, Transfer)
 - **Custom node components** per category — AI nodes look different from Data nodes, etc.
 - **Real-time validation** with visual feedback (green/red borders)
 - **Auto-layout** via ELKJS graph layout engine
@@ -63,7 +63,7 @@ StepFlow Builder replaces the original div-based drag-and-drop UI with a profess
 
 ## Architecture
 
-The frontend lives in **`StepFlow-UI/`** at the repo root (React + xyflow). The **.NET 10 backend** (`StepFunctions/`) is kept as-is — it provides the execution engine, resource invoker, and flow storage. Vite builds into `StepFlow-UI/dist/`, which [`docker-example/`](docker-example/) serves via nginx; for single-process mode copy `dist/` next to the backend as `StepFunctionsApp/dist`, which it serves at `/`.
+The frontend lives in **`StepFlow-UI/`** at the repo root (React + xyflow). The **.NET 10 backend** (`StepFunctionsApp/`) is kept as-is — it provides the execution engine, resource invoker, and flow storage. Vite builds into `StepFlow-UI/dist/`, which [`docker-example/`](docker-example/) serves via nginx; for single-process mode copy `dist/` next to the backend as `StepFunctionsApp/dist`, which it serves at `/`.
 
 ```
 stepflow-builder/
@@ -299,88 +299,59 @@ interface StepSchema {
 stepflow-builder/
 ├── StepFlow-UI/                   ← Frontend (React + xyflow); Vite builds into dist/
 │   ├── src/
-│   │   ├── App.tsx                    ← Main app (3-panel layout)
+│   │   ├── App.tsx                    ← Main app: canvas + toggleable side panels
 │   │   ├── main.tsx                   ← Entry point
 │   │   │
 │   │   ├── components/
-│   │   │   ├── Canvas/
-│   │   │   │   ├── FlowCanvas.tsx     ← xyflow canvas wrapper
-│   │   │   │   └── StepEdge.tsx       ← Custom edge with animations
-│   │   │   ├── Header/
-│   │   │   │   ├── AppHeader.tsx      ← Toolbar with Run/Save/Layout
-│   │   │   │   └── StatusBar.tsx      ← Zoom, node count, execution status
-│   │   │   ├── Nodes/                 ← Custom node per category
-│   │   │   │   ├── BaseNode.tsx       ← Shared foundation (handles, drag)
-│   │   │   │   ├── AiNode.tsx         ← AI Decision, AI Text
-│   │   │   │   ├── RuleNode.tsx       ← Rule Engine, MS Rules
-│   │   │   │   ├── DataNode.tsx       ← SQL, DuckDB, EAV
-│   │   │   │   ├── ApiNode.tsx        ← HTTP, Registered API
-│   │   │   │   ├── TransformNode.tsx  ← JSONata, Script
-│   │   │   │   ├── UtilityNode.tsx    ← Pass, Wait, Branch
-│   │   │   │   └── SubFlowNode.tsx    ← Sub-flow invocation
-│   │   │   ├── Palette/
-│   │   │   │   └── NodePalette.tsx    ← Category browser + search
-│   │   │   └── Properties/
-│   │   │       └── PropertyPanel.tsx  ← Config / Info / Template tabs
+│   │   │   ├── Canvas/                ← FlowCanvas, StepEdge, AddNextPopover, CanvasAssistant
+│   │   │   ├── Header/                ← AppHeader (toolbar + theme toggle), StatusBar, HelpModal
+│   │   │   ├── Nodes/                 ← BaseNode + one node component per category
+│   │   │   ├── Palette/               ← NodePalette: category browser + search
+│   │   │   ├── Properties/            ← PropertyPanel (Config/Info/Template tabs), VariablePicker
+│   │   │   ├── Agents/                ← AgentPanel: AI assistant chat
+│   │   │   ├── DataExchange/          ← Profile wizard, schema editor, pipeline visualizer
+│   │   │   ├── DynamicApi/            ← Dynamic API panel + AI build wizard
+│   │   │   ├── Forms/                 ← FormBuilderWindow, FormRenderer, AI form builder
+│   │   │   ├── HumanTasks/            ← Pending/completed task queue with form-capture handoff
+│   │   │   ├── Executions/            ← Backend execution history: resume/stop/delete
+│   │   │   ├── Rules/                 ← Named rule catalog CRUD (SQL + MS Rules)
+│   │   │   ├── EavData/               ← Browse/filter captured attribute rows per domain
+│   │   │   ├── Solutions/             ← Solution package export/import dialog
+│   │   │   └── Workspace/             ← Org → project → sub-project browser
 │   │   │
-│   │   ├── hooks/                     ← Custom React hooks
-│   │   │   ├── useAutoLayout.ts       ← ELKJS auto-arrange
-│   │   │   ├── useDragDrop.ts         ← Palette → canvas drag
-│   │   │   ├── useExecutionProgress.ts ← Execution animation
-│   │   │   ├── useFavorites.ts        ← Favorite persistence
-│   │   │   ├── useKeyboardShortcuts.ts ← Keyboard shortcuts
-│   │   │   └── useNodeValidity.ts     ← Real-time validation
+│   │   ├── hooks/                     ← useAutoLayout, useDragDrop, useExecutionProgress,
+│   │   │                                useFavorites, useFlowValidation, useInScopeVariables,
+│   │   │                                useKeyboardShortcuts, useNodeValidity
 │   │   │
-│   │   ├── library/                   ← Reusable step library
-│   │   │   ├── LibraryService.ts      ← Template CRUD
-│   │   │   └── StepLibraryStore.ts    ← Zustand store
+│   │   ├── library/                   ← Reusable step library (template CRUD + store)
 │   │   │
 │   │   ├── schema-types/
-│   │   │   └── schema.ts              ← TypeScript interfaces
+│   │   │   └── schema.ts              ← TypeScript interfaces used by node components
 │   │   │
-│   │   ├── schemas/                   ← 15 step schemas
-│   │   │   ├── index.ts               ← Registry + node type map
-│   │   │   ├── categories.ts          ← Category definitions
-│   │   │   └── steps/                 ← Per-category schemas
-│   │   │       ├── ai.ts              ← AI Decision, AI Text
-│   │   │       ├── rule.ts            ← Rule Engine, MS Rules
-│   │   │       ├── data.ts            ← SQL, DuckDB, EAV
-│   │   │       ├── api.ts             ← HTTP, Registered API
-│   │   │       ├── transform.ts       ← JSONata, Script
-│   │   │       ├── utility.ts         ← Pass, Wait, Branch
-│   │   │       └── subflow.ts         ← Sub-flow invoke
+│   │   ├── schemas/                   ← Step schema registry; steps/ holds one file per category
 │   │   │
-│   │   ├── services/                  ← Backend API services
-│   │   │   ├── flowService.ts         ← Flow save/load
-│   │   │   ├── executionService.ts    ← Start/stop execution
-│   │   │   ├── flowMigrationService.ts ← Import legacy flows
-│   │   │   └── apiRegistryService.ts  ← API registry
+│   │   ├── services/                  ← Backend API clients (plain fetch, no axios)
+│   │   │   ├── flowService.ts         ← Flow save/load/export/import
+│   │   │   ├── executionService.ts    ← Local simulation + backend history (list/resume/stop/delete)
+│   │   │   ├── workspaceService.ts    ← Org/project tree + ACLs
+│   │   │   ├── dynamicApiService.ts   ← Dynamic API CRUD + test dispatch
+│   │   │   ├── formService.ts         ← Form definitions + validation
+│   │   │   ├── dataExchangeService.ts ← Profiles, schemas, pipeline runs
+│   │   │   ├── humanTaskService.ts    ← Task queue + complete/assignee
+│   │   │   ├── rulesService.ts        ← Named rule CRUD
+│   │   │   ├── eavService.ts          ← Domain list + row query/read/write
+│   │   │   ├── solutionsService.ts    ← Solution package export/import
+│   │   │   └── …                      ← flowCatalog, apiRegistry, migration, AI builders
 │   │   │
-│   │   ├── stores/                    ← Zustand state stores
-│   │   │   ├── useNodeStore.ts        ← Canvas nodes
-│   │   │   ├── useEdgeStore.ts        ← Canvas edges
-│   │   │   ├── useExecutionStore.ts   ← Execution state
-│   │   │   ├── useUndoRedoStore.ts    ← Undo/redo history
-│   │   │   ├── useViewportStore.ts    ← Zoom, pan, selection
-│   │   │   ├── usePaletteStore.ts     ← Palette search/collapse
-│   │   │   └── useSettingsStore.ts    ← Theme, snap-to-grid
+│   │   ├── stores/                    ← Zustand: nodes, edges, execution, undo/redo, palette,
+│   │   │                                settings/theme, toasts, workspace, agents, canvas UI
 │   │   │
-│   │   ├── utils/                     ← Utilities
-│   │   │   ├── validation.ts          ← Validation helpers
-│   │   │   ├── colors.ts              ← Category accent colors
-│   │   │   ├── id.ts                  ← UUID generation
-│   │   │   └── layout.ts              ← Position helpers
+│   │   ├── utils/                     ← validation, colors, id, layout, variables, typeGuards
 │   │   │
-│   │   ├── test/                      ← Vitest test suite
-│   │   │   ├── schema.test.ts         ← Schema validation (111 tests)
-│   │   │   ├── stores.test.ts         ← Store operations (36 tests)
-│   │   │   ├── library.test.ts        ← Template CRUD (9 tests)
-│   │   │   ├── flowService.test.ts    ← Flow export/import (6 tests)
-│   │   │   ├── validation.test.ts     ← Validation logic (12 tests)
-│   │   │   └── utils.test.ts          ← Utility functions (12 tests)
+│   │   ├── test/                      ← Vitest suite (schemas, stores, services, AI builders)
 │   │   │
 │   │   └── styles/
-│   │       └── globals.css            ← Tailwind + custom styles
+│   │       └── globals.css            ← Tailwind + theme variables ([data-theme='light'] overrides)
 │   │
 │   ├── package.json
 │   ├── vite.config.ts                 ← Builds into dist/
@@ -401,7 +372,7 @@ stepflow-builder/
 │   ├── Solutions/                 ← Solution package export/import (the portable "project" artifact)
 │   ├── Workspace/                 ← Org → project → sub-project tree, ACLs, flow/profile storage
 │   ├── Converters/                ← BPMN/SSIS conversion pipeline
-│   ├── Mcp/                       ← MCP endpoint for AI harnesses (34 tools)
+│   ├── Mcp/                       ← MCP endpoint for AI harnesses (51 tools)
 │   ├── StepFunctionsApp.Tests/    ← xUnit backend test suite (engine, flow state, MCP, scenarios)
 │   └── Stepflow-Builder-Tests/    ← Standalone fake test API host (http://localhost:5095)
 ├── DynamicApiHost/                ← Standalone host exposing published dynamic APIs (:5002)
@@ -517,9 +488,11 @@ All state is managed via **Zustand** stores — no Redux boilerplate, no Context
 | `useEdgeStore` | Add/remove edges, connection validation |
 | `useExecutionStore` | Execution lifecycle (idle → running → completed/failed) |
 | `useUndoRedoStore` | 50-entry undo/redo history for node changes |
-| `useViewportStore` | Zoom level, pan position, fit-to-screen |
+| `useCanvasUiStore` | "Add next" popover anchor state |
 | `usePaletteStore` | Search query, collapsed categories, favorites |
-| `useSettingsStore` | Theme, snap-to-grid, auto-save preferences |
+| `useSettingsStore` | Theme (persisted to localStorage), snap-to-grid, auto-save preferences |
+| `useWorkspaceStore` | Org → project tree, selected sub-project, ACLs |
+| `useToastStore` | Global toast queue (errors/success/info) |
 
 ### Data Flow
 
@@ -536,7 +509,7 @@ Header Save → FlowService → localStorage
 
 ## Backend Integration
 
-The **.NET 10 backend** (`StepFunctions/`) is production-quality and kept as-is. It provides:
+The **.NET 10 backend** (`StepFunctionsApp/`) is production-quality and kept as-is. It provides:
 
 - **StepFunctionInterpreter** — Amazon States Language compatible execution
 - **ResourceInvoker** — Scheme-based routing (`ai://`, `rule://`, `sql://`, `flow://`, `http://`)
@@ -580,48 +553,22 @@ The frontend communicates with the backend via these endpoints:
 
 ## MCP Server
 
-The backend exposes a **Model Context Protocol (MCP)** server at `/mcp`, letting AI agents (Claude Desktop, VS Code Copilot, or any MCP client) manage flows **and** workspace configuration — data-exchange profiles, attribute domains, schema definitions, EAV rows and entity contracts, dynamic APIs, named rules, solution packages — through the same .NET engine as the UI. Transport: streamable HTTP — stateless, so no session handshake is required per request. All 34 tools return errors as JSON (`{"error": "…"}`) rather than throwing; full parameter/return details live in **SKILL.md §2**.
+The backend exposes a **Model Context Protocol (MCP)** server at `/mcp`, letting AI agents (Claude Desktop, VS Code Copilot, or any MCP client) manage flows **and** workspace configuration — data-exchange profiles, attribute domains, schema definitions, EAV rows and entity contracts, dynamic APIs, named rules, solution packages — through the same .NET engine as the UI. Transport: streamable HTTP — stateless, so no session handshake is required per request. All 51 tools return errors as JSON (`{"error": "…"}`) rather than throwing; full parameter/return details live in **SKILL.md §2**.
 
 ### Tools
 
-| Tool | Purpose | Parameters |
-|:-----|:--------|:-----------|
-| `list_flows` | List registered flows (id, name, description, updatedAt) | — |
-| `get_flow` | Full flow definition as camelCase ASL + metadata | `idOrName` |
-| `save_flow` | Create or replace a flow by name; validates `startAt` and state references | `name`, `statesJson`, `description?`, `startAt?` (defaults to first key) |
-| `run_flow` | Run synchronously; returns status, final output and per-state history | `idOrName`, `inputJson?` |
-| `list_data_exchange_profiles` | List data-exchange pipeline profiles (id, name, subProjectPath, stage count) | — |
-| `get_data_exchange_profile` | Full profile JSON definition | `idOrName` |
-| `save_data_exchange_profile` | Create or replace a profile by the name in its JSON; optionally file it under a workspace sub-project | `profileJson`, `subProjectPath?` |
-| `delete_data_exchange_profile` | Delete a profile by id or name | `idOrName` |
-| `run_data_exchange_profile` | Run a profile synchronously (inline rows via input, or its configured data source) | `idOrName`, `inputJson?` |
-| `list_attribute_domains` | List attribute domains (entity contracts) with version and linked schema | — |
-| `get_attribute_domain` | Full domain JSON including attributes and linked schema definition | `name` |
-| `save_attribute_domain` | Create or replace a domain by the name in its JSON; links to a saved schema version | `domainJson`, `schemaName?`, `schemaVersion?` |
-| `delete_attribute_domain` | Delete an attribute domain by name | `name` |
-| `list_schema_definitions` | List all saved schema definition versions (one row per version) | — |
-| `get_schema_definition` | Full schema JSON; version optional, defaults to latest saved | `name`, `version?` |
-| `save_schema_definition` | Create or replace a schema definition by name + version in its JSON | `schemaJson` |
-| `delete_schema_definition` | Delete one saved version of a schema definition | `name`, `version` |
-| `list_eav_domains` | List EAV data domains with row counts and contract flags | — |
-| `read_eav_rows` | Read captured EAV rows for a domain in append order (flow-side read of persisted EAV data) | `domain`, `limit?` |
-| `write_eav_row` | Append an EAV row; returns its `rowKeyId` | `domain`, `valuesJson`, `entityId?`, `entityType?`, `sourceTaskId?` |
-| `update_eav_row` | Replace a row's values wholesale by `rowKeyId` | `domain`, `rowKeyId`, `valuesJson` |
-| `patch_eav_row` | Merge partial attribute values into an existing row | `domain`, `rowKeyId`, `patchJson` |
-| `delete_eav_row` | Delete a row by domain and `rowKeyId` | `domain`, `rowKeyId` |
-| `list_eav_entities` | List registry entity contracts with full attribute definitions | — |
-| `register_eav_entity` | Create or replace an entity contract by the name in its JSON | `entityJson` |
-| `delete_eav_entity` | Delete an entity contract from the EAV registry | `name` |
-| `list_dynamic_apis` | List dynamic API definitions, optionally filtered to a workspace node subtree | `nodePathPrefix?` |
-| `get_dynamic_api` | Full API definition JSON including all operations | `id` |
-| `save_dynamic_api` | Create or replace an API by the name in its JSON | `definitionJson` |
-| `delete_dynamic_api` | Delete a dynamic API by id | `id` |
-| `export_solution` | Export a solution package (flows + canvas, forms, domains, schemas, APIs, DX profiles, named rules, EAV datasets, SQL migrations) as one JSON document | `nodePath?`, `seedTables?`, `seedDomains?`, `name?`, `version?` |
-| `import_solution` | Import a solution package onto this instance (idempotent redeploy; engine-backed rules register immediately) | `packageJson`, `targetNodePath?` |
-| `list_rules` | List persisted named rules (`choice`, `jsonata`, `sql`, `ms-rules`, `ai-decision`) | — |
-| `get_rule` | Full rule including its definition body | `name` |
-| `save_rule` | Create or replace a rule by name; engine-backed kinds register immediately (`rule://` / `rules://`) | `ruleJson` |
-| `delete_rule` | Delete a rule and unregister it from its engine | `name` |
+The full reference for all 51 tools (parameters, return shapes) lives in **SKILL.md §2**. Functional areas covered:
+
+- **Flows** — list / get / save / run; delete flow
+- **Executions** — execution history: get / list / stop / resume / delete
+- **Human tasks & form capture** — task queue, completion, form-capture submit/retrieve
+- **Forms** — versioned form definition CRUD
+- **Data Exchange** — profile CRUD + synchronous runs
+- **Attribute domains & schema definitions** — entity-contract and schema-versioning CRUD
+- **EAV rows & entities** — domain listing, row query/read/write/patch/delete, registry contracts
+- **Dynamic APIs** — definition CRUD (workspace-scoped)
+- **Named rules** — catalog CRUD across all five rule kinds
+- **Solutions** — package export / import
 
 Definitions use the same camelCase Amazon States Language format the React UI exports (`startAt`, `states`, `type`, `next`, …), so a flow fetched via MCP can be re-imported into the canvas unchanged. State names keep their original casing. Supported state types: `Task`, `Pass`, `Choice`, `Wait`, `Parallel`, `Map`, `Succeed`, `Fail`.
 

@@ -207,6 +207,52 @@ namespace StepFunctionsApp.Tests
             }
         }
 
+        [Fact]
+        public async Task ListDomains_ReturnsRowCounts_AndContractFlags()
+        {
+            // Two fresh domains so counts are deterministic regardless of other suites sharing eav-data.
+            var domainA = "EAVDOM-A-" + Guid.NewGuid().ToString("N");
+            var domainB = "EAVDOM-B-" + Guid.NewGuid().ToString("N");
+            var keys = new List<(string Domain, string Key)>();
+            try
+            {
+                // Two rows in A, one row in B.
+                for (var i = 0; i < 2; i++)
+                {
+                    var (s, b) = await SendAsync(_client, HttpMethod.Post, $"/api/eav/{domainA}/rows", new { entityId = $"a{i}", name = "x" });
+                    Assert.Equal(HttpStatusCode.Created, s);
+                    keys.Add((domainA, (string)b!["rowKeyId"]!));
+                }
+
+                var (sB, bB) = await SendAsync(_client, HttpMethod.Post, $"/api/eav/{domainB}/rows", new { entityId = "b0", name = "y" });
+                Assert.Equal(HttpStatusCode.Created, sB);
+                keys.Add((domainB, (string)bB!["rowKeyId"]!));
+
+                var (sd, bd) = await SendAsync(_client, HttpMethod.Get, "/api/eav/domains", null);
+                Assert.Equal(HttpStatusCode.OK, sd);
+                Assert.Equal(JTokenType.Array, bd!.Type);
+
+                var entries = (JArray)bd;
+                var entryA = entries.FirstOrDefault(e => string.Equals((string)e!["domain"], domainA, StringComparison.OrdinalIgnoreCase));
+                var entryB = entries.FirstOrDefault(e => string.Equals((string)e!["domain"], domainB, StringComparison.OrdinalIgnoreCase));
+                Assert.NotNull(entryA);
+                Assert.NotNull(entryB);
+                Assert.Equal(2, (int)entryA!["rows"]!);
+                Assert.Equal(1, (int)entryB!["rows"]!);
+
+                // Fresh domains have no registry entity contract and no attribute domain.
+                Assert.False((bool)entryA["hasRegistryContract"]!);
+                Assert.False((bool)entryA["hasAttributeDomain"]!);
+                Assert.False((bool)entryB["hasRegistryContract"]!);
+                Assert.False((bool)entryB["hasAttributeDomain"]!);
+            }
+            finally
+            {
+                foreach (var (domain, key) in keys)
+                    await SendAsync(_client, HttpMethod.Delete, $"/api/eav/{domain}/rows/{key}", null);
+            }
+        }
+
         // ── test host factory (isolated state dirs; eav-data stays CWD-relative like in production) ──
 
         public sealed class Factory : WebApplicationFactory<Program>

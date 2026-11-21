@@ -31,7 +31,13 @@ const FormBuilderWindow = lazy(() => import('@components/Forms/FormBuilderWindow
 const DataExchangePanel = lazy(() => import('@components/DataExchange/DataExchangePanel').then((m) => ({ default: m.DataExchangePanel })));
 const WorkspacePanel = lazy(() => import('@components/Workspace/WorkspacePanel').then((m) => ({ default: m.WorkspacePanel })));
 const DynamicApiPanel = lazy(() => import('@components/DynamicApi/DynamicApiPanel').then((m) => ({ default: m.DynamicApiPanel })));
+const HumanTasksPanel = lazy(() => import('@components/HumanTasks/HumanTasksPanel').then((m) => ({ default: m.HumanTasksPanel })));
+const ExecutionsPanel = lazy(() => import('@components/Executions/ExecutionsPanel').then((m) => ({ default: m.ExecutionsPanel })));
+const RulesPanel = lazy(() => import('@components/Rules/RulesPanel').then((m) => ({ default: m.RulesPanel })));
+const EavDataPanel = lazy(() => import('@components/EavData/EavDataPanel').then((m) => ({ default: m.EavDataPanel })));
+const SolutionDialog = lazy(() => import('@components/Solutions/SolutionDialog').then((m) => ({ default: m.SolutionDialog })));
 
+import { useSettingsStore } from '@stores/useSettingsStore';
 import './styles/globals.css';
 export default function App() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -45,6 +51,11 @@ export default function App() {
   const [showDataExchangePanel, setShowDataExchangePanel] = useState(false);
   const [showWorkspacePanel, setShowWorkspacePanel] = useState(false);
   const [showDynamicApiPanel, setShowDynamicApiPanel] = useState(false);
+  const [showHumanTasks, setShowHumanTasks] = useState(false);
+  const [showExecutions, setShowExecutions] = useState(false);
+  const [showRules, setShowRules] = useState(false);
+  const [showEavData, setShowEavData] = useState(false);
+  const [showSolution, setShowSolution] = useState(false);
   const [formBuilderOpen, setFormBuilderOpen] = useState(false);
   const [showLogPanel, setShowLogPanel] = useState(false);
   const [expandedLogNodeId, setExpandedLogNodeId] = useState<string | null>(null);
@@ -71,6 +82,13 @@ export default function App() {
       delete (window as any).__showToast;
     };
   }, []);
+
+  // Apply the persisted theme to <html> (light CSS variables live under [data-theme='light']).
+  const theme = useSettingsStore((s) => s.theme);
+  useEffect(() => {
+    if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    else document.documentElement.removeAttribute('data-theme');
+  }, [theme]);
 
   // Register flowName on window so the execution service can read the current flow's name
   useEffect(() => {
@@ -472,6 +490,11 @@ export default function App() {
         onToggleDataExchange={() => setShowDataExchangePanel((p) => !p)}
         onToggleWorkspace={() => setShowWorkspacePanel((p) => !p)}
         onToggleDynamicApi={() => setShowDynamicApiPanel((p) => !p)}
+        onToggleHumanTasks={() => setShowHumanTasks((p) => !p)}
+        onToggleExecutions={() => setShowExecutions((p) => !p)}
+        onToggleRules={() => setShowRules((p) => !p)}
+        onToggleEavData={() => setShowEavData((p) => !p)}
+        onOpenSolution={() => setShowSolution(true)}
         onToggleFormBuilder={() => setFormBuilderOpen((p) => !p)}
         onToggleAiConfig={toggleAiConfig}
         onToggleHelp={() => setShowHelp(true)}
@@ -666,6 +689,26 @@ export default function App() {
               <DynamicApiPanel onClose={() => setShowDynamicApiPanel(false)} />
             </Suspense>
         )}
+        {showHumanTasks && (
+          <Suspense fallback={null}>
+            <HumanTasksPanel onClose={() => setShowHumanTasks(false)} />
+          </Suspense>
+        )}
+        {showExecutions && (
+          <Suspense fallback={null}>
+            <ExecutionsPanel onClose={() => setShowExecutions(false)} />
+          </Suspense>
+        )}
+        {showRules && (
+          <Suspense fallback={null}>
+            <RulesPanel onClose={() => setShowRules(false)} />
+          </Suspense>
+        )}
+        {showEavData && (
+          <Suspense fallback={null}>
+            <EavDataPanel onClose={() => setShowEavData(false)} />
+          </Suspense>
+        )}
       </div>
 
       <StatusBar
@@ -681,6 +724,11 @@ export default function App() {
       <AiModelConfigModal />
 
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+      {showSolution && (
+        <Suspense fallback={null}>
+          <SolutionDialog onClose={() => setShowSolution(false)} />
+        </Suspense>
+      )}
 
       {/* Load Flow Dialog */}
       {showLoadDialog && (

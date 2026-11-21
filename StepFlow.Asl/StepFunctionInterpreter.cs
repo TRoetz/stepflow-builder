@@ -49,12 +49,14 @@ namespace StepFunctionsApp.StepFunctions
             string executionId,
             string stateMachineId,
             CancellationToken cancellationToken = default,
-            CheckpointCallback? onCheckpoint = null)
+            CheckpointCallback? onCheckpoint = null,
+            string? stateMachineName = null)
         {
             var execution = new Execution
             {
                 ExecutionId = executionId,
                 StateMachineId = stateMachineId,
+                StateMachineName = stateMachineName ?? "",
                 Input = input,
                 Status = ExecutionStatus.Running,
                 CurrentState = definition.StartAt

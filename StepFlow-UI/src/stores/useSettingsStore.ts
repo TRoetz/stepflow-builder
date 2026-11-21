@@ -1,5 +1,11 @@
 import { create } from 'zustand';
 
+const THEME_KEY = 'stepflow-theme'; // read by index.html before first paint to avoid a flash of dark
+
+function initialTheme(): 'dark' | 'light' {
+  try { return localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark'; } catch { return 'dark'; }
+}
+
 interface SettingsState {
   theme: 'dark' | 'light';
   snapToGrid: boolean;
@@ -29,8 +35,12 @@ const defaultSettings: Omit<SettingsState, 'setTheme' | 'setSnapToGrid' | 'setSn
 
 export const useSettingsStore = create<SettingsState>((set) => ({
   ...defaultSettings,
+  theme: initialTheme(),
 
-  setTheme: (theme) => set({ theme }),
+  setTheme: (theme) => {
+    try { localStorage.setItem(THEME_KEY, theme); } catch { /* storage unavailable */ }
+    set({ theme });
+  },
   setSnapToGrid: (snapToGrid) => set({ snapToGrid }),
   setSnapGridSize: (snapGridSize) => set({ snapGridSize }),
   setShowHandleLabels: (showHandleLabels) => set({ showHandleLabels }),

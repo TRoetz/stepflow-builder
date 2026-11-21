@@ -15,10 +15,30 @@ namespace StepFunctionsApp.Controllers
     public class EavRowsController : ControllerBase
     {
         private readonly EavRowStore _eavRows;
+        private readonly EavRegistryService _registry;
+        private readonly IAttributeDomainStore _domains;
 
-        public EavRowsController(EavRowStore eavRows)
+        public EavRowsController(EavRowStore eavRows, EavRegistryService registry, IAttributeDomainStore domains)
         {
             _eavRows = eavRows;
+            _registry = registry;
+            _domains = domains;
+        }
+
+        // All EAV domains with row counts + whether each has a registry entity contract or an attribute domain.
+        [HttpGet("api/eav/domains")]
+        public IActionResult ListDomains()
+        {
+            var knownEntities = new HashSet<string>(_registry.GetAllEntities().Select(e => e.EntityName), StringComparer.OrdinalIgnoreCase);
+            var knownAttributeDomains = new HashSet<string>(_domains.GetAll().Select(d => d.AttributeDomainName), StringComparer.OrdinalIgnoreCase);
+
+            return Ok(_eavRows.ListDomains().Select(domain => new
+            {
+                domain,
+                rows = _eavRows.ListRows(domain).Count,
+                hasRegistryContract = knownEntities.Contains(domain),
+                hasAttributeDomain = knownAttributeDomains.Contains(domain)
+            }));
         }
 
         // All rows for a domain with the full query language (filter/sort/page/limit/offset/fields - see EavQuery).

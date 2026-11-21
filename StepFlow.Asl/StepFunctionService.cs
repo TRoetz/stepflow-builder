@@ -117,7 +117,8 @@ namespace StepFunctionsApp.StepFunctions
         {
             var sm = GetStateMachine(idOrName) ?? throw new ArgumentException($"State machine '{idOrName}' not found");
             var executionId = Guid.NewGuid().ToString("N")[..8];
-            var execution = await _interpreter.ExecuteAsync(sm.Definition, input ?? new JObject(), executionId, sm.Id, ct, SaveCheckpointAsync);
+            // Pass the name too: suspended human-task records and durable checkpoints carry it for REST/MCP views.
+            var execution = await _interpreter.ExecuteAsync(sm.Definition, input ?? new JObject(), executionId, sm.Id, ct, SaveCheckpointAsync, stateMachineName: sm.Name);
             _executions[execution.ExecutionId] = execution;
             return execution;
         }
@@ -154,7 +155,7 @@ namespace StepFunctionsApp.StepFunctions
                             // cancellation RunCoreAsync returns with Status unchanged and no terminal checkpoint.
                             var result = pending.Resume
                                 ? await _interpreter.ResumeAsync(pending.Definition, pending.Execution, cts.Token, SaveCheckpointAsync)
-                                : await _interpreter.ExecuteAsync(pending.Definition, pending.Execution.Input, pending.Execution.ExecutionId, pending.Execution.StateMachineId, cts.Token, SaveCheckpointAsync);
+                                : await _interpreter.ExecuteAsync(pending.Definition, pending.Execution.Input, pending.Execution.ExecutionId, pending.Execution.StateMachineId, cts.Token, SaveCheckpointAsync, stateMachineName: pending.Execution.StateMachineName);
                             if (!_executions.TryGetValue(pending.Execution.ExecutionId, out var tracked)) return; // deleted while running
                             tracked.Status = result.Status;
                             tracked.Output = result.Output;

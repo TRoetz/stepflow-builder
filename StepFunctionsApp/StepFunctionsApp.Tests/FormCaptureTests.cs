@@ -79,7 +79,7 @@ namespace StepFunctionsApp.Tests
                 Rows.Initialize(Directory.CreateDirectory(Path.Combine(_dir, "eav-data")).FullName);
 
                 Service = NewService(stateStore, Tasks, invoker, Forms);
-                Controller = new FormCaptureController(Tasks, Forms, Domains, Rows, Service);
+                Controller = new FormCaptureController(new StepFunctionsApp.Forms.FormCaptureService(Tasks, Forms, Domains, Rows, Service));
             }
 
             public void Dispose()

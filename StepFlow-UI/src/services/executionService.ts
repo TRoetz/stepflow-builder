@@ -166,7 +166,75 @@ async function executeAiStep(node: StepNode, nodeConfig: Record<string, unknown>
 // (HttpContext.RequestAborted) and onward into the engine's linked CancellationToken.
 let liveAbort: AbortController | null = null;
 
+// ── Backend execution history (durable store) ──
+// These hit the backend's stored-execution API directly; they are independent of
+// the local browser-side simulation above and survive backend restarts.
+
+export interface BackendExecutionSummary {
+  executionId: string;
+  stateMachineName: string;
+  status: 'Running' | 'Suspended' | 'Completed' | 'Failed' | 'Stopped' | string;
+  currentState?: string;
+  startedAt: string;
+  checkpointedAt: string;
+}
+
+export interface BackendExecutionDetail extends BackendExecutionSummary {
+  stateMachineId: string;
+  input?: unknown;
+  output?: unknown;
+  currentNode?: string;
+  completedAt?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  history?: Array<{ timestamp: string; type: string; state?: string; data?: unknown }>;
+}
+
+async function backendFail(res: Response): Promise<never> {
+  let message = `Request failed with status ${res.status}`;
+  try {
+    const body = (await res.json()) as { error?: string };
+    if (body && typeof body.error === 'string' && body.error.length > 0) message = body.error;
+  } catch { /* non-JSON error body - keep the status message */ }
+  throw new Error(message);
+}
+
 export const ExecutionService = {
+  /** List all stored executions from the backend (survives restarts, includes terminal history). */
+  async listBackendExecutions(): Promise<BackendExecutionSummary[]> {
+    const res = await fetch('/api/flows/executions');
+    if (!res.ok) return backendFail(res);
+    return (await res.json()) as BackendExecutionSummary[];
+  },
+
+  /** Full detail for one stored execution, including input/output and the state history. */
+  async getBackendExecution(executionId: string): Promise<BackendExecutionDetail> {
+    const res = await fetch(`/api/flows/executions/${encodeURIComponent(executionId)}`);
+    if (!res.ok) return backendFail(res);
+    return (await res.json()) as BackendExecutionDetail;
+  },
+
+  /** Queue a stored execution for resume. Throws with the backend message on 409 Conflict / 404. */
+  async resumeBackendExecution(executionId: string): Promise<{ message: string; status: string }> {
+    const res = await fetch(`/api/flows/executions/${encodeURIComponent(executionId)}/resume`, { method: 'POST' });
+    if (!res.ok) return backendFail(res);
+    return (await res.json()) as { message: string; status: string };
+  },
+
+  /** Request a stop for an in-flight execution. */
+  async stopBackendExecution(executionId: string): Promise<{ message: string; stopped: boolean }> {
+    const res = await fetch(`/api/flows/executions/${encodeURIComponent(executionId)}/stop`, { method: 'POST' });
+    if (!res.ok) return backendFail(res);
+    return (await res.json()) as { message: string; stopped: boolean };
+  },
+
+  /** Delete a stored execution's checkpoint from the flow-state store. */
+  async deleteBackendExecution(executionId: string): Promise<{ message: string }> {
+    const res = await fetch(`/api/flows/executions/${encodeURIComponent(executionId)}`, { method: 'DELETE' });
+    if (!res.ok) return backendFail(res);
+    return (await res.json()) as { message: string };
+  },
+
   /**
    * Start flow execution.
    */

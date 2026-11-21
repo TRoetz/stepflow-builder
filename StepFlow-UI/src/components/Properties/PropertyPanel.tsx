@@ -3,9 +3,10 @@ import { StepNode } from '@stores/useNodeStore';
 import { useNodeStore } from '@stores/useNodeStore';
 import { schemaById, stepLibrary } from '@schemas/index';
 import { ConfigField, Validity } from '@schema-types/schema';
-import { Trash2, Copy, AlertCircle, ArrowRight, CheckCircle, Settings, Info, GitBranch, Save, Play, Loader2, Terminal, Code, Sparkles, Bot } from 'lucide-react';
+import { Trash2, Copy, AlertCircle, ArrowRight, CheckCircle, Settings, Info, GitBranch, Save, Play, Loader2, Terminal, Code, Sparkles, Bot, FolderOpen } from 'lucide-react';
 import { useExecutionStore } from '@stores/useExecutionStore';
 import { ExecutionService } from '@services/executionService';
+import { DynamicApiService } from '@services/dynamicApiService';
 import { FlowService } from '@services/flowService';
 import { FormService } from '@services/formService';
 import { useAutoLayout } from '@hooks/useAutoLayout';
@@ -1022,6 +1023,17 @@ function ConfigFieldRenderer({ field, value, onChange, formOptions = [], formVer
     [onChange]
   );
 
+  // api-selector options: the workspace's dynamic APIs (null while loading).
+  const [apiOptions, setApiOptions] = useState<Array<{ label: string; value: string }> | null>(null);
+  useEffect(() => {
+    if (field.type !== 'api-selector') return;
+    let cancelled = false;
+    DynamicApiService.list()
+      .then((apis) => { if (!cancelled) setApiOptions(apis.map((a) => ({ label: `${a.name} (${a.basePath})`, value: a.id }))); })
+      .catch(() => { if (!cancelled) setApiOptions([]); });
+    return () => { cancelled = true; };
+  }, [field.type]);
+
   switch (field.type) {
     case 'text':
       return (
@@ -1181,20 +1193,78 @@ function ConfigFieldRenderer({ field, value, onChange, formOptions = [], formVer
         </div>
       );
 
-    case 'file':
     case 'color':
-    case 'api-selector':
+      return (
+        <div className="flex items-center justify-between gap-2">
+          <label className="text-xs text-gray-400">
+            {field.label}
+            {field.required && <span className="text-red-400 ml-1">*</span>}
+          </label>
+          <input
+            type="color"
+            value={(value as string) || '#888888'}
+            onChange={(e) => handleChange(e.target.value)}
+            title={field.description}
+            className="h-7 w-12 shrink-0 cursor-pointer rounded bg-gray-800 border border-gray-700"
+          />
+        </div>
+      );
+
+    case 'file': {
+      // Browsers can't read arbitrary local paths — store the picked file's name.
+      const pickFile = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.onchange = () => {
+          const f = input.files?.[0];
+          if (f) handleChange(f.name);
+        };
+        input.click();
+      };
       return (
         <div>
           <label className="text-xs text-gray-400 block mb-1">
             {field.label}
             {field.required && <span className="text-red-400 ml-1">*</span>}
           </label>
-          <div className="text-xs text-gray-600 italic">
-            ({field.type} — coming soon)
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={(value as string) ?? ''}
+              onChange={(e) => handleChange(e.target.value)}
+              placeholder={field.description || 'filename'}
+              className="w-full px-3 py-1.5 text-sm rounded-lg bg-gray-800 border border-gray-700 text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+            <button type="button" onClick={pickFile} className="btn-icon shrink-0" title="Browse for a file">
+              <FolderOpen className="w-4 h-4" />
+            </button>
           </div>
         </div>
       );
+    }
+
+    case 'api-selector': {
+      const options = apiOptions ?? [];
+      return (
+        <div>
+          <label className="text-xs text-gray-400 block mb-1">
+            {field.label}
+            {field.required && <span className="text-red-400 ml-1">*</span>}
+          </label>
+          <select
+            value={(value as string) ?? ''}
+            onChange={(e) => handleChange(e.target.value)}
+            disabled={apiOptions === null}
+            className="w-full px-3 py-1.5 text-sm rounded-lg bg-gray-800 border border-gray-700 text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:opacity-50"
+          >
+            <option value="">{apiOptions === null ? 'Loading APIs…' : '-- Select an API --'}</option>
+            {options.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+      );
+    }
 
     default:
       return (

@@ -55,6 +55,39 @@
   --toolbar-border: #1f2937;
 }
 
+/* Light theme — applied via <html data-theme="light"> (persisted in localStorage as 'stepflow-theme').
+   Note: most panels are styled with hardcoded Tailwind gray classes and stay dark; the variables
+   drive the canvas, body background, react-flow controls/minimap and node/edge accents. */
+[data-theme='light'] {
+  /* Background layers */
+  --bg-primary: #f8fafc;
+  --bg-secondary: #e2e8f0;
+  --bg-tertiary: #cbd5e1;
+  --bg-canvas: #f1f5f9;
+
+  /* Text */
+  --text-primary: #1e293b;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+
+  /* Node colors (status accents are theme-neutral and kept) */
+  --node-bg: #ffffff;
+  --node-border: #cbd5e1;
+
+  /* Palette */
+  --palette-bg: #f8fafc;
+  --palette-hover: #e2e8f0;
+  --palette-active: #cbd5e1;
+
+  /* Panel */
+  --panel-bg: #ffffff;
+  --panel-border: #e2e8f0;
+
+  /* Toolbar */
+  --toolbar-bg: #ffffff;
+  --toolbar-border: #e2e8f0;
+}
+
 /* ═══════════════════════════════════════════════════════════
    Base Reset
    ═══════════════════════════════════════════════════════════ */
