@@ -1,100 +1,302 @@
 {
+  "DataExchangeProfileId": 0,
   "DataExchangeProfileName": "Stock File To Store Page",
   "ProfileId": "stock-store-page",
   "IsActive": true,
+  "DataExchangeId": 0,
+  "DataSourceId": 0,
   "DataSource": {
+    "DataSourceId": 0,
     "DataSourceName": "live-stock.csv",
-    "MediumType": "File",
-    "MediumConfigurationJson": "{\"filePath\": \"C:/Source/stepflow-builder/StepFunctionsApp/dataexchange/live-stock.csv\"}"
+    "MediumType": 3,
+    "MediumConfigurationJson": "{\"filePath\": \"C:/Source/stepflow-builder/StepFunctionsApp/dataexchange/live-stock.csv\"}",
+    "ImportSchemaId": 0
   },
+  "PipelineId": 0,
   "Pipeline": {
+    "PipelineId": 0,
     "PipelineName": "StockToStorePage",
     "Description": "Map customer stock CSV to the internal store-page schema, enrich WEB-BREAD-CRUM via a category lookup API, and dispatch each row into the store-page inventory API.",
     "PipelineStages": [
       {
-        "StageType": "DataTreatment",
+        "PipelineStageId": 0,
+        "PipelineId": 0,
+        "StageType": 0,
         "ExecutionOrder": 1,
         "PipelineStageActions": [
           {
-            "ExecutionOrder": 1,
+            "PipelineStageActionId": 0,
+            "PipelineStageId": 0,
+            "ActionId": 0,
             "Action": {
+              "ActionId": 0,
               "ActionName": "MapToStorePageSchema",
-              "Type": "Transformation",
+              "Type": 1,
+              "ActionRules": [],
               "SchemaMap": {
+                "ActionSchemaMapId": 0,
+                "SourceSchemaId": 0,
+                "TargetSchemaId": 0,
                 "AttributeMappings": [
                   {
-                    "TargetAttribute": { "AttributeName": "SKU-ID" },
-                    "SourceAttributes": [{ "AttributeName": "SKU-ID" }],
-                    "TransformType": "DirectCopy",
-                    "MergeStrategy": "OverwriteExisting"
+                    "SchemaMapId": 0,
+                    "ActionSchemaMapId": 0,
+                    "TargetAttributeId": 0,
+                    "TargetAttribute": {
+                      "EntityAttributeId": 0,
+                      "PrimaryKey": false,
+                      "AttributeName": "SKU-ID",
+                      "DataType": 0,
+                      "Visible": true,
+                      "ReadOnly": false,
+                      "AttributeDomainId": 0,
+                      "AttributeValueData": [],
+                      "Rules": []
+                    },
+                    "SourceAttributes": [
+                      {
+                        "EntityAttributeId": 0,
+                        "PrimaryKey": false,
+                        "AttributeName": "SKU-ID",
+                        "DataType": 0,
+                        "Visible": true,
+                        "ReadOnly": false,
+                        "AttributeDomainId": 0,
+                        "AttributeValueData": [],
+                        "Rules": []
+                      }
+                    ],
+                    "TransformType": 0,
+                    "MergeStrategy": 1,
+                    "Parameters": {}
                   },
                   {
-                    "TargetAttribute": { "AttributeName": "PRODUCT_ID" },
-                    "SourceAttributes": [{ "AttributeName": "PRODUCT-CODE" }],
-                    "TransformType": "DirectCopy",
-                    "MergeStrategy": "OverwriteExisting"
+                    "SchemaMapId": 0,
+                    "ActionSchemaMapId": 0,
+                    "TargetAttributeId": 0,
+                    "TargetAttribute": {
+                      "EntityAttributeId": 0,
+                      "PrimaryKey": false,
+                      "AttributeName": "PRODUCT_ID",
+                      "DataType": 0,
+                      "Visible": true,
+                      "ReadOnly": false,
+                      "AttributeDomainId": 0,
+                      "AttributeValueData": [],
+                      "Rules": []
+                    },
+                    "SourceAttributes": [
+                      {
+                        "EntityAttributeId": 0,
+                        "PrimaryKey": false,
+                        "AttributeName": "PRODUCT-CODE",
+                        "DataType": 0,
+                        "Visible": true,
+                        "ReadOnly": false,
+                        "AttributeDomainId": 0,
+                        "AttributeValueData": [],
+                        "Rules": []
+                      }
+                    ],
+                    "TransformType": 0,
+                    "MergeStrategy": 1,
+                    "Parameters": {}
                   },
                   {
-                    "TargetAttribute": { "AttributeName": "CATEGORY" },
-                    "SourceAttributes": [{ "AttributeName": "PRODUCT-CATAGORY" }],
-                    "TransformType": "Trim",
-                    "MergeStrategy": "OverwriteExisting"
+                    "SchemaMapId": 0,
+                    "ActionSchemaMapId": 0,
+                    "TargetAttributeId": 0,
+                    "TargetAttribute": {
+                      "EntityAttributeId": 0,
+                      "PrimaryKey": false,
+                      "AttributeName": "CATEGORY",
+                      "DataType": 0,
+                      "Visible": true,
+                      "ReadOnly": false,
+                      "AttributeDomainId": 0,
+                      "AttributeValueData": [],
+                      "Rules": []
+                    },
+                    "SourceAttributes": [
+                      {
+                        "EntityAttributeId": 0,
+                        "PrimaryKey": false,
+                        "AttributeName": "PRODUCT-CATAGORY",
+                        "DataType": 0,
+                        "Visible": true,
+                        "ReadOnly": false,
+                        "AttributeDomainId": 0,
+                        "AttributeValueData": [],
+                        "Rules": []
+                      }
+                    ],
+                    "TransformType": 4,
+                    "MergeStrategy": 1,
+                    "Parameters": {}
                   },
                   {
-                    "TargetAttribute": { "AttributeName": "PRODUCTNAME" },
-                    "SourceAttributes": [{ "AttributeName": "PRODUCT-NAME" }],
-                    "TransformType": "DirectCopy",
-                    "MergeStrategy": "OverwriteExisting"
+                    "SchemaMapId": 0,
+                    "ActionSchemaMapId": 0,
+                    "TargetAttributeId": 0,
+                    "TargetAttribute": {
+                      "EntityAttributeId": 0,
+                      "PrimaryKey": false,
+                      "AttributeName": "PRODUCTNAME",
+                      "DataType": 0,
+                      "Visible": true,
+                      "ReadOnly": false,
+                      "AttributeDomainId": 0,
+                      "AttributeValueData": [],
+                      "Rules": []
+                    },
+                    "SourceAttributes": [
+                      {
+                        "EntityAttributeId": 0,
+                        "PrimaryKey": false,
+                        "AttributeName": "PRODUCT-NAME",
+                        "DataType": 0,
+                        "Visible": true,
+                        "ReadOnly": false,
+                        "AttributeDomainId": 0,
+                        "AttributeValueData": [],
+                        "Rules": []
+                      }
+                    ],
+                    "TransformType": 0,
+                    "MergeStrategy": 1,
+                    "Parameters": {}
                   },
                   {
-                    "TargetAttribute": { "AttributeName": "QTY" },
-                    "SourceAttributes": [{ "AttributeName": "QTY" }],
-                    "TransformType": "DirectCopy",
-                    "MergeStrategy": "OverwriteExisting"
+                    "SchemaMapId": 0,
+                    "ActionSchemaMapId": 0,
+                    "TargetAttributeId": 0,
+                    "TargetAttribute": {
+                      "EntityAttributeId": 0,
+                      "PrimaryKey": false,
+                      "AttributeName": "QTY",
+                      "DataType": 0,
+                      "Visible": true,
+                      "ReadOnly": false,
+                      "AttributeDomainId": 0,
+                      "AttributeValueData": [],
+                      "Rules": []
+                    },
+                    "SourceAttributes": [
+                      {
+                        "EntityAttributeId": 0,
+                        "PrimaryKey": false,
+                        "AttributeName": "QTY",
+                        "DataType": 0,
+                        "Visible": true,
+                        "ReadOnly": false,
+                        "AttributeDomainId": 0,
+                        "AttributeValueData": [],
+                        "Rules": []
+                      }
+                    ],
+                    "TransformType": 0,
+                    "MergeStrategy": 1,
+                    "Parameters": {}
                   },
                   {
-                    "TargetAttribute": { "AttributeName": "PRICE" },
-                    "SourceAttributes": [{ "AttributeName": "RETAIL-PRICE" }],
-                    "TransformType": "DirectCopy",
-                    "MergeStrategy": "OverwriteExisting"
+                    "SchemaMapId": 0,
+                    "ActionSchemaMapId": 0,
+                    "TargetAttributeId": 0,
+                    "TargetAttribute": {
+                      "EntityAttributeId": 0,
+                      "PrimaryKey": false,
+                      "AttributeName": "PRICE",
+                      "DataType": 0,
+                      "Visible": true,
+                      "ReadOnly": false,
+                      "AttributeDomainId": 0,
+                      "AttributeValueData": [],
+                      "Rules": []
+                    },
+                    "SourceAttributes": [
+                      {
+                        "EntityAttributeId": 0,
+                        "PrimaryKey": false,
+                        "AttributeName": "RETAIL-PRICE",
+                        "DataType": 0,
+                        "Visible": true,
+                        "ReadOnly": false,
+                        "AttributeDomainId": 0,
+                        "AttributeValueData": [],
+                        "Rules": []
+                      }
+                    ],
+                    "TransformType": 0,
+                    "MergeStrategy": 1,
+                    "Parameters": {}
                   }
                 ]
-              }
-            }
+              },
+              "PipelineStageActions": [],
+              "SubPipelines": [],
+              "Parameters": {}
+            },
+            "ExecutionOrder": 1
           }
         ]
       },
       {
-        "StageType": "DataTreatment",
+        "PipelineStageId": 0,
+        "PipelineId": 0,
+        "StageType": 0,
         "ExecutionOrder": 2,
         "PipelineStageActions": [
           {
-            "ExecutionOrder": 1,
+            "PipelineStageActionId": 0,
+            "PipelineStageId": 0,
+            "ActionId": 0,
             "Action": {
+              "ActionId": 0,
               "ActionName": "EnrichWebBreadCrum",
-              "Type": "EnrichmentLookup",
+              "Type": 2,
               "OutputParameterName": "WEB-BREAD-CRUM",
               "Lookup": {
+                "LookupId": 0,
                 "LookupName": "category-breadcrumb",
+                "LookupVersion": 0,
                 "LookupEndpoint": "http://localhost:5095/api/fake/categories/breadcrumb?category={CATEGORY}",
-                "Type": "Api",
-                "ValueFieldToReturn": "breadcrumb"
-              }
-            }
+                "Type": 0,
+                "ValueFieldToReturn": "breadcrumb",
+                "CreatedAtUtc": "0001-01-01T00:00:00"
+              },
+              "ActionRules": [],
+              "PipelineStageActions": [],
+              "SubPipelines": [],
+              "Parameters": {}
+            },
+            "ExecutionOrder": 1
           }
         ]
       },
       {
-        "StageType": "PreRouting",
+        "PipelineStageId": 0,
+        "PipelineId": 0,
+        "StageType": 1,
         "ExecutionOrder": 3,
         "PipelineStageActions": [
           {
-            "ExecutionOrder": 1,
+            "PipelineStageActionId": 0,
+            "PipelineStageId": 0,
+            "ActionId": 0,
             "Action": {
+              "ActionId": 0,
               "ActionName": "AddStockItemsToStorePage",
-              "Type": "Dispatch",
-              "Endpoint": { "ActionEndpointURL": "http://localhost:5095/api/fake/store-page/items" }
-            }
+              "Type": 3,
+              "ActionRules": [],
+              "Endpoint": {
+                "ActionEndpointId": 0,
+                "ActionEndpointURL": "http://localhost:5095/api/fake/store-page/items"
+              },
+              "PipelineStageActions": [],
+              "SubPipelines": [],
+              "Parameters": {}
+            },
+            "ExecutionOrder": 1
           }
         ]
       }

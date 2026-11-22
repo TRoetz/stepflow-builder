@@ -1,10 +1,10 @@
 {
-  "startAt": "2b64ce00-1a20-49f5-9403-7ec27c0339c6",
+  "startAt": "b7adfa6e-98f1-498b-b33b-858849fbd355",
   "states": {
-    "2b64ce00-1a20-49f5-9403-7ec27c0339c6": {
+    "b7adfa6e-98f1-498b-b33b-858849fbd355": {
       "type": "Pass",
       "resource": "utility://default",
-      "next": "b5ebd690-218d-4dd7-a68b-4d58bd304ace",
+      "next": "f78b44ba-c81d-4304-abcb-fd0f48f713c3",
       "parameters": {
         "description": ""
       },
@@ -14,10 +14,10 @@
         "start_output"
       ]
     },
-    "b5ebd690-218d-4dd7-a68b-4d58bd304ace": {
+    "f78b44ba-c81d-4304-abcb-fd0f48f713c3": {
       "type": "Task",
       "resource": "eav://customer_refund_request",
-      "next": "bb091435-8e69-40df-9d45-955af85d8b14",
+      "next": "f2741c44-5f03-4994-875f-15b5398a5d98",
       "parameters": {
         "operation": "read",
         "attributeFilter": "",
@@ -37,10 +37,10 @@
         "output_metadata"
       ]
     },
-    "bb091435-8e69-40df-9d45-955af85d8b14": {
+    "f2741c44-5f03-4994-875f-15b5398a5d98": {
       "type": "Task",
       "resource": "transform://jsonata",
-      "next": "97096e49-48de-4792-8caf-0f092368efc7",
+      "next": "d4584e84-7342-4d30-97be-140d6c607497",
       "parameters": {
         "expression": "$map($, function($v) { return { \"amount\": $v.amount, \"reason\": $v.reason, \"customer_id\": $v.customer_id } })",
         "enableDebug": false,
@@ -57,7 +57,7 @@
         "output_error"
       ]
     },
-    "97096e49-48de-4792-8caf-0f092368efc7": {
+    "d4584e84-7342-4d30-97be-140d6c607497": {
       "type": "Map",
       "itemsPath": "$",
       "maxConcurrency": 1,
@@ -153,12 +153,12 @@
           }
         }
       },
-      "next": "38198069-29fa-4e65-91d2-4537fd6445ff"
+      "next": "70ef25d7-1589-43a5-b6df-f1671f878860"
     },
-    "38198069-29fa-4e65-91d2-4537fd6445ff": {
+    "70ef25d7-1589-43a5-b6df-f1671f878860": {
       "type": "Task",
       "resource": "eav://refund_decision",
-      "next": "263d1d4b-210c-455c-a89e-61201e6dd79b",
+      "next": "d9e8a709-4909-4fab-8d11-624a586e4993",
       "parameters": {
         "operation": "write",
         "attributeFilter": "",
@@ -179,7 +179,7 @@
         "output_metadata"
       ]
     },
-    "263d1d4b-210c-455c-a89e-61201e6dd79b": {
+    "d9e8a709-4909-4fab-8d11-624a586e4993": {
       "type": "Pass",
       "end": true,
       "comment": "Marks the end of the workflow. Place one or more END states to define flow completion.",
@@ -191,42 +191,42 @@
   },
   "canvas": {
     "nodes": {
-      "2b64ce00-1a20-49f5-9403-7ec27c0339c6": {
+      "b7adfa6e-98f1-498b-b33b-858849fbd355": {
         "label": "Start",
         "position": {
           "x": 100,
           "y": 100
         }
       },
-      "b5ebd690-218d-4dd7-a68b-4d58bd304ace": {
+      "f78b44ba-c81d-4304-abcb-fd0f48f713c3": {
         "label": "Fetch Requests",
         "position": {
           "x": 100,
           "y": 250
         }
       },
-      "bb091435-8e69-40df-9d45-955af85d8b14": {
+      "f2741c44-5f03-4994-875f-15b5398a5d98": {
         "label": "Normalize Rows",
         "position": {
           "x": 100,
           "y": 400
         }
       },
-      "97096e49-48de-4792-8caf-0f092368efc7": {
+      "d4584e84-7342-4d30-97be-140d6c607497": {
         "label": "Review Each Row",
         "position": {
           "x": 100,
           "y": 550
         }
       },
-      "38198069-29fa-4e65-91d2-4537fd6445ff": {
+      "70ef25d7-1589-43a5-b6df-f1671f878860": {
         "label": "Store Decisions",
         "position": {
           "x": 100,
           "y": 700
         }
       },
-      "263d1d4b-210c-455c-a89e-61201e6dd79b": {
+      "d9e8a709-4909-4fab-8d11-624a586e4993": {
         "label": "End",
         "position": {
           "x": 100,

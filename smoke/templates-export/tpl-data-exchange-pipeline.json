@@ -1,10 +1,10 @@
 {
-  "startAt": "efd08998-ab57-4d5a-a950-8e534fc297fc",
+  "startAt": "cc2c9519-208b-4836-a7c6-675572208b64",
   "states": {
-    "efd08998-ab57-4d5a-a950-8e534fc297fc": {
+    "cc2c9519-208b-4836-a7c6-675572208b64": {
       "type": "Pass",
       "resource": "utility://default",
-      "next": "6a5c6169-63b3-4657-9696-6ed6c0eaa5a6",
+      "next": "07b67e7b-1039-4758-8d1d-e73e21d7a8bc",
       "parameters": {
         "description": ""
       },
@@ -14,10 +14,10 @@
         "start_output"
       ]
     },
-    "6a5c6169-63b3-4657-9696-6ed6c0eaa5a6": {
+    "07b67e7b-1039-4758-8d1d-e73e21d7a8bc": {
       "type": "Task",
       "resource": "transform://jsonata",
-      "next": "91007b8d-87f4-4e1f-b07f-55e90e943208",
+      "next": "3a7b1dd2-0761-46fc-ba0a-09269900ddbd",
       "parameters": {
         "expression": "{ \"rows\": [ { \"OrderId\": 'ORD-001', \"CustomerCode\": 'CUST-A', \"Amount\": 250 }, { \"OrderId\": 'ORD-002', \"CustomerCode\": 'CUST-B', \"Amount\": 80.5 }, { \"OrderId\": 'ORD-003', \"CustomerCode\": 'CUST-C', \"Amount\": -15 }, { \"OrderId\": 'ORD-004', \"CustomerCode\": 'CUST-A', \"Amount\": 120 } ] }",
         "enableDebug": false,
@@ -34,10 +34,10 @@
         "output_error"
       ]
     },
-    "91007b8d-87f4-4e1f-b07f-55e90e943208": {
+    "3a7b1dd2-0761-46fc-ba0a-09269900ddbd": {
       "type": "Task",
       "resource": "dataexchange://demo-order-validation",
-      "next": "c90cc0e5-6315-4400-813d-3e10cc5648b0",
+      "next": "2e3e26bc-c99c-43ed-9e1a-131018f9c63c",
       "comment": "Run a registered Data Exchange profile pipeline (validation, calculation, mapping) over the upstream rows.",
       "inputs": [
         "input_data"
@@ -46,10 +46,10 @@
         "result"
       ]
     },
-    "c90cc0e5-6315-4400-813d-3e10cc5648b0": {
+    "2e3e26bc-c99c-43ed-9e1a-131018f9c63c": {
       "type": "Task",
       "resource": "transform://jsonata",
-      "next": "eb647edd-8dfc-4f0c-a63b-3021cbf81584",
+      "next": "9f05bc90-c430-4419-9f23-71a1c4da841f",
       "parameters": {
         "expression": "{ \"processed\": $.rowsOut, \"rejected\": $.rejectedCount, \"firstRowTotalWithTax\": $.enrichedRows[0].TotalWithTax }",
         "enableDebug": false,
@@ -66,7 +66,7 @@
         "output_error"
       ]
     },
-    "eb647edd-8dfc-4f0c-a63b-3021cbf81584": {
+    "9f05bc90-c430-4419-9f23-71a1c4da841f": {
       "type": "Pass",
       "end": true,
       "comment": "Marks the end of the workflow. Place one or more END states to define flow completion.",
@@ -78,35 +78,35 @@
   },
   "canvas": {
     "nodes": {
-      "efd08998-ab57-4d5a-a950-8e534fc297fc": {
+      "cc2c9519-208b-4836-a7c6-675572208b64": {
         "label": "Start",
         "position": {
           "x": 100,
           "y": 100
         }
       },
-      "6a5c6169-63b3-4657-9696-6ed6c0eaa5a6": {
+      "07b67e7b-1039-4758-8d1d-e73e21d7a8bc": {
         "label": "Build Input Rows",
         "position": {
           "x": 100,
           "y": 250
         }
       },
-      "91007b8d-87f4-4e1f-b07f-55e90e943208": {
+      "3a7b1dd2-0761-46fc-ba0a-09269900ddbd": {
         "label": "Exchange",
         "position": {
           "x": 100,
           "y": 400
         }
       },
-      "c90cc0e5-6315-4400-813d-3e10cc5648b0": {
+      "2e3e26bc-c99c-43ed-9e1a-131018f9c63c": {
         "label": "Summarize Result",
         "position": {
           "x": 100,
           "y": 550
         }
       },
-      "eb647edd-8dfc-4f0c-a63b-3021cbf81584": {
+      "9f05bc90-c430-4419-9f23-71a1c4da841f": {
         "label": "End",
         "position": {
           "x": 100,

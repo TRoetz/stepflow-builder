@@ -1,0 +1,1 @@
+{"startAt":"A","states":{"A":{"type":"Pass","next":"B"},"B":{"type":"HumanTask","task":{"title":"Approve order","assignee":"alice"},"completion":{"Type":"api"},"resultPath":"$.approval","next":"C"},"C":{"type":"Task","resource":"internal://echo","end":true}}}

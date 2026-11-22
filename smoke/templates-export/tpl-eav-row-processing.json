@@ -1,10 +1,10 @@
 {
-  "startAt": "11098422-a219-4b6d-b388-73a1eb3a4407",
+  "startAt": "e5ed4101-d0dd-4052-9035-be467eec2620",
   "states": {
-    "11098422-a219-4b6d-b388-73a1eb3a4407": {
+    "e5ed4101-d0dd-4052-9035-be467eec2620": {
       "type": "Pass",
       "resource": "utility://default",
-      "next": "bab1af7f-bbf5-4254-a462-6b1569e6b07a",
+      "next": "95ecd3c4-5c2e-4495-af0c-b07e72e81f0e",
       "parameters": {
         "description": ""
       },
@@ -14,10 +14,10 @@
         "start_output"
       ]
     },
-    "bab1af7f-bbf5-4254-a462-6b1569e6b07a": {
+    "95ecd3c4-5c2e-4495-af0c-b07e72e81f0e": {
       "type": "Task",
       "resource": "sql://<your-connection-string>",
-      "next": "7023d822-cd51-4d30-89e2-fd1bab50a673",
+      "next": "18ad0265-f006-40ed-be58-37411b4d8bce",
       "parameters": {
         "query": "SELECT * FROM your_table",
         "outputColumns": "",
@@ -36,7 +36,7 @@
         "output_count"
       ]
     },
-    "7023d822-cd51-4d30-89e2-fd1bab50a673": {
+    "18ad0265-f006-40ed-be58-37411b4d8bce": {
       "type": "Map",
       "itemsPath": "$.rows",
       "maxConcurrency": 1,
@@ -155,12 +155,12 @@
           }
         }
       },
-      "next": "54cc7fb0-dc29-416d-b575-03ec15677a6f"
+      "next": "1c19fe37-513f-43c3-92ae-8dc8534cf731"
     },
-    "54cc7fb0-dc29-416d-b575-03ec15677a6f": {
+    "1c19fe37-513f-43c3-92ae-8dc8534cf731": {
       "type": "Task",
       "resource": "rule://first_match",
-      "next": "19f9a9a0-036a-45f5-8f5a-69dd825ad6ff",
+      "next": "31cfebe1-8972-4e02-9694-2826f0a9d07b",
       "parameters": {
         "ruleSet": "[\n  {\n    \"name\": \"approved\",\n    \"expression\": \"$.score >= 90 || $.decision == \\\"ok\\\"\",\n    \"outcome\": \"approved\"\n  },\n  {\n    \"name\": \"fallback\",\n    \"expression\": \"true\",\n    \"outcome\": \"manual_review\"\n  }\n]",
         "evaluationMode": "first_match",
@@ -178,10 +178,10 @@
         "output_matched"
       ]
     },
-    "19f9a9a0-036a-45f5-8f5a-69dd825ad6ff": {
+    "31cfebe1-8972-4e02-9694-2826f0a9d07b": {
       "type": "Task",
       "resource": "transform://javascript",
-      "next": "d9494866-a03f-4232-8240-21156e0a9ef2",
+      "next": "7960c0a7-df18-4959-9dda-da95618b3fcf",
       "parameters": {
         "language": "javascript",
         "script": "// Write the classified rows to an output file (placeholder — adjust path/format).\nconst fs = require(\"fs\");\nfs.writeFileSync(\"output_rows.json\", JSON.stringify(context.input.rows ?? context.input, null, 2));\nreturn context.input;",
@@ -200,7 +200,7 @@
         "output_error"
       ]
     },
-    "d9494866-a03f-4232-8240-21156e0a9ef2": {
+    "7960c0a7-df18-4959-9dda-da95618b3fcf": {
       "type": "Pass",
       "end": true,
       "comment": "Marks the end of the workflow. Place one or more END states to define flow completion.",
@@ -212,42 +212,42 @@
   },
   "canvas": {
     "nodes": {
-      "11098422-a219-4b6d-b388-73a1eb3a4407": {
+      "e5ed4101-d0dd-4052-9035-be467eec2620": {
         "label": "Start",
         "position": {
           "x": 0,
           "y": 180
         }
       },
-      "bab1af7f-bbf5-4254-a462-6b1569e6b07a": {
+      "95ecd3c4-5c2e-4495-af0c-b07e72e81f0e": {
         "label": "Query Rows",
         "position": {
           "x": 280,
           "y": 180
         }
       },
-      "7023d822-cd51-4d30-89e2-fd1bab50a673": {
+      "18ad0265-f006-40ed-be58-37411b4d8bce": {
         "label": "Process Each Row",
         "position": {
           "x": 560,
           "y": 180
         }
       },
-      "54cc7fb0-dc29-416d-b575-03ec15677a6f": {
+      "1c19fe37-513f-43c3-92ae-8dc8534cf731": {
         "label": "Classify Result",
         "position": {
           "x": 840,
           "y": 180
         }
       },
-      "19f9a9a0-036a-45f5-8f5a-69dd825ad6ff": {
+      "31cfebe1-8972-4e02-9694-2826f0a9d07b": {
         "label": "Write Output File",
         "position": {
           "x": 1120,
           "y": 180
         }
       },
-      "d9494866-a03f-4232-8240-21156e0a9ef2": {
+      "7960c0a7-df18-4959-9dda-da95618b3fcf": {
         "label": "End",
         "position": {
           "x": 1400,
